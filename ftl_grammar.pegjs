@@ -73,7 +73,7 @@ TernaryOperatorExpression
   = __ "(" conditon:Expression ")" __ "?" __ then:Expression otherwise:(__ ":" __ Expression)?
 
 TupleSelector
-  = __ "_" ("0" / (NonZeroDigit DecimalDigit*))
+  = __ "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart))
 
 Literal
   = NullLiteral

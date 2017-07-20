@@ -41,6 +41,13 @@
     return (Array.isArray(rest) && rest.length == 0) ? first : buildList(first, rest, 1)
   }
 
+  function getValueString(value) {
+    if (Array.isArray(value))
+      return '[' + value.toString() + ']'
+    else
+      return value.toString()
+  }
+
   class Tuple {
     constructor() {
       // full map of named or unnamed values
@@ -104,19 +111,19 @@
             buf.push(last)
             i++
           }
-          last = value
+          last = getValueString(value)
         } else {
-          if (Array.isArray(value))
-            buf.push(key + ':[' + value.toString() + ']')
-          else
-            buf.push(key + ':' + value)
-
+          buf.push(key + ':' + getValueString(value))
           i++
           last = null
         }
         if (i == this._size)
           break
       }
+
+      if (i < this._size && last)
+        buf.push(last)
+
       return '(' + buf.join(', ') + ')'
 	}
   }
@@ -346,16 +353,7 @@
         }
 
         else if (tpl instanceof RefFn) {
-          var res = null;
-          var name = tpl.name;
-          console.log('name:', res)
-
-          // to do: get ref from input tuple
-          if (provided_names != null && provided_names[name] != null) {
-            res = provided_names[name];
-          }
-          else if (functions[name] != null)
-            res = functions[name].apply(input);
+          var res = tpl.apply(input);
           console.log('res:', res)
           tuple.addValue(res);
         }
@@ -613,7 +611,7 @@ TernaryOperatorExpression
   = __ "(" conditon:Expression ")" __ "?" __ then:Expression otherwise:(__ ":" __ Expression)?
 
 TupleSelector
-  = __ "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart))
+  = __ "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new RefFn(text()) }
 
 Literal
   = NullLiteral
