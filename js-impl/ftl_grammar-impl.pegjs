@@ -95,7 +95,10 @@
     }
 
     toList() {
-      return this._list
+      var list = [];
+      for (var i = 0; i < this._size; i++)
+        list.push(this.get('_' + i))
+      return list
     }
 
     toString() {
@@ -176,7 +179,7 @@
       super(val);
       this._name = name;
       if (functions[name] != null)
-        throw name + " exists and can not be used for var/const!"
+        throw { message: "'" + name + "' exists and can not be declared again for var/const!"}
       functions[name] = this; 
     }
 
@@ -342,6 +345,8 @@
 
     apply(input, provided_names) {
       var tuple = new Tuple()
+      if (this.tp == null)
+        return tuple
       for (var i = 0; i < this.tp.length; i++) {
         var tpl = this.tp[i];
         console.log("tuple type: ", tpl)
@@ -472,7 +477,7 @@
         return e.apply(input);
       }
       else
-        throw "no ref for '" + this._name + "' found as identifier or function!"
+        throw { message: "no ref for '" + this._name + "' found as identifier or function!" }
     }
   }
 
@@ -493,7 +498,7 @@
       if (typeof input === 'string') {
         var match = input.match(this.regex);
         if (match == null) {
-          throw input + " does not match pattern";
+          throw {message: input + " does not match pattern" }
         }
         return this.internal.apply(null, match);
       }
@@ -504,23 +509,26 @@
 
 // start
 Start
-  = __ program:Declarations? __ { return program } 
+  = ___ program:Declarations? ___ { return program } 
 
 // all allowed declarations
 Declarations
-  = variables:(__ VariableDeclaration)* functions:(__ FunctionDeclaration)* statements:(__ Executable)* {
-      return {variables: extractList(variables, 1), functions:extractList(functions, 1), statements: extractList(statements, 1)}
-    }
+  = first:Declaration rest:(__ Declaration)* {
+    return buildList(first, rest, 1)
+  } 
+
+Declaration
+  = VariableDeclaration / FunctionDeclaration / Executable
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module.
 VariableDeclaration
-  = modifier:(ConstToken / VarToken) __ id:Identifier __ "=" __ expr:PrimaryExpression {
+  = modifier:(ConstToken / VarToken) _ id:Identifier _ "=" _ expr:PrimaryExpression {
     return modifier=='const' ? new ImmutableValFn(id.name, expr) : new VarFn(id.name, expr)
   }
 
 // Function declaration
 FunctionDeclaration
-  = __ FunctionToken __ id:(Identifier / Operator) __ params:Tuple __ body:FunctionBody {
+  = FunctionToken _ id:(Identifier / Operator) _ params:Tuple _ body:FunctionBody {
     console.log('function id: ', id.name)
     console.log('expr: ', body)
     if (body.script) {
@@ -535,13 +543,13 @@ FunctionDeclaration
     }
   }
 
-Tuple = "(" __ elms:ParameterList? ")" {return new TupleFn(elms)}
+Tuple = "(" _ elms:ParameterList? ")" { return new TupleFn(elms) }
 
 ParameterList
-  = first:Parameter rest:(__ "," __ Parameter)* {return buildList(first, rest, 3)}
+  = first:Parameter rest:(_ "," _ Parameter)* { return buildList(first, rest, 3) }
 
 Parameter
-  = id:(Identifier __ ":")? __ expr:Expression {
+  = id:(Identifier _ ":")? _ expr:Expression {
       var iid = extractOptional(id, 0);
       if (iid != null)
         iid = iid.name;
@@ -555,10 +563,10 @@ FunctionBody
   / PipeExpression
 
 PipeExpression
-  = "->" __ ex:Expression __ { return ex }
+  = "->" _ ex:Expression _ { return ex }
 
 Expression
-  = first:(PrimaryExpression / OperatorExpression) rest:(__ PipeExpression)? {
+  = first:(PrimaryExpression / OperatorExpression) rest:(_ PipeExpression)? {
     var t = extractOptional(rest, 1);
     if (rest)
       console.log("rest is ", t)
@@ -574,7 +582,7 @@ Expression
   }
 
 Executable
-  = __ expr:Expression {
+  = expr:Expression {
       var res = expr.apply()
       if (res)
         console.log('executable result: ', expr.apply())
@@ -589,9 +597,10 @@ PrimaryExpression
   / ArrayLiteral
   / Tuple
   / TupleSelector
+  / ArrayElementSelector
 
 Operator
-  = __ !"->" first:OperatorSymbol rest:OperatorSymbol*
+  = !"->" first:OperatorSymbol rest:OperatorSymbol*
 
 OperatorExpression
   = UnaryOperatorExpression
@@ -600,18 +609,21 @@ OperatorExpression
 
 // unary prefix operator expression 
 UnaryOperatorExpression
-  = __ op:Operator __ expr:Expression 
+  = op:Operator _ expr:Expression 
 
 // binary infix operator expression
 BinaryOperatorExpression
-  = __ preop:PrimaryExpression __ op:Operator postop:Expression 
+  = preop:PrimaryExpression _ op:Operator postop:Expression 
 
 // conditional ternary expression
 TernaryOperatorExpression
-  = __ "(" conditon:Expression ")" __ "?" __ then:Expression otherwise:(__ ":" __ Expression)?
+  = "(" conditon:Expression ")" _ "?" _ then:Expression otherwise:(_ ":" _ Expression)?
 
 TupleSelector
-  = __ "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new RefFn(text()) }
+  = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new RefFn(text()) }
+
+ArrayElementSelector
+  = "[" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) + "]" { return new RefFn(text()) }
 
 Literal
   = NullLiteral
@@ -620,13 +632,13 @@ Literal
   / StringLiteral
 
 ArrayLiteral
-  = __ "[" elms:(__ LiteralList)? "]" {
+  = "[" elms:(_ LiteralList)? "]" {
     var lst = extractOptional(elms, 1);
     return lst == null ? new ConstFn([]) : lst
   }
 
 LiteralList
-  = first:PrimaryExpression rest:(__ "," __ PrimaryExpression)* {
+  = first:PrimaryExpression rest:(_ "," _ PrimaryExpression)* {
     var elms = buildList(first, rest, 3);
     var ret = [];
     for (var i = 0; i < elms.length; i++)
@@ -636,15 +648,15 @@ LiteralList
 
 // expression for getting member of variable
 MemberExpression
-  = __ Identifier __ "[" __ ( ParameterList)+ __ "]"
+  = Identifier _ "[" _ ( ParameterList)+ _ "]"
 
 CallExpression
-  = __ Identifier __ "(" __ ( ParameterList)+ __ ")"
+  = Identifier _ "(" _ ( ParameterList)+ _ ")"
 
 // Native javascript block wrapped with "{" and "}"
 NativeBlock
-  = "{" __ ((!("{" / "}") SourceCharacter)* {return text()})
-    NativeBlock* __
+  = "{" _ ((!("{" / "}") SourceCharacter)* {return text()})
+    NativeBlock* _
     ((!("{" / "}") SourceCharacter)* {return text()}) "}"
     {return {type:'native', script: text()}}
 
@@ -823,6 +835,14 @@ MultiLineComment
 MultiLineCommentNoLineTerminator
   = "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
 
-// white spaces
+// any white space, comment, with end of line
+_
+  = (WhiteSpace / Comment)* (EOL+ (WhiteSpace / Comment)+)*
+
+// at least one end of line with optional white space or comment preceding it
 __
+  = ((WhiteSpace / Comment)* EOL)+
+
+// any white space, comment, or end of line
+___
   = (WhiteSpace / EOL / Comment)*
