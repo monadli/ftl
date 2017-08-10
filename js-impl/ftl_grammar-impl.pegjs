@@ -48,6 +48,16 @@
       return value.toString()
   }
 
+  class OperatorSymbol {
+    constructor(symbol) {
+      this._symbol = symbol;
+    }
+    
+    get symbol() {
+      return this._symbol
+    }
+  }
+
   class Tuple {
     constructor() {
       // full map of named or unnamed values
@@ -267,6 +277,8 @@
     // @params array of parameter list
     extractParams(params) {
       var param_list = [];
+      if (params == null)
+        return param_list;
       for (var i = 0; i < params.length; i++) {
         var param = params[i];
         if (param instanceof RefFn)
@@ -286,17 +298,8 @@
       else
       	var res = this.internal.apply(null, (input instanceof Tuple)? input.toList() : [input]);
 
-      if (res) {
-      	console.log("output of native function: ", res)
-        if (Array.isArray(res))
-          return Tuple.fromList(res)
-        else {
-       	  console.log("no output from native function")
-          return Tuple.fromValue(res)
-        }
-      }
-      else
-        return res
+   	  console.log("output of native function: ", res)
+      return res
     }
   }
 
@@ -531,16 +534,12 @@ FunctionDeclaration
   = FunctionToken _ id:(Identifier / Operator) _ params:Tuple _ body:FunctionBody {
     console.log('function id: ', id.name)
     console.log('expr: ', body)
-    if (body.script) {
-      var ret = new NativeFunctionFn(id.name, optionalList(params), body.script);
-      functions[id.name] = ret;
-      console.log("functions: ", functions)
-      return ret;
-    } else {
-      var ret = new FunctionFn(id.name, optionalList(params), body);
-      functions[id.name] = ret;
-      return ret;
-    }
+    var name = id instanceof OperatorSymbol ? id.symbol : id.name
+    var ret = body.script ? new NativeFunctionFn(name, optionalList(params), body.script) :
+        new FunctionFn(name, optionalList(params), body);
+
+    functions[name] = ret;
+    return ret;
   }
 
 Tuple = "(" _ elms:ParameterList? ")" { return new TupleFn(elms) }
@@ -600,7 +599,7 @@ PrimaryExpression
   / ArrayElementSelector
 
 Operator
-  = !"->" first:OperatorSymbol rest:OperatorSymbol*
+  = !"->" first:OperatorSymbol rest:OperatorSymbol* { return new OperatorSymbol(text()) }
 
 OperatorExpression
   = UnaryOperatorExpression
@@ -609,7 +608,11 @@ OperatorExpression
 
 // unary prefix operator expression 
 UnaryOperatorExpression
-  = op:Operator _ expr:Expression 
+  = op:Operator _ expr:PrimaryExpression {
+      console.log('op', op)
+      console.log('expr', expr)
+      return new CompositionFn([expr, functions[op.symbol]]);
+    }
 
 // binary infix operator expression
 BinaryOperatorExpression
