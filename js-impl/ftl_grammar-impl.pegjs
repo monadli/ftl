@@ -565,7 +565,7 @@ PipeExpression
   = "->" _ ex:Expression _ { return ex }
 
 Expression
-  = first:(PrimaryExpression / OperatorExpression) rest:(_ PipeExpression)? {
+  = first:(OperatorExpression / PrimaryExpression) rest:(_ PipeExpression)? {
     var t = extractOptional(rest, 1);
     if (rest)
       console.log("rest is ", t)
@@ -616,7 +616,12 @@ UnaryOperatorExpression
 
 // binary infix operator expression
 BinaryOperatorExpression
-  = preop:PrimaryExpression _ op:Operator postop:Expression 
+  = preop:PrimaryExpression _ op:Operator postop:PrimaryExpression {
+      console.log('preop', preop)
+      console.log('op', op)
+      console.log('postop', postop)
+      return new CompositionFn([new TupleFn([preop, postop]), functions[op.symbol]]);
+    }
 
 // conditional ternary expression
 TernaryOperatorExpression
