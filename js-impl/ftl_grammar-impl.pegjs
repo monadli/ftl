@@ -459,6 +459,22 @@
       return this._name;
     }
 
+    setAsValueType() {
+      this._refType = 'value'
+    }
+
+    setAsRefType() {
+      this._refType = 'ref'
+    }
+
+    isValueType() {
+      this._refType == 'value'
+    }
+
+    isRefType() {
+      this._refType == 'ref'
+    }
+    
     apply(input) {
       console.log("calculating ref for '" + this._name)
       console.log("input to RefFn:" + input)
@@ -530,13 +546,22 @@ VariableDeclaration
   }
 
 // Function declaration
+// A function can be n-ary operator as well
 FunctionDeclaration
-  = FunctionToken _ id:(Identifier / Operator) _ params:Tuple _ body:FunctionBody {
+  = FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody {
     console.log('function id: ', id.name)
     console.log('expr: ', body)
-    var name = id instanceof OperatorSymbol ? id.symbol : id.name
-    var ret = body.script ? new NativeFunctionFn(name, optionalList(params), body.script) :
-        new FunctionFn(name, optionalList(params), body);
+
+    var is_operator = id.type == 'OperatorDeclaration';
+    if (is_operator)
+    	console.log('parameter list from operator: ', id.operands)
+  	console.log('parameter list from function: ', optionalList(params))
+
+    var param_list = is_operator ? id.operands : optionalList(params);
+    console.log('parameter list: ', param_list)
+    var name = id.name
+    var ret = body.script ? new NativeFunctionFn(name, param_list, body.script) :
+        new FunctionFn(name, param_list, body);
 
     functions[name] = ret;
     return ret;
@@ -545,7 +570,10 @@ FunctionDeclaration
 Tuple = "(" _ elms:ParameterList? ")" { return new TupleFn(elms) }
 
 ParameterList
-  = first:Parameter rest:(_ "," _ Parameter)* { return buildList(first, rest, 3) }
+  = first:Parameter rest:(_ "," _ Parameter)* {
+    console.log("first", first);console.log("rest", rest);
+    console.log("param list:", buildList(first, rest, 3));
+    return buildList(first, rest, 3) }
 
 Parameter
   = id:(Identifier _ ":")? _ expr:Expression {
@@ -566,6 +594,7 @@ PipeExpression
 
 Expression
   = first:(OperatorExpression / PrimaryExpression) rest:(_ PipeExpression)? {
+    console.log("first is ", first)
     var t = extractOptional(rest, 1);
     if (rest)
       console.log("rest is ", t)
@@ -599,33 +628,61 @@ PrimaryExpression
   / ArrayElementSelector
 
 Operator
-  = !"->" first:OperatorSymbol rest:OperatorSymbol* { return new OperatorSymbol(text()) }
+  = !"->" first:OperatorSymbol rest:OperatorSymbol* { return {name: text()} }
+
+OperandValueDeclaration
+  = "$" id:Identifier { id.setAsValueType(); return id }
+
+OperandReferenceDeclaration
+  = "&" id:Identifier { id.setAsRefType(); return id }
+
+OperandDeclaration
+ = OperandValueDeclaration
+ / OperandReferenceDeclaration
+
+/**
+ * Operator declaration with form of:
+ *   operand (op operand)+
+ * @return type:'OperatorDeclaration', id, operands
+ */
+OperatorDeclaration
+  = first:OperandDeclaration rest:(_ Operator _ OperandDeclaration)+ {
+      var ops = extractList(rest, 1);
+      var name = ops.length == 1 ? ops[0] : ops.join(' ');
+      console.log("operators in operator declaration:", ops)
+      var operands = [first].concat(extractList(rest, 3))
+      console.log("operands in operator declaration:", operands)
+      return {
+        type: 'OperatorDeclaration',
+        name: name,
+        operands: new TupleFn(operands)
+      }
+    }
 
 OperatorExpression
   = UnaryOperatorExpression
-  / BinaryOperatorExpression
-  / TernaryOperatorExpression
+  / N_aryOperatorExpression
 
 // unary prefix operator expression 
 UnaryOperatorExpression
   = op:Operator _ expr:PrimaryExpression {
       console.log('op', op)
       console.log('expr', expr)
-      return new CompositionFn([expr, functions[op.symbol]]);
-    }
-
-// binary infix operator expression
-BinaryOperatorExpression
-  = preop:PrimaryExpression _ op:Operator postop:PrimaryExpression {
-      console.log('preop', preop)
-      console.log('op', op)
-      console.log('postop', postop)
-      return new CompositionFn([new TupleFn([preop, postop]), functions[op.symbol]]);
+      return new CompositionFn([expr, functions[op.name]]);
     }
 
 // conditional ternary expression
-TernaryOperatorExpression
-  = "(" conditon:Expression ")" _ "?" _ then:Expression otherwise:(_ ":" _ Expression)?
+N_aryOperatorExpression
+  = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+ {
+  	  var ops = extractList(rest, 1);
+  	  var operands = extractList(rest, 3);
+  	  var op = ops.length == 1 ? ops : ops.join(' ')
+  	  if (ops.length == 0)
+  	    throw new Error('No ops found!')
+      console.log('ops:', op)
+  	  console.log('operands', operands)
+  	  return new CompositionFn([new TupleFn([operand].concat(operands)), functions[op]]);
+    }
 
 TupleSelector
   = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new RefFn(text()) }
@@ -709,7 +766,7 @@ DecimalDigit
   = [0-9]
 
 OperatorSymbol
-  = [\u0021\u0025\u0026\u002A\u002B\u002D\u002F\u003A\u003C\u003D\u003E\u005E\u007C\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
+  = [!%&*+\-/:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
 
 ReservedWord
   = Keyword

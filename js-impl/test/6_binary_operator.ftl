@@ -1,6 +1,6 @@
 fn out(val) { console.info('res:' + val)} 
 
-fn +(a, b) {
+fn $a + $b {
   return a + b
 }
 
