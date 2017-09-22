@@ -48,14 +48,8 @@
       return value.toString()
   }
 
-  class OperatorSymbol {
-    constructor(symbol) {
-      this._symbol = symbol;
-    }
-    
-    get symbol() {
-      return this._symbol
-    }
+  function function_ref(arg) {
+    return this.apply(arg);
   }
 
   class Tuple {
@@ -100,8 +94,14 @@
 //      if (key.startsWith('_')) {
 //        var ind = parseInt(key.substring(1))
 //        return ind < this._list.length ? this._list[ind] : null
-//      } 
-      return this._map.get(key)
+//      }
+      var ret = this._map.get(key);
+      if (ret)
+        return ret
+      else if (key == '_' && this._size == 1)
+        return this._map.get('_0');
+      else
+        return null;
     }
 
     toList() {
@@ -256,12 +256,15 @@
     constructor(name, params, script) {
       super()
       this._name = name;
+      this._params = params;
       var ins = params;
       var param_list = [];
       if (params instanceof TupleFn) {
         param_list = this.extractParams(ins.list);
+        this._params = ins.list;
       } else {
         param_list = this.extractParams(ins);
+        this._params = ins;
       }
       for (var i = 0; i < ins.length; i++) {
         param_list.push('_' + (i + 1));
@@ -290,6 +293,11 @@
     }
 
     get name() {return this._name}
+
+    /**
+     * Parameters in list
+     */
+    get params() { return this._params; }
 
     apply(input) {
       console.log("tuple to native function: ", input)
@@ -360,7 +368,7 @@
           tuple.addKeyValue(tpl.id, res);
         }
 
-        else if (tpl instanceof RefFn) {
+        else {
           var res = tpl.apply(input);
           console.log('res:', res)
           tuple.addValue(res);
@@ -426,6 +434,38 @@
       this._type = "CompositionFn"
     }
 
+    /**
+     * Creates a CompositionFn
+     */
+    static createCompositionFn(first, rest) {
+      if (first instanceof CompositionFn) {
+        first.appendElements(rest);
+        return first;
+      } else if (rest instanceof CompositionFn) {
+        rest.prependElements(first);
+        return rest;
+      } else {
+        var list = Array.isArray(first) ? list : [first];
+        var ret = new CompositionFn(Array.isArray(first) ? first : [first])
+        ret.appendElements(rest);
+        return ret;
+      }
+    }
+
+    /**
+     * Appends elements.
+     */
+    appendElements(elms) {
+      this.funs = this.funs.concat(Array.isArray(elms) ? elms : [elms]);
+    }
+
+    /**
+     * Prepends elements.
+     */
+    prependElements(elms) {
+      this.funs = (Array.isArray(elms) ? elms : [elms]).concat(this.funs);
+    }
+
     get elements() {
       return this.funs;
     }
@@ -468,11 +508,11 @@
     }
 
     isValueType() {
-      this._refType == 'value'
+      return this._refType == 'value'
     }
 
     isRefType() {
-      this._refType == 'ref'
+      return this._refType == 'ref'
     }
     
     apply(input) {
@@ -495,8 +535,25 @@
         console.log("result of RefFn: ", e.apply(input))
         return e.apply(input);
       }
+      else if (this._name == '_' && input && !(input instanceof Tuple))
+        return input;
       else
         throw { message: "no ref for '" + this._name + "' found as identifier or function!" }
+    }
+  }
+
+  /**
+   * This is a functional tuple reference, which returns a function.
+   */
+  class ExprRefFn extends Fn {
+    constructor(fn) {
+      super()
+      this._type = "ExprRefFn"
+      this._fn = fn;
+    }
+
+    apply(input) {
+      return function_ref.bind(this._fn);
     }
   }
 
@@ -601,12 +658,7 @@ Expression
     if (t == null)
       return first;
     
-    if (t instanceof CompositionFn) {
-      [first].concat(t.elements)
-      return new CompositionFn([first].concat(t.elements));
-    }
-
-    return new CompositionFn([first, t]);
+    return CompositionFn.createCompositionFn(first, t);
   }
 
 Executable
@@ -654,7 +706,7 @@ OperatorDeclaration
       console.log("operands in operator declaration:", operands)
       return {
         type: 'OperatorDeclaration',
-        name: name,
+        name: name.name,
         operands: new TupleFn(operands)
       }
     }
@@ -668,21 +720,30 @@ UnaryOperatorExpression
   = op:Operator _ expr:PrimaryExpression {
       console.log('op', op)
       console.log('expr', expr)
-      return new CompositionFn([expr, functions[op.name]]);
+      return CompositionFn.createCompositionFn(expr, functions[op.name]);
     }
 
 // conditional ternary expression
 N_aryOperatorExpression
   = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+ {
   	  var ops = extractList(rest, 1);
-  	  var operands = extractList(rest, 3);
-  	  var op = ops.length == 1 ? ops : ops.join(' ')
+  	  var params = [operand].concat(extractList(rest, 3));
+  	  var op = ops.length == 1 ? ops[0].name : ops.map(v => v.name).join(' ')
   	  if (ops.length == 0)
   	    throw new Error('No ops found!')
       console.log('ops:', op)
-  	  console.log('operands', operands)
-  	  return new CompositionFn([new TupleFn([operand].concat(operands)), functions[op]]);
-    }
+  	  console.log('operands', params)
+  	  var f = functions[op];
+  	  if (!f)
+  	    throw new Error("No function with name '" + op + "' found!");
+  	  for (var i = 0; i < f.params.length; i++) {
+  	    if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
+  	      params[i] = new ExprRefFn(params[i]);
+  	    }
+      }
+
+  	  return CompositionFn.createCompositionFn(new TupleFn(params), f);
+  }
 
 TupleSelector
   = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new RefFn(text()) }
