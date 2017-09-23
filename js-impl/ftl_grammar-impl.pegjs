@@ -259,13 +259,9 @@
       this._params = params;
       var ins = params;
       var param_list = [];
-      if (params instanceof TupleFn) {
-        param_list = this.extractParams(ins.list);
-        this._params = ins.list;
-      } else {
-        param_list = this.extractParams(ins);
-        this._params = ins;
-      }
+      this._params = params instanceof TupleFn ? ins.list : [ins];
+      param_list = this.extractParams(this._params);
+
       for (var i = 0; i < ins.length; i++) {
         param_list.push('_' + (i + 1));
       }
@@ -348,6 +344,12 @@
       this.tp = tp;
       console.log("arg to TupleFn constructor", tp)
       this._type="TupleFn"
+    }
+
+    static createTupleFn(elms) {
+      if (elms.length == 1 && elms[0] instanceof Fn)
+        return elms[0];
+      return new TupleFn(elms);
     }
 
     get list() {
@@ -624,7 +626,7 @@ FunctionDeclaration
     return ret;
   }
 
-Tuple = "(" _ elms:ParameterList? ")" { return new TupleFn(elms) }
+Tuple = "(" _ elms:ParameterList? ")" { return TupleFn.createTupleFn(elms) }
 
 ParameterList
   = first:Parameter rest:(_ "," _ Parameter)* {
@@ -707,7 +709,7 @@ OperatorDeclaration
       return {
         type: 'OperatorDeclaration',
         name: name.name,
-        operands: new TupleFn(operands)
+        operands: TupleFn.createTupleFn(operands)
       }
     }
 
@@ -742,7 +744,7 @@ N_aryOperatorExpression
   	    }
       }
 
-  	  return CompositionFn.createCompositionFn(new TupleFn(params), f);
+  	  return CompositionFn.createCompositionFn(TupleFn.createTupleFn(params), f);
   }
 
 TupleSelector
