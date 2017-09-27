@@ -356,7 +356,7 @@
       return this.tp;
     }
 
-    apply(input, provided_names) {
+    apply(input) {
       var tuple = new Tuple()
       if (this.tp == null)
         return tuple
@@ -364,7 +364,7 @@
         var tpl = this.tp[i];
         console.log("tuple type: ", tpl)
         if (tpl instanceof ConstFn || tpl instanceof CompositionFn)
-          tuple.addValue(tpl.apply(input, provided_names)); 
+          tuple.addValue(tpl.apply(input)); 
         else if (tpl instanceof ExprFn) {
           var res = tpl.apply(input);
           tuple.addKeyValue(tpl.id, res);
@@ -377,38 +377,6 @@
         }
       }
       return tuple
-      console.log("provided_names", provided_names)
-      var tuple = [];
-      var names = {};
-      for (var i = 0; i < this.tp.length; i++) {
-        var tpl = this.tp[i];
-        console.log("tuple type: ", tpl)
-        if (tpl instanceof ConstFn || tpl instanceof CompositionFn)
-          tuple.push(tpl.apply(input, provided_names)); 
-        else if (tpl instanceof ExprFn) {
-          var res = tpl.apply(input);
-          tuple.push(res);
-          var id = tpl.id;
-          if (id != null)
-          	names[tpl.id] = res;
-        }
-
-        else if (tpl instanceof RefFn) {
-          var res = null;
-          var name = tpl.name;
-          console.log('name:', res)
-          if (provided_names != null && provided_names[name] != null) {
-            res = provided_names[name];
-          }
-          else if (functions[name] != null)
-            res = functions[name].apply(input);
-          console.log('res:', res)
-          tuple.push(res);
-        }
-      }
-      console.log("list", tuple); 
-      console.log("map", names)
-      return {type: "tuple", list: tuple, map: names}; 
     }
   }
 
@@ -421,7 +389,7 @@
       this.elm = elm;
     }
 
-    apply(input, provided_names) {
+    apply(input) {
       return this.elm.apply(input);
     }
   }
@@ -534,8 +502,9 @@
       if (e) {
         console.log("actual f ", e)
         console.log("tuple to " + this._name, input)
-        console.log("result of RefFn: ", e.apply(input))
-        return e.apply(input);
+        var res = e.apply(input);
+        console.log("result of RefFn: ", res)
+        return res;
       }
       else if (this._name == '_' && input && !(input instanceof Tuple))
         return input;
@@ -682,7 +651,7 @@ PrimaryExpression
   / ArrayElementSelector
 
 Operator
-  = !"->" first:OperatorSymbol rest:OperatorSymbol* { return {name: text()} }
+  = !"->" first:OperatorSymbol rest:OperatorSymbol* { return text() }
 
 OperandValueDeclaration
   = "$" id:Identifier { id.setAsValueType(); return id }
@@ -708,7 +677,7 @@ OperatorDeclaration
       console.log("operands in operator declaration:", operands)
       return {
         type: 'OperatorDeclaration',
-        name: name.name,
+        name: name,
         operands: TupleFn.createTupleFn(operands)
       }
     }
@@ -728,23 +697,47 @@ UnaryOperatorExpression
 // conditional ternary expression
 N_aryOperatorExpression
   = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+ {
-  	  var ops = extractList(rest, 1);
-  	  var params = [operand].concat(extractList(rest, 3));
-  	  var op = ops.length == 1 ? ops[0].name : ops.map(v => v.name).join(' ')
-  	  if (ops.length == 0)
-  	    throw new Error('No ops found!')
-      console.log('ops:', op)
-  	  console.log('operands', params)
-  	  var f = functions[op];
-  	  if (!f)
-  	    throw new Error("No function with name '" + op + "' found!");
-  	  for (var i = 0; i < f.params.length; i++) {
-  	    if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
-  	      params[i] = new ExprRefFn(params[i]);
+  
+      var current_index = 0;
+      var stop_index = 0;
+      var lookupoperators = function(ops, operands, index, full) {
+        var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
+   	    var f = functions[op];
+
+        // no corresponding function found for single op
+  	    if (!f) {
+  	      if (index == 1)
+  	        throw new Error("No function with name '" + op + "' found!");
+
+          index--;
+          var reduced = lookupoperators(ops, operands, index, false);
+          
+          if (current_index == stop_index)
+            return reduced;
+
+          ops = ops.slice(index, ops.length)
+          operands = [reduced].concat(operands.slice(index + 1, operands.length))
+          return lookupoperators(ops, operands, ops.length, true)
   	    }
+
+  	    for (var i = 0; i < f.params.length; i++) {
+  	      if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
+  	        operands[i] = new ExprRefFn(params[i]);
+  	      }
+        }
+
+        current_index += index;
+        return CompositionFn.createCompositionFn(TupleFn.createTupleFn(operands.slice(0, f.params.length)), f);
       }
 
-  	  return CompositionFn.createCompositionFn(TupleFn.createTupleFn(params), f);
+  	  var ops = extractList(rest, 1);
+  	  var params = [operand].concat(extractList(rest, 3));
+  	  if (ops.length == 0)
+  	    throw new Error('No ops found!')
+      console.log('ops:', ops)
+  	  console.log('operands', params)
+  	  stop_index = ops.length;
+  	  return lookupoperators(ops, params, ops.length, true);
   }
 
 TupleSelector
