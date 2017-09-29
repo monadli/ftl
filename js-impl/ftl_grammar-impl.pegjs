@@ -49,7 +49,15 @@
   }
 
   function function_ref(arg) {
-    return this.apply(arg);
+    console.log("function_ref arguments", arg)
+    console.log("function_ref closure", this.closure)
+    var len = arguments.length;
+    if (len == 0)
+      return this.f.apply(this.closure)
+    else if (len == 1)
+      return this.f.apply(arg)
+    else
+      this.f.apply(Tuple.fromList(Array.apply(null, arguments)));
   }
 
   class Tuple {
@@ -71,9 +79,7 @@
       if (list == null)
         return t
 
-      var iterator = list.entries();
-      for (let e of iterator)
-        t.addValue(e)
+      list.forEach(elm => t.addValue(elm));
 
       return t;
     }
@@ -95,13 +101,7 @@
 //        var ind = parseInt(key.substring(1))
 //        return ind < this._list.length ? this._list[ind] : null
 //      }
-      var ret = this._map.get(key);
-      if (ret)
-        return ret
-      else if (key == '_' && this._size == 1)
-        return this._map.get('_0');
-      else
-        return null;
+      return this._map.get(key);
     }
 
     toList() {
@@ -506,7 +506,7 @@
         console.log("result of RefFn: ", res)
         return res;
       }
-      else if (this._name == '_' && input && !(input instanceof Tuple))
+      else if (this._name == '_0' && input && !(input instanceof Tuple))
         return input;
       else
         throw { message: "no ref for '" + this._name + "' found as identifier or function!" }
@@ -524,7 +524,7 @@
     }
 
     apply(input) {
-      return function_ref.bind(this._fn);
+      return function_ref.bind({f: this._fn, closure: input});
     }
   }
 
@@ -691,6 +691,8 @@ UnaryOperatorExpression
   = op:Operator _ expr:PrimaryExpression {
       console.log('op', op)
       console.log('expr', expr)
+      if (op == '-' && expr instanceof ConstFn)
+        return new ConstFn(-1 * expr.value);
       return CompositionFn.createCompositionFn(expr, functions[op.name]);
     }
 
@@ -700,7 +702,7 @@ N_aryOperatorExpression
   
       var current_index = 0;
       var stop_index = 0;
-      var lookupoperators = function(ops, operands, index, full) {
+      var parse_operators = function(ops, operands, index, full) {
         var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
    	    var f = functions[op];
 
@@ -710,19 +712,19 @@ N_aryOperatorExpression
   	        throw new Error("No function with name '" + op + "' found!");
 
           index--;
-          var reduced = lookupoperators(ops, operands, index, false);
+          var reduced = parse_operators(ops, operands, index, false);
           
           if (current_index == stop_index)
             return reduced;
 
           ops = ops.slice(index, ops.length)
           operands = [reduced].concat(operands.slice(index + 1, operands.length))
-          return lookupoperators(ops, operands, ops.length, true)
+          return parse_operators(ops, operands, ops.length, true)
   	    }
 
   	    for (var i = 0; i < f.params.length; i++) {
   	      if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
-  	        operands[i] = new ExprRefFn(params[i]);
+  	        operands[i] = new ExprRefFn(operands[i]);
   	      }
         }
 
@@ -737,7 +739,7 @@ N_aryOperatorExpression
       console.log('ops:', ops)
   	  console.log('operands', params)
   	  stop_index = ops.length;
-  	  return lookupoperators(ops, params, ops.length, true);
+  	  return parse_operators(ops, params, ops.length, true);
   }
 
 TupleSelector
