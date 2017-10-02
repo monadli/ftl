@@ -51,13 +51,32 @@
   function function_ref(arg) {
     console.log("function_ref arguments", arg)
     console.log("function_ref closure", this.closure)
+
     var len = arguments.length;
     if (len == 0)
       return this.f.apply(this.closure)
-    else if (len == 1)
-      return this.f.apply(arg)
-    else
-      this.f.apply(Tuple.fromList(Array.apply(null, arguments)));
+
+    var tpl = new Tuple();
+    
+    // has parameters
+    // no named parameters
+    var start = 0;
+    if (this.params instanceof RefFn) {
+      tpl.addKeyValue(this.params.name, arg);
+      start = 1;
+    } else if (this.params instanceof TupleFn) {
+      var keys = this.params.list;
+      start = keys.length;
+
+      for (var i = 0; i < arguments.length; i++)
+        tpl.addKeyValue(keys[i].name, arguments[i]);
+    }
+
+    for (var i = start; i < arguments.length; i++) {
+        tpl.addValue(arguments[i]);
+    }
+
+    return this.f.apply(tpl);
   }
 
   class Tuple {
@@ -94,6 +113,15 @@
 //      this._list.push(value)
       this._map.set("_" + this._size++, value);
       this._map.set(key, value);
+    }
+
+    getNamedKeys() {
+      var keys = [];
+      for (let key of this._map.keys()) {
+        if (!key.startsWith("_"))
+          keys.push(key)
+      }
+      return keys;
     }
 
     get(key) {
@@ -347,9 +375,7 @@
     }
 
     static createTupleFn(elms) {
-      if (elms.length == 1 && elms[0] instanceof Fn)
-        return elms[0];
-      return new TupleFn(elms);
+      return elms == null ? null : (elms.length == 1 && elms[0] instanceof Fn) ? elms[0] : new TupleFn(elms);
     }
 
     get list() {
@@ -477,6 +503,14 @@
       this._refType = 'ref'
     }
 
+    set params(params) {
+      this._params = params
+    }
+
+    get params() {
+      return this._params;
+    }
+
     isValueType() {
       return this._refType == 'value'
     }
@@ -513,18 +547,21 @@
     }
   }
 
+
+
   /**
    * This is a functional tuple reference, which returns a function.
    */
   class ExprRefFn extends Fn {
-    constructor(fn) {
+    constructor(fn, params) {
       super()
       this._type = "ExprRefFn"
       this._fn = fn;
+      this._params = params;
     }
 
     apply(input) {
-      return function_ref.bind({f: this._fn, closure: input});
+      return function_ref.bind({f: this._fn, closure: input, params: this._params});
     }
   }
 
@@ -654,14 +691,18 @@ Operator
   = !"->" first:OperatorSymbol rest:OperatorSymbol* { return text() }
 
 OperandValueDeclaration
-  = "$" id:Identifier { id.setAsValueType(); return id }
+  = id:Identifier { id.setAsValueType(); return id }
 
 OperandReferenceDeclaration
-  = "&" id:Identifier { id.setAsRefType(); return id }
+  = id:Identifier params:Tuple {
+      id.setAsRefType();
+      id.params = params;
+      return id
+    }
 
 OperandDeclaration
- = OperandValueDeclaration
- / OperandReferenceDeclaration
+ = OperandReferenceDeclaration
+ / OperandValueDeclaration
 
 /**
  * Operator declaration with form of:
@@ -724,7 +765,7 @@ N_aryOperatorExpression
 
   	    for (var i = 0; i < f.params.length; i++) {
   	      if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
-  	        operands[i] = new ExprRefFn(operands[i]);
+  	        operands[i] = new ExprRefFn(operands[i], f.params[i].params);
   	      }
         }
 

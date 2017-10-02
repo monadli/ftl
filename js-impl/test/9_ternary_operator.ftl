@@ -1,10 +1,10 @@
 fn out(val) { console.info('res:' + val)} 
 
-fn $a > $b {
+fn a > b {
   return a > b
 }
 
-fn $a * $b {
+fn a * b {
   return a * b
 }
 
@@ -18,7 +18,7 @@ fn $a * $b {
  * @input &otherwise: expression lazily computed
  * @output output of either &if_true or &otherwise
  */
-fn $condition ? &if_true : &otherwise {
+fn condition ? if_true() : otherwise() {
   return condition ? if_true() : otherwise()
 }
 
