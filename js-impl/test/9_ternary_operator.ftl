@@ -13,9 +13,9 @@ fn a * b {
  *    predicate ? if_true() : otherwise()
  *  where output of if_true() and otherwise() should have the same type
  *
- * @input $predicate any conditional expression that returns true or false
- * @input &if_true: expression lazily computed
- * @input &otherwise: expression lazily computed
+ * @input condition - a predicate that returns true or false
+ * @input if_true() - an expression that will be computed when condition is true
+ * @input otherwise() - an expression that will be computed when condition is false
  * @output output of either &if_true or &otherwise
  */
 fn condition ? if_true() : otherwise() {

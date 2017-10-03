@@ -522,13 +522,13 @@
     apply(input) {
       console.log("calculating ref for '" + this._name)
       console.log("input to RefFn:" + input)
-      var e = null;
+      var e;
 
       // find name from scoped tuple first
       if (input && input instanceof Tuple)
         e = input.get(this._name);
 
-      if (e)
+      if (e !== undefined)
       	return e;
 
       // must be a function
