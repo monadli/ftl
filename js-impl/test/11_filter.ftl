@@ -1,4 +1,4 @@
-fn out(val) { console.info('res:' + val)} 
+fn out(raw) { console.info('result: ' + raw)} 
 
 fn a > b {
   return a > b
@@ -9,7 +9,7 @@ fn a > b {
  *
  * @input 
  */
-fn list |=> predicate(item) {
+fn list |=> predicate(i) {
   var ret = [];
   for (var i = 0; i < list.length; i++) {
     var itm = list[i];
@@ -19,4 +19,4 @@ fn list |=> predicate(item) {
   return ret;
 }
 
-[-1, 2, 3, 0, -4, 5] |=> (item > 0) -> out
+[-1, 2, 3, 0, -4, 5] |=> (i > 0) -> out

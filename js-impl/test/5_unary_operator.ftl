@@ -1,4 +1,4 @@
-fn out(val) { console.info('res:' + val)} 
+fn out(raw) { console.info('result :' + raw)} 
 
 fn sin(val) { return Math.sin(val) } 
 

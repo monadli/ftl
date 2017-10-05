@@ -1,4 +1,4 @@
-fn out(val) { console.info('res:' + val)} 
+fn out(raw) { console.info('result: ' + raw)} 
 
 fn a + b {
   return a + b
@@ -11,11 +11,11 @@ fn a + b {
  * @input reducer - a function that passes item1 and item2 and reduces to a single item
  * @output - a single reduced item
  */
-fn list =|> reducer(item1, item2) {
+fn list =|> reducer(i1, i2) {
   var ret = list[0];
   for (var i = 1; i < list.length; i++)
     ret = reducer(ret, list[i]);
   return ret
 }
 
-[1, 2, 3] =|> (item1 + item2) -> out
+[1, 2, 3] =|> (i1 + i2) -> out

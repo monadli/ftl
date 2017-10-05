@@ -62,6 +62,9 @@
     // no named parameters
     var start = 0;
     if (this.params instanceof RefFn) {
+      if (this.params.name === 'raw')
+        return this.f.apply(arg);
+
       tpl.addKeyValue(this.params.name, arg);
       start = 1;
     } else if (this.params instanceof TupleFn) {
@@ -325,7 +328,7 @@
 
     apply(input) {
       console.log("tuple to native function: ", input)
-      if (this._param_list.length == 1 && this._param_list[0] == 'varargs')
+      if (this._param_list.length == 1 && this._param_list[0] == 'raw')
         var res = this.internal.apply(null, [input])
       else
       	var res = this.internal.apply(null, (input instanceof Tuple)? input.toList() : [input]);
@@ -865,7 +868,7 @@ DecimalDigit
   = [0-9]
 
 OperatorSymbol
-  = [!%&*+\-/:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
+  = [!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
 
 ReservedWord
   = Keyword
@@ -922,8 +925,8 @@ HexDigit
   = [0-9a-f]i
 
 StringLiteral
-  = '"' chars:DoubleStringCharacter* '"' { return new ConstFn(text()) }
-  / "'" chars:SingleStringCharacter* "'" { return new ConstFn(text()) }
+  = '"' chars:DoubleStringCharacter* '"' { var str = text(); return new ConstFn(str.substr(1, str.length - 2)) }
+  / "'" chars:SingleStringCharacter* "'" { var str = text(); return new ConstFn(str.substr(1, str.length - 2)) }
 
 DoubleStringCharacter
   = !('"' / "\\" / LineTerminator) SourceCharacter
