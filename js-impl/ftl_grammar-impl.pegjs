@@ -106,6 +106,10 @@
       return t;
     }
 
+    get size() {
+      return this._size;
+    }
+
     // add value without id
     addValue(value) {
 //      this._list.push(value)
@@ -116,6 +120,16 @@
 //      this._list.push(value)
       this._map.set("_" + this._size++, value);
       this._map.set(key, value);
+    }
+
+    copyAllFrom(anotherTuple) {
+      if (anotherTuple == null)
+        return
+
+      if (anotherTuple instanceof Tuple)
+        anotherTuple.toList().forEach(elm => this.addValue(elm));
+      else
+        this.addValue(anotherTuple);
     }
 
     getNamedKeys() {
@@ -341,8 +355,9 @@
   /**
    * Function function.
    */  
-  class FunctionFn {
+  class FunctionFn extends Fn {
     constructor(name, params, expr) {
+      super()
       this._name = name;
       this.expr = expr;
       var ins = params.in;
@@ -363,6 +378,21 @@
 
     apply(input) {
       return this.expr.apply(null, input);
+    }
+  }
+
+  class PartialFunctionFn extends Fn {
+    constructor(f, partialParams) {
+      super()
+      this._f = f;
+      this._partialParams = partialParams;
+    }
+
+    apply(input) {
+      var tuple = new Tuple();
+      tuple.copyAllFrom(input)
+      tuple.copyAllFrom(this._partialParams)
+      return this._f.apply(tuple);
     }
   }
 
@@ -818,7 +848,21 @@ MemberExpression
   = Identifier _ "[" _ ( ParameterList)+ _ "]"
 
 CallExpression
-  = Identifier _ "(" _ ( ParameterList)+ _ ")"
+  = id: Identifier _ params:Tuple {
+    var f = functions[id.name];
+    if (!f)
+      throw {message: id.name + " is not a function" }
+
+    var params_len = f.params.length;
+    var param_list = params.apply();
+    var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
+
+    if (actual_params_len >= params_len) {
+      return new ConstFn(f.apply(param_list));
+    }
+    
+    return new PartialFunctionFn(f, param_list);
+  }
 
 // Native javascript block wrapped with "{" and "}"
 NativeBlock
