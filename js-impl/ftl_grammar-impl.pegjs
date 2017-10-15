@@ -290,6 +290,31 @@
     }
   }
 
+  class ParameterMappingFn extends Fn {
+    constructor(params) {
+      super();
+      this._params = params;
+    }
+
+    get params() {
+      return this._params;
+    }
+
+    apply(input) {
+      if (!(input instanceof Tuple)) {
+        return input;
+      }
+
+      var tuple = new Tuple();
+      // to do: get right size of parameters
+      var list = this._params.list
+      for (var i = 0; i < input.size; i++) {
+        tuple.addKeyValue(list[i].name, input.get('_' + i))
+      }
+      return tuple;
+    }
+  }
+
   /**
    * Native javascript function.
    */
@@ -359,25 +384,19 @@
     constructor(name, params, expr) {
       super()
       this._name = name;
-      this.expr = expr;
-      var ins = params.in;
-      console.log("in:", params.in)
-      console.log("out:", params.out)
-      var param_list = [];
-      for (var i = 0; i < ins.length; i++) {
-        param_list.push(ins[i].id);
-      }
-      for (var i = 0; i < ins.length; i++) {
-        param_list.push('_' + (i + 1));
-      }
-      console.log("parameter list:", param_list) 
-      console.log("expr:", expr) 
+      this._expr = new CompositionFn([new ParameterMappingFn(params), expr]);
     }
 
-    get name() {return this._name}
+    get name() {
+      return this._name;
+    }
+
+    get params() {
+      return this._expr.elements[0].params.list;
+    }
 
     apply(input) {
-      return this.expr.apply(null, input);
+      return this._expr.apply(input);
     }
   }
 
@@ -561,8 +580,17 @@
       if (input && input instanceof Tuple)
         e = input.get(this._name);
 
-      if (e !== undefined)
-      	return e;
+      if (e !== undefined) {
+        if (typeof(e) == 'function' && this._params != null) {
+          var args = [];
+          if (this._params instanceof RefFn)
+            args.push(input.get(this._params.name))
+          else for (var i = 0; i < this._params.size; i++)
+            args.push(input.get(this._params[i].name));
+          return e.apply(null, args)
+        }
+        return e;
+      }
 
       // must be a function
       e = functions[this._name];
@@ -850,18 +878,22 @@ MemberExpression
 CallExpression
   = id: Identifier _ params:Tuple {
     var f = functions[id.name];
-    if (!f)
-      throw {message: id.name + " is not a function" }
+    if (f) {
+      var params_len = f.params.length;
+      var param_list = params.apply();
+      var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
 
-    var params_len = f.params.length;
-    var param_list = params.apply();
-    var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
 
-    if (actual_params_len >= params_len) {
-      return new ConstFn(f.apply(param_list));
+      if (actual_params_len >= params_len) {
+        return new ConstFn(f.apply(param_list));
+      }
+      return new PartialFunctionFn(f, param_list);
     }
-    
-    return new PartialFunctionFn(f, param_list);
+
+    else {
+      id.params = params;
+      return id;
+    }
   }
 
 // Native javascript block wrapped with "{" and "}"
