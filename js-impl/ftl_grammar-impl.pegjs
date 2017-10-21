@@ -186,9 +186,30 @@
 	}
   }
 
+  /**
+   * Base class for a function in ftl.
+   */
   class Fn {
     apply(input) {
       return null;
+    }
+  }
+
+  /**
+   * Function with children.
+   */
+  class WrapperFn extends Fn {
+    constructor(fn) {
+      super();
+      this._wrapped = fn;
+    }
+
+    get wrapped() {
+      return this._wrapped;
+    }
+
+    apply(input) {
+      return this._wrapped.apply(input);
     }
   }
 
@@ -380,11 +401,10 @@
   /**
    * Function function.
    */  
-  class FunctionFn extends Fn {
+  class FunctionFn extends WrapperFn {
     constructor(name, params, expr) {
-      super()
+      super(new CompositionFn([new ParameterMappingFn(params), expr]))
       this._name = name;
-      this._expr = new CompositionFn([new ParameterMappingFn(params), expr]);
     }
 
     get name() {
@@ -392,18 +412,13 @@
     }
 
     get params() {
-      return this._expr.elements[0].params.list;
-    }
-
-    apply(input) {
-      return this._expr.apply(input);
+      return this.wrapped.elements[0].params.list;
     }
   }
 
-  class PartialFunctionFn extends Fn {
+  class PartialFunctionFn extends WrapperFn {
     constructor(f, partialParams) {
-      super()
-      this._f = f;
+      super(f)
       this._partialParams = partialParams;
     }
 
@@ -411,7 +426,7 @@
       var tuple = new Tuple();
       tuple.copyAllFrom(input)
       tuple.copyAllFrom(this._partialParams)
-      return this._f.apply(tuple);
+      return super.apply(tuple);
     }
   }
 
@@ -613,16 +628,15 @@
   /**
    * This is a functional tuple reference, which returns a function.
    */
-  class ExprRefFn extends Fn {
+  class ExprRefFn extends WrapperFn {
     constructor(fn, params) {
-      super()
+      super(fn)
       this._type = "ExprRefFn"
-      this._fn = fn;
       this._params = params;
     }
 
     apply(input) {
-      return function_ref.bind({f: this._fn, closure: input, params: this._params});
+      return function_ref.bind({f: this.wrapped, closure: input, params: this._params});
     }
   }
 
