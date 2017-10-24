@@ -322,12 +322,14 @@
     }
 
     apply(input) {
+      var tuple = new Tuple();
+
       if (!(input instanceof Tuple)) {
-        return input;
+        var param = (this.params instanceof RefFn) ? this.params : this._params.list[0];
+        tuple.addKeyValue(param.name, input)
+        return tuple;
       }
 
-      var tuple = new Tuple();
-      // to do: get right size of parameters
       var list = this._params.list
       for (var i = 0; i < input.size; i++) {
         tuple.addKeyValue(list[i].name, input.get('_' + i))
@@ -893,7 +895,7 @@ CallExpression
   = id: Identifier _ params:Tuple {
     var f = functions[id.name];
     if (f) {
-      var params_len = f.params.length;
+      var params_len = (f.params instanceof TupleFn) ? f.params.length : 1;
       var param_list = params.apply();
       var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
 
