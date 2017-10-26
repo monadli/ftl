@@ -330,10 +330,11 @@
         return tuple;
       }
 
-      var list = this._params.list
+      var list = (this.params instanceof RefFn) ? [this._params.list] : this._params.list
       for (var i = 0; i < input.size; i++) {
         tuple.addKeyValue(list[i].name, input.get('_' + i))
       }
+
       return tuple;
     }
   }
@@ -614,7 +615,12 @@
       if (e) {
         console.log("actual f ", e)
         console.log("tuple to " + this._name, input)
-        var res = e.apply(input);
+
+        if (this._params && this._params instanceof CompositionFn) {
+          var res = e.apply(this._params.apply(input));
+        } else {
+          var res = e.apply(input);
+        }
         console.log("result of RefFn: ", res)
         return res;
       }
@@ -624,8 +630,6 @@
         throw { message: "no ref for '" + this._name + "' found as identifier or function!" }
     }
   }
-
-
 
   /**
    * This is a functional tuple reference, which returns a function.
@@ -895,7 +899,7 @@ CallExpression
   = id: Identifier _ params:Tuple {
     var f = functions[id.name];
     if (f) {
-      var params_len = (f.params instanceof TupleFn) ? f.params.length : 1;
+      var params_len = (f.params instanceof TupleFn || Array.isArray(f.params)) ? f.params.length : 1;
       var param_list = params.apply();
       var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
 
