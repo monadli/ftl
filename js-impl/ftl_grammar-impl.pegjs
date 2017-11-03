@@ -48,6 +48,10 @@
       return value.toString()
   }
 
+  function pass_through() {
+    return this;
+  }
+
   function function_ref(arg) {
     console.log("function_ref arguments", arg)
     console.log("function_ref closure", this.closure)
@@ -122,6 +126,10 @@
       this._map.set(key, value);
     }
 
+    replaceValue(key, value) {
+      this._map.set(key, value);
+    }
+
     copyAllFrom(anotherTuple) {
       if (anotherTuple == null)
         return
@@ -147,6 +155,13 @@
 //        return ind < this._list.length ? this._list[ind] : null
 //      }
       return this._map.get(key);
+    }
+
+    hasTail() {
+      for (var i = 0; i < this._size; i++)
+        if (this.get('_' + i) instanceof TailFn)
+          return true;
+      return false
     }
 
     toList() {
@@ -408,6 +423,11 @@
     constructor(name, params, expr) {
       super(new CompositionFn([new ParameterMappingFn(params), expr]))
       this._name = name;
+      this._recursive = false;
+    }
+
+    get isRecursive() {
+      return this._recursive
     }
 
     get name() {
@@ -416,6 +436,29 @@
 
     get params() {
       return this.wrapped.elements[0].params.list;
+    }
+  
+    apply(input, context) {
+      var res = super.apply(input);
+      var i = 0;
+      while (res instanceof TailFn) {
+        i++;
+        if (i == 10000)
+          break;
+        if (context == this) {
+          res._recursive = true;
+          return res;
+        }
+        var prev = res;
+        if (res.nextTail)
+          res = res.executeRecursive(this);
+        else {
+          res = res.apply(this);
+          if (!(res instanceof TailFn))
+            break;
+        }
+      }
+      return res;
     }
   }
 
@@ -434,7 +477,7 @@
   }
 
   /**
-   * Tuple function.
+   * Tuple function that contains list of elements.
    */
   class TupleFn extends Fn {
     constructor(tp) {
@@ -448,11 +491,16 @@
       return elms == null ? null : (elms.length == 1 && elms[0] instanceof Fn) ? elms[0] : new TupleFn(elms);
     }
 
+    // deprecated
     get list() {
       return this.tp;
     }
 
-    apply(input) {
+    get tuple() {
+      return this.tp;
+    }
+
+    apply(input, context) {
       var tuple = new Tuple()
       if (this.tp == null)
         return tuple
@@ -462,12 +510,16 @@
         if (tpl instanceof ConstFn || tpl instanceof CompositionFn)
           tuple.addValue(tpl.apply(input)); 
         else if (tpl instanceof ExprFn) {
-          var res = tpl.apply(input);
+          var res = tpl.apply(input, context);
           tuple.addKeyValue(tpl.id, res);
         }
 
         else {
-          var res = tpl.apply(input);
+          var tp = typeof(tpl);
+          if (tp == 'number' || tp == 'string' || tp == 'boolean')
+            var res = tpl 
+          else
+            var res = tpl.apply(input, context);
           console.log('res:', res)
           tuple.addValue(res);
         }
@@ -536,13 +588,22 @@
       return this.funs;
     }
 
-    apply(tuple) {
+    apply(tuple, context) {
       console.log("composition input:", tuple);
-      var res = this.funs[0].apply(tuple);
+      var res = this.funs[0].apply(tuple, context);
       console.log("result of first item:", res);
 
       for (var i = 1; i < this.funs.length; i++) {
-        res = this.funs[i].apply(res)
+        if (res instanceof TailFn) {
+          return new TailFn(new CompositionFn([res._wrapped].concat(this.funs.slice(i))));
+        } else if (res instanceof Tuple && res.hasTail()) {
+          var nextTail = new TupleFn(res.toList());
+          res = new TailFn(new CompositionFn([nextTail].concat(this.funs.slice(i))));
+          res.nextTail = nextTail;
+          return res;
+        }
+
+        res = this.funs[i].apply(res, context)
         if (res)
           console.log("result of item " + i + ":", res);
       }
@@ -559,6 +620,12 @@
       super()
       this._type = "RefFn"
       this._name = name;
+      if (name.endsWith('$')) {
+        this._name = name.substr(0, name.length - 1);
+        this._tail = true;
+      } else {
+        this._name = name;
+      }
     }
 
     get name() {
@@ -571,6 +638,10 @@
 
     setAsRefType() {
       this._refType = 'ref'
+    }
+
+    isTail() {
+      return this._tail ? this._tail : false;
     }
 
     set params(params) {
@@ -589,7 +660,7 @@
       return this._refType == 'ref'
     }
     
-    apply(input) {
+    apply(input, context) {
       console.log("calculating ref for '" + this._name)
       console.log("input to RefFn:" + input)
       var e;
@@ -617,7 +688,7 @@
         console.log("tuple to " + this._name, input)
 
         if (this._params && this._params instanceof CompositionFn) {
-          var res = e.apply(this._params.apply(input));
+          var res = e.apply(this._params.apply(input), context);
         } else {
           var res = e.apply(input);
         }
@@ -635,14 +706,62 @@
    * This is a functional tuple reference, which returns a function.
    */
   class ExprRefFn extends WrapperFn {
-    constructor(fn, params) {
+    constructor(fn, params, isTail) {
       super(fn)
       this._type = "ExprRefFn"
       this._params = params;
+      this._isTail = isTail;
     }
 
     apply(input) {
-      return function_ref.bind({f: this.wrapped, closure: input, params: this._params});
+      if (this._isTail) {
+        return pass_through.bind(new TailFn(this.wrapped, input));
+      } else
+        return function_ref.bind({f: this.wrapped, closure: input, params: this._params});;
+    }
+  }
+
+  class TailFn extends WrapperFn {
+    constructor(fn, closure) {
+      super(fn);
+      this._closure = closure;
+      this._nextTail = null;
+    }
+
+    set nextTail(nextTail) {
+      this._nextTail = nextTail;
+    }
+
+    get nextTail() {
+      return this._nextTail;
+    }
+
+    executeRecursive(context) {
+      if (this._nextTail instanceof TupleFn) {
+        var tuple = this._nextTail.tuple;
+        for (var i = 0; i < tuple.length; i++) {
+          var elm = tuple[i];
+          if (elm instanceof TailFn) {
+            var next = elm.apply(context);
+            if (next instanceof TailFn) {
+              this._nextTail = next._nextTail;
+              tuple[i] = next.wrapped;
+            }
+
+            // end of recursive
+            else {
+              this._nextTail = null;
+              tuple[i] = next;
+            }
+          }
+        }
+      }
+      return this;
+    }
+
+    apply(context) {
+      var res = this._wrapped.apply(this._closure, context);
+      return res;
     }
   }
 
@@ -753,8 +872,10 @@ Expression
 Executable
   = expr:Expression {
       var res = expr.apply()
+      if (res && res instanceof TailFn)
+        res = res.apply();
       if (res)
-        console.log('executable result: ', expr.apply())
+        console.log('executable result: ', res)
       return expr
     }
 
@@ -846,7 +967,7 @@ N_aryOperatorExpression
 
   	    for (var i = 0; i < f.params.length; i++) {
   	      if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
-  	        operands[i] = new ExprRefFn(operands[i], f.params[i].params);
+  	        operands[i] = new ExprRefFn(operands[i], f.params[i].params, f.params[i].isTail());
   	      }
         }
 
@@ -905,7 +1026,7 @@ CallExpression
 
 
       if (actual_params_len >= params_len) {
-        return new ConstFn(f.apply(param_list));
+        return new CompositionFn([params, f])
       }
       return new PartialFunctionFn(f, param_list);
     }
