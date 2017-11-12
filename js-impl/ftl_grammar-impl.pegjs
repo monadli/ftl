@@ -817,7 +817,7 @@ FunctionDeclaration
     console.log('function id: ', id.name)
     console.log('expr: ', body)
 
-    var is_operator = id.type == 'OperatorDeclaration';
+    var is_operator = id.type == 'OperatorDeclaration' || id.type == 'PostfixOperatorDeclaration';
     if (is_operator)
     	console.log('parameter list from operator: ', id.operands)
   	console.log('parameter list from function: ', optionalList(params))
@@ -876,6 +876,7 @@ Executable
         res = res.apply();
       if (res)
         console.log('executable result: ', res)
+      expr.result = res;
       return expr
     }
 
@@ -912,6 +913,10 @@ OperandDeclaration
  * @return type:'OperatorDeclaration', id, operands
  */
 OperatorDeclaration
+  = PreInfixOperatorDeclaration
+  / PostfixOperatorDeclaration
+
+PreInfixOperatorDeclaration
   = first:OperandDeclaration rest:(_ Operator _ OperandDeclaration)+ {
       var ops = extractList(rest, 1);
       var name = ops.length == 1 ? ops[0] : ops.join(' ');
@@ -925,9 +930,20 @@ OperatorDeclaration
       }
     }
 
+PostfixOperatorDeclaration
+  = operand:OperandDeclaration _ op:Operator {
+    console.log('PostfixOperatorDeclaration begin')
+      return {
+        type: 'PostfixOperatorDeclaration',
+        name: op,
+        operands: operand
+      }
+  }
+
 OperatorExpression
   = UnaryOperatorExpression
   / N_aryOperatorExpression
+  / PostfixOperatorExpression
 
 // unary prefix operator expression 
 UnaryOperatorExpression
@@ -939,7 +955,20 @@ UnaryOperatorExpression
       return CompositionFn.createCompositionFn(expr, functions[op.name]);
     }
 
-// conditional ternary expression
+// postfix operator
+PostfixOperatorExpression
+  = expr:PrimaryExpression _ op:Operator {
+      console.log('PostfixOperatorExpression: op', op)
+      console.log('PostfixOperatorExpression: expr', expr)
+      if (op == '-' && expr instanceof ConstFn)
+        return new ConstFn(-1 * expr.value);
+      var op_fn = functions[op];
+      if (!op_fn)
+        op_fn = new RefFn(op);
+      return CompositionFn.createCompositionFn(expr, op_fn);
+  }
+
+// n-ary operator expression
 N_aryOperatorExpression
   = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+ {
   

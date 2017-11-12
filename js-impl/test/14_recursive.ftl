@@ -14,6 +14,6 @@ fn condition ? if_true$() : otherwise$() {
   return condition ? if_true() : otherwise()
 }
 
-fn fractorial(x) -> x < 2 ? 1 : (fractorial(x - 1) * x)
+fn x! -> x < 2 ? 1 : (((x - 1)!) * x)
 
-fractorial(4)
+4!
