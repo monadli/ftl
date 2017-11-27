@@ -164,6 +164,13 @@
       return false
     }
 
+    hasRef() {
+      for (var i = 0; i < this._size; i++)
+        if (this.get('_' + i) instanceof RefFn)
+          return true;
+      return false
+    }
+
     toList() {
       var list = [];
       for (var i = 0; i < this._size; i++)
@@ -603,6 +610,11 @@
           return res;
         }
 
+        // still has unresolved ref
+        else if (res instanceof Tuple && res.hasRef()) {
+          return new CompositionFn([new TupleFn(res.toList())].concat(this.funs.slice(i)))
+        }
+
         res = this.funs[i].apply(res, context)
         if (res)
           console.log("result of item " + i + ":", res);
@@ -670,13 +682,23 @@
         e = input.get(this._name);
 
       if (e !== undefined) {
-        if (typeof(e) == 'function' && this._params != null) {
-          var args = [];
-          if (this._params instanceof RefFn)
-            args.push(input.get(this._params.name))
-          else for (var i = 0; i < this._params.size; i++)
-            args.push(input.get(this._params[i].name));
-          return e.apply(null, args)
+        if (this._params != null) {
+          if (typeof(e) == 'function') {
+            var args = [];
+            if (this._params instanceof RefFn)
+              args.push(input.get(this._params.name))
+            else for (var i = 0; i < this._params.size; i++)
+              args.push(input.get(this._params[i].name));
+            return e.apply(null, args)
+          }
+
+          // e not a function but an Fn
+          else {
+            var tpl = this._params.apply(input);
+            if (!(tpl instanceof Tuple))
+              tpl = Tuple.fromValue(tpl);
+            return e.apply(tpl);
+          }
         }
         return e;
       }
@@ -697,8 +719,10 @@
       }
       else if (this._name == '_0' && input && !(input instanceof Tuple))
         return input;
+
+      // can not find ref, return itself
       else
-        throw { message: "no ref for '" + this._name + "' found as identifier or function!" }
+        return this;
     }
   }
 
