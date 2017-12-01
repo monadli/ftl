@@ -8,40 +8,44 @@
 
 // start
 Start
-  = __ program:Declarations? __
+  = ___ program:Declarations? ___ 
 
 // all allowed declarations
 Declarations
-  = (__ VariableDeclaration)* (__ FunctionDeclaration)* (__ Executable)*
+  = first:Declaration rest:(__ Declaration)*
+
+Declaration
+  = VariableDeclaration / FunctionDeclaration / Executable
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module.
 VariableDeclaration
-  = (ConstToken / VarToken) __ id:Identifier __ "=" __ expr:PrimaryExpression
+  = modifier:(ConstToken / VarToken) _ id:Identifier _ "=" _ expr:PrimaryExpression
 
 // Function declaration
+// A function can be n-ary operator as well
 FunctionDeclaration
-  = __ FunctionToken __ id:(Identifier / Operator) __ params:Tuple __ body:FunctionBody
+  = FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody
 
-Tuple = "(" __ elms:ParameterList? ")"
+Tuple = "(" _ elms:ParameterList? ")"
 
 ParameterList
-  = first:Parameter rest:(__ "," __ Parameter)*
+  = first:Parameter rest:(_ "," _ Parameter)*
 
 Parameter
-  = id:(Identifier __ ":")? __ expr:Expression
+  = id:(Identifier _ ":")? _ expr:Expression
 
 FunctionBody
   = NativeBlock
   / PipeExpression
 
 PipeExpression
-  = "->" __ ex:Expression __
+  = "->" _ ex:Expression _
 
 Expression
-  = first:(PrimaryExpression / OperatorExpression) pipe:(__ PipeExpression)?
+  = first:(OperatorExpression / PrimaryExpression) rest:(_ PipeExpression)?
 
 Executable
-  = __ expr:Expression
+  = expr:Expression
 
 PrimaryExpression
   = CallExpression
@@ -51,29 +55,58 @@ PrimaryExpression
   / ArrayLiteral
   / Tuple
   / TupleSelector
+  / ArrayElementSelector
 
 Operator
-  = __ !"->" first:OperatorSymbol rest:OperatorSymbol*
+  = !"->" first:OperatorSymbol rest:OperatorSymbol*
+
+OperandValueDeclaration
+  = id:Identifier
+
+OperandReferenceDeclaration
+  = id:Identifier params:Tuple
+
+OperandDeclaration
+ = OperandReferenceDeclaration
+ / OperandValueDeclaration
+
+/**
+ * Operator declaration with form of:
+ *   operand (op operand)+
+ * @return type:'OperatorDeclaration', id, operands
+ */
+OperatorDeclaration
+  = PreInfixOperatorDeclaration
+  / PostfixOperatorDeclaration
+
+PreInfixOperatorDeclaration
+  = first:OperandDeclaration rest:(_ Operator _ OperandDeclaration)+
+
+PostfixOperatorDeclaration
+  = operand:OperandDeclaration _ op:Operator
 
 OperatorExpression
   = UnaryOperatorExpression
-  / BinaryOperatorExpression
-  / TernaryOperatorExpression
+  / N_aryOperatorExpression
+  / PostfixOperatorExpression
 
 // unary prefix operator expression 
 UnaryOperatorExpression
-  = __ op:Operator __ expr:Expression 
+  = op:Operator _ expr:PrimaryExpression
 
-// binary infix operator expression
-BinaryOperatorExpression
-  = __ preop:PrimaryExpression __ op:Operator postop:Expression 
+// postfix operator
+PostfixOperatorExpression
+  = expr:PrimaryExpression _ op:Operator
 
-// conditional ternary expression
-TernaryOperatorExpression
-  = __ "(" conditon:Expression ")" __ "?" __ then:Expression otherwise:(__ ":" __ Expression)?
+// n-ary operator expression
+N_aryOperatorExpression
+  = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+
 
 TupleSelector
-  = __ "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart))
+  = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart))
+
+ArrayElementSelector
+  = "[" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) + "]"
 
 Literal
   = NullLiteral
@@ -82,23 +115,23 @@ Literal
   / StringLiteral
 
 ArrayLiteral
-  = __ "[" (__ elms:LiteralList)? "]"
+  = "[" elms:(_ LiteralList)? "]"
 
 LiteralList
-  = first:PrimaryExpression rest:(__ "," __ PrimaryExpression)*
+  = first:PrimaryExpression rest:(_ "," _ PrimaryExpression)*
 
 // expression for getting member of variable
 MemberExpression
-  = __ Identifier __ "[" __ ( ParameterList)+ __ "]"
+  = Identifier _ "[" _ ( ParameterList)+ _ "]"
 
 CallExpression
-  = __ Identifier __ "(" __ ( ParameterList)+ __ ")"
+  = id: Identifier _ params:Tuple
 
 // Native javascript block wrapped with "{" and "}"
 NativeBlock
-  = "{" __ ((!("{" / "}") SourceCharacter)* )
-    NativeBlock* __
-    ((!("{" / "}") SourceCharacter)* ) "}"
+  = "{" _ ((!("{" / "}") SourceCharacter)*)
+    NativeBlock* _
+    ((!("{" / "}") SourceCharacter)*) "}"
 
 SourceCharacter
   = .
@@ -121,10 +154,10 @@ IdentifierPart
 
 // Tokens
 FalseToken      = "false"
-FunctionToken   = "function"
+FunctionToken   = "fn"
 NullToken       = "null"
-TrueToken       = "true"
-VarToken        = "var"
+TrueToken       = "true" !IdentifierStart
+VarToken        = "var" !IdentifierStart
 ConstToken      = "const"
 
 AsciiLetter
@@ -141,7 +174,7 @@ DecimalDigit
   = [0-9]
 
 OperatorSymbol
-  = [\u0021\u0025\u0026\u002A\u002B\u002D\u002F\u003A\u003C\u003D\u003E\u005E\u007C\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
+  = [!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
 
 ReservedWord
   = Keyword
@@ -166,8 +199,6 @@ NumericLiteral
 
 DecimalLiteral
   = DecimalIntegerLiteral "." DecimalDigit* ExponentPart?
-  / [-]? "." DecimalDigit+ ExponentPart?
-  / DecimalIntegerLiteral ExponentPart?
 
 DecimalIntegerLiteral
   = "0"
@@ -269,6 +300,14 @@ MultiLineComment
 MultiLineCommentNoLineTerminator
   = "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
 
-// white spaces
+// any white space, comment, with end of line
+_
+  = (WhiteSpace / Comment)* (EOL+ (WhiteSpace / Comment)+)*
+
+// at least one end of line with optional white space or comment preceding it
 __
+  = ((WhiteSpace / Comment)* EOL)+
+
+// any white space, comment, or end of line
+___
   = (WhiteSpace / EOL / Comment)*
