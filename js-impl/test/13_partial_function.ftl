@@ -1,5 +1,3 @@
-fn out(raw) { console.info('result: ' + raw)}
-
 fn sin(x) {
   return Math.sin(x)
 }
@@ -16,4 +14,4 @@ fn contains(str, sub) {
 // 
 // When calling this partial function, only the first one argument
 // needs to be provided. 
-'this is a test' -> contains('test') -> out
+'this is a test' -> contains('test')

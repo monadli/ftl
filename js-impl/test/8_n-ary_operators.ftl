@@ -1,5 +1,3 @@
-fn out(raw) { console.info('result: ' + raw)} 
-
 // binary operator
 fn a + b {
   return a + b
@@ -16,4 +14,4 @@ fn a - b + c - d {
 }
 
 // the following is equivalent to (1 - 2 + 4 - 9) + (4 - 5 - 7) 
-1 - 2 + 4 - 9 + 4 - 5 - 7 -> out
+1 - 2 + 4 - 9 + 4 - 5 - 7

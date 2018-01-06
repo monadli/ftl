@@ -3,4 +3,4 @@ var a = 1
 
 fn out(raw) { console.info('result: ' + raw)}
 
-a -> out
+a

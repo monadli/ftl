@@ -1,0 +1,32 @@
+<html>
+<head>
+<script src="ftl-js-core.js"></script>
+<script src="ftl-js-parser.js"></script>
+<script>
+function run() {
+  initialize();
+  ftl_js_parser.parse(document.getElementById("ftl_src").value)
+  var out_area = document.getElementById('out_area');
+  out_area.value = '';
+  executables.forEach(function(executable) {
+    var res = executable.apply()
+    if (res && res instanceof TailFn)
+      res = res.apply();
+    if (res) {
+      out_area.value += res + '\r\n';
+    }
+  });
+}
+</script>
+</head>
+<body>
+<h3>FTL Editor</h3>
+<textarea id='ftl_src' style='width:80%; height:400px'>
+</textarea>
+<div>
+<button onclick='run()'>Run</button>
+</div>
+<textarea id='out_area' style='width:80%; height:200px'>
+</textarea>
+</body>
+</html>

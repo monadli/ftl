@@ -1,5 +1,3 @@
-fn out(raw) { console.info('result: ' + raw)} 
-
 fn a + b {
   return a + b
 }
@@ -20,4 +18,4 @@ fn list => mapper(item) {
 }
 
 // an array containing number that are mapped into another number with 2 added.
-[1, 2, 3] => (item + 2) -> out
+[1, 2, 3] => (item + 2)

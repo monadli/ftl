@@ -1,5 +1,3 @@
-fn out(raw) { console.info('result: ' + raw)} 
-
 fn a > b {
   return a > b
 }
@@ -23,4 +21,4 @@ fn condition ? if_true() : otherwise() {
 }
 
 // if 4 > 0 return 5 * 2 = 10 otherwise return 3 * 3 = 9
-(1, 3, 4, 5) -> _2 > 0 ? (_3 * 2) : (_1 * 3) -> out
+(1, 3, 4, 5) -> _2 > 0 ? (_3 * 2) : (_1 * 3)

@@ -1,5 +1,3 @@
-fn out(raw) { console.info('result: ' + raw)}
-
 /**
  * Operator "." for sub-element resolution.
  */
@@ -9,4 +7,4 @@ fn a . b(raw) ->  b(a)
 var tuple = (b:(4.3, 4.5), c:"test", d:4, e:true)
 
 // using operator '.' to retrieve the second element (with ._1) of b (with .b)
-tuple.b._1 -> out
+tuple.b._1

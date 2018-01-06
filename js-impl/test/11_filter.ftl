@@ -1,5 +1,3 @@
-fn out(raw) { console.info('result: ' + raw)} 
-
 fn a > b {
   return a > b
 }
@@ -19,4 +17,4 @@ fn list |=> predicate(i) {
   return ret;
 }
 
-[-1, 2, 3, 0, -4, 5] |=> (i > 0) -> out
+[-1, 2, 3, 0, -4, 5] |=> (i > 0)

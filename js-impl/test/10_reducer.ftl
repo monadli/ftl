@@ -1,5 +1,3 @@
-fn out(raw) { console.info('result: ' + raw)} 
-
 fn a + b {
   return a + b
 }
@@ -18,4 +16,4 @@ fn list =|> reducer(i1, i2) {
   return ret
 }
 
-[1, 2, 3] =|> (i1 + i2) -> out
+[1, 2, 3] =|> (i1 + i2)
