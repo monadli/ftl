@@ -10,10 +10,14 @@ function run() {
   out_area.value = '';
   executables.forEach(function(executable) {
     var res = executable.apply()
-    if (res && res instanceof TailFn)
+    if (typeof(res) != 'undefined' && res instanceof TailFn) {
       res = res.apply();
-    if (res) {
-      out_area.value += res + '\r\n';
+    }
+    if (typeof(res) != 'undefined') {
+      if (res instanceof RefFn) {
+        out_area.value += 'reference ' + res.name + ' undefined\r\n';
+      } else
+        out_area.value += res + '\r\n';
     }
   });
 }

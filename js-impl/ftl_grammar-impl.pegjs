@@ -415,8 +415,10 @@
       console.log("tuple to native function: ", input)
       if (this._param_list.length == 1 && this._param_list[0] == 'raw')
         var res = this.internal.apply(null, [input])
-      else
-      	var res = this.internal.apply(null, (input instanceof Tuple)? input.toList() : [input]);
+      else {
+        var input_array = (input instanceof Tuple)? input.toList() : [input];
+        var res = this.internal.apply(null, input_array);
+      }
 
    	  console.log("output of native function: ", res)
       return res
@@ -709,11 +711,7 @@
         console.log("actual f ", e)
         console.log("tuple to " + this._name, input)
 
-        if (this._params && this._params instanceof CompositionFn) {
-          var res = e.apply(this._params.apply(input), context);
-        } else {
-          var res = e.apply(input);
-        }
+        var res = e.apply((this._params == null ? input : this._params.apply(input)), context);
         console.log("result of RefFn: ", res)
         return res;
       }

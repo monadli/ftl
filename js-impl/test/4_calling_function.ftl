@@ -5,6 +5,6 @@ fn sin(x) { return Math.sin(x) }
 
 // a functional tuple can contain element selector from result of previous functional tuple
 // for variable t, its member is queryable in next ft 
-t -> (_0 -> sin, c -> sin) -> out
+t -> (_0 -> sin, c -> sin)
 
 (3.13, 2.12) -> sin
