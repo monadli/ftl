@@ -313,18 +313,18 @@ class ParameterMappingFn extends Fn {
     return this._params;
   }
 
+  _getInputElement(input, idx) {
+    return input instanceof Tuple ? input.get('_' + idx) : idx == 0 ? input : null;
+  }
+
   apply(input) {
     var tuple = new Tuple();
 
-  if (!(input instanceof Tuple)) {
-      var param = (this.params instanceof RefFn) ? this.params : this._params.list[0];
-      tuple.addKeyValue(param.name, input)
-      return tuple;
-    }
+    var list = (this.params instanceof RefFn) ? [this._params] : this._params.list
+    for (var i = 0; i < list.length; i++) {
 
-    var list = (this.params instanceof RefFn) ? [this._params.list] : this._params.list
-    for (var i = 0; i < input.size; i++) {
-      tuple.addKeyValue(list[i].name, input.get('_' + i))
+      // value from input or from default expression
+      tuple.addKeyValue(list[i].name, this._getInputElement(input, i) || list[i].apply(input))
     }
 
     return tuple;
@@ -416,7 +416,7 @@ class FunctionFn extends WrapperFn {
   get params() {
     return this.wrapped.elements[0].params.list;
   }
-  
+
   apply(input, context) {
     var res = super.apply(input);
     var i = 0;
@@ -514,6 +514,14 @@ class ExprFn {
   constructor(id, elm) {
     this.id = id;
     this.elm = elm;
+  }
+
+  get name() {
+    return this.id;
+  }
+
+  hasRef() {
+    return this.elm instanceof RefFn
   }
 
   apply(input) {

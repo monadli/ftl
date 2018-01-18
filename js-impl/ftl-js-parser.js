@@ -323,10 +323,22 @@ ftl_js_parser = /*
           function(id, params) {
               var f = functions[id.name];
               if (f) {
-                var params_len = (f.params instanceof TupleFn || Array.isArray(f.params)) ? f.params.length : 1;
+                var f_params = f.params;
+                if (!Array.isArray(f_params)) {
+                  if (f_params instanceof TupleFn) {
+                    f_params = f_params.list
+                  } else
+                    f_params = [f_params]
+                }
+                
+                var params_len = f_params.length;
+                for (var i = 0; i < f_params.length; i++) {
+                  var p = f_params[i];
+                  if (p instanceof ExprFn && !p.hasRef())
+                    params_len--;
+                }
                 var param_list = params.apply();
                 var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
-
 
                 if (actual_params_len >= params_len) {
                   return new CompositionFn([params, f])
