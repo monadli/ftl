@@ -324,7 +324,10 @@ class ParameterMappingFn extends Fn {
     for (var i = 0; i < list.length; i++) {
 
       // value from input or from default expression
-      tuple.addKeyValue(list[i].name, this._getInputElement(input, i) || list[i].apply(input))
+      var val = this._getInputElement(input, i);
+      if (val == null)
+        list[i].apply(input);
+      tuple.addKeyValue(list[i].name, val)
     }
 
     return tuple;
@@ -580,7 +583,7 @@ class CompositionFn extends Fn {
     var res = this.funs[0].apply(tuple, context);
     console.log("result of first item:", res);
 
-  for (var i = 1; i < this.funs.length; i++) {
+    for (var i = 1; i < this.funs.length; i++) {
       if (res instanceof TailFn) {
         return new TailFn(new CompositionFn([res._wrapped].concat(this.funs.slice(i))));
       } else if (res instanceof Tuple && res.hasTail()) {
@@ -667,6 +670,10 @@ class RefFn extends Fn {
           var args = [];
           if (this._params instanceof RefFn)
             args.push(input.get(this._params.name))
+          else if (this._params instanceof Fn) {
+            args = this._params.apply(input);
+            args = args instanceof Tuple ? args.toList() : [args];
+          }
           else for (var i = 0; i < this._params.size; i++)
             args.push(input.get(this._params[i].name));
           return e.apply(null, args)
@@ -762,6 +769,40 @@ class TailFn extends WrapperFn {
   apply(context) {
     var res = this._wrapped.apply(this._closure, context);
     return res;
+  }
+}
+
+/**
+ * Array element selector.
+ *
+ * @parameter name - name of a list
+ * @ index - index of element
+ */
+class ArrayElementSelectorFn extends Fn {
+  constructor(name, index) {
+    super()
+    this._type = "ArrayElementSelectorFn"
+    this._name = name.name;
+    this._index = (index instanceof RefFn) ? index.name : parseInt(index);
+  }
+
+  get name() {
+    return this._name;
+  }
+
+  apply(input) {
+    var list;
+    if (input && input instanceof Tuple)
+      list = input.get(this._name);
+
+    if (!list)
+      list = functions[this._name];
+
+    if (list instanceof VarFn)
+      list = list._val;
+
+    var i = typeof(this._index) == 'number' ? this._index : input.get(this._index)
+    return list[i];
   }
 }
 

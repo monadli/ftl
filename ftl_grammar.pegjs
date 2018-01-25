@@ -48,14 +48,14 @@ Executable
   = expr:Expression
 
 PrimaryExpression
-  = CallExpression
+  = ArrayElementSelector
+  / CallExpression
   / MemberExpression
   / Identifier
   / Literal
   / ArrayLiteral
   / Tuple
   / TupleSelector
-  / ArrayElementSelector
 
 Operator
   = !"->" first:OperatorSymbol rest:OperatorSymbol*
@@ -106,7 +106,7 @@ TupleSelector
   = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart))
 
 ArrayElementSelector
-  = "[" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) + "]"
+  = id: Identifier _ "[" index:("0" / (NonZeroDigit DecimalDigit*) / Identifier) _ "]"
 
 Literal
   = NullLiteral

@@ -343,18 +343,21 @@
       return this._params;
     }
 
+    _getInputElement(input, idx) {
+      return input instanceof Tuple ? input.get('_' + idx) : idx == 0 ? input : null;
+    }
+
     apply(input) {
       var tuple = new Tuple();
 
-      if (!(input instanceof Tuple)) {
-        var param = (this.params instanceof RefFn) ? this.params : this._params.list[0];
-        tuple.addKeyValue(param.name, input)
-        return tuple;
-      }
+      var list = (this.params instanceof RefFn) ? [this._params] : this._params.list
+      for (var i = 0; i < list.length; i++) {
 
-      var list = (this.params instanceof RefFn) ? [this._params.list] : this._params.list
-      for (var i = 0; i < input.size; i++) {
-        tuple.addKeyValue(list[i].name, input.get('_' + i))
+        // value from input or from default expression
+        var val = this._getInputElement(input, i);
+        if (val == null)
+          list[i].apply(input);
+        tuple.addKeyValue(list[i].name, val)
       }
 
       return tuple;
@@ -627,7 +630,7 @@
   }
 
   /**
-   * Reference function.
+   * Function capturing any reference.
    */
   class RefFn extends Fn {
     constructor(name) {
@@ -673,7 +676,7 @@
     isRefType() {
       return this._refType == 'ref'
     }
-    
+
     apply(input, context) {
       console.log("calculating ref for '" + this._name)
       console.log("input to RefFn:" + input)
@@ -689,6 +692,10 @@
             var args = [];
             if (this._params instanceof RefFn)
               args.push(input.get(this._params.name))
+            else if (this._params instanceof Fn) {
+              args = this._params.apply(input);
+              args = args instanceof Tuple ? args.toList() : [args];
+            }
             else for (var i = 0; i < this._params.size; i++)
               args.push(input.get(this._params[i].name));
             return e.apply(null, args)
@@ -787,7 +794,41 @@
     }
   }
 
-  /**
+/**
+ * Array element selector.
+ *
+ * @parameter name - name of a list
+ * @ index - index of element
+ */
+class ArrayElementSelectorFn extends Fn {
+  constructor(name, index) {
+    super()
+    this._type = "ArrayElementSelectorFn"
+    this._name = name.name;
+    this._index = (index instanceof RefFn) ? index.name : parseInt(index);
+  }
+
+  get name() {
+    return this._name;
+  }
+
+  apply(input) {
+    var list;
+    if (input && input instanceof Tuple)
+      list = input.get(this._name);
+
+    if (!list)
+      list = functions[this._name];
+
+    if (list instanceof VarFn)
+      list = list._val;
+
+    var i = typeof(this._index) == 'number' ? this._index : input.get(this._index)
+    return list[i];
+  }
+}
+
+/**
    * Simple type function.
    */
   class SimpleTypeFn {
@@ -836,6 +877,9 @@ VariableDeclaration
 // A function can be n-ary operator as well
 FunctionDeclaration
   = FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody {
+
+    // FunctionDeclaration
+
     console.log('function id: ', id.name)
     console.log('expr: ', body)
 
@@ -903,14 +947,14 @@ Executable
     }
 
 PrimaryExpression
-  = CallExpression
+  = ArrayElementSelector
+  / CallExpression
   / MemberExpression
   / Identifier
   / Literal
   / ArrayLiteral
   / Tuple
   / TupleSelector
-  / ArrayElementSelector
 
 Operator
   = !"->" first:OperatorSymbol rest:OperatorSymbol* { return text() }
@@ -1040,7 +1084,10 @@ TupleSelector
   = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new RefFn(text()) }
 
 ArrayElementSelector
-  = "[" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) + "]" { return new RefFn(text()) }
+  = id: Identifier _ "[" index:("0" / (NonZeroDigit DecimalDigit* {return text()}) / Identifier) _ "]" {
+    console.log('got ArrayElementSelector', index);
+    return new ArrayElementSelectorFn(id, index);
+  }
 
 Literal
   = NullLiteral
@@ -1069,12 +1116,14 @@ MemberExpression
 
 CallExpression
   = id: Identifier _ params:Tuple {
+
+    // CallExpression
+
     var f = functions[id.name];
     if (f) {
       var params_len = (f.params instanceof TupleFn || Array.isArray(f.params)) ? f.params.length : 1;
       var param_list = params.apply();
       var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
-
 
       if (actual_params_len >= params_len) {
         return new CompositionFn([params, f])
