@@ -14,12 +14,12 @@ fn len(list) {
   return list.length;
 }
 
-fn append(list, item) {
+fn list += item {
   list.push(item)
   return list
 }
 
-fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : _map(src, append(mapped, mapper(src[index])), index + 1, mapper)
+fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : _map(src, mapped += mapper(src[index]), index + 1, mapper)
 
 fn list => mapper(item) -> _map(list, [], 0, mapper)
 

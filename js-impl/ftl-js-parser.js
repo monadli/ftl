@@ -146,19 +146,34 @@ ftl_js_parser = /*
           function(first, rest) {
               return buildList(first, rest, 1)
             },
+          "import",
+          peg$literalExpectation("import", false),
+          ".",
+          peg$literalExpectation(".", false),
+          function() {return text()},
+          "*",
+          peg$literalExpectation("*", false),
+          function(path) { return text()},
+          "as",
+          peg$literalExpectation("as", false),
+          function(path, id) {return text()},
+          function(path, id, as) { ftl.import_statement(path, id, extractOptional(as, 3))},
           "=",
           peg$literalExpectation("=", false),
           function(modifier, id, expr) {
               return modifier=='const' ? new ImmutableValFn(id.name, expr) : new VarFn(id.name, expr)
             },
           function(id, params, body) {
+
+              // FunctionDeclaration
+
               console.log('function id: ', id.name)
               console.log('expr: ', body)
 
               var is_operator = id.type == 'OperatorDeclaration' || id.type == 'PostfixOperatorDeclaration';
               if (is_operator)
-                console.log('parameter list from operator: ', id.operands)
-              console.log('parameter list from function: ', optionalList(params))
+              	console.log('parameter list from operator: ', id.operands)
+            	console.log('parameter list from function: ', optionalList(params))
 
               var param_list = is_operator ? id.operands : optionalList(params);
               console.log('parameter list: ', param_list)
@@ -257,12 +272,12 @@ ftl_js_parser = /*
                 var stop_index = 0;
                 var parse_operators = function(ops, operands, index, full) {
                   var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-                  var f = functions[op];
+             	    var f = functions[op];
 
                   // no corresponding function found for single op
-                  if (!f) {
-                    if (index == 1)
-                      throw new Error("No function with name '" + op + "' found!");
+            	    if (!f) {
+            	      if (index == 1)
+            	        throw new Error("No function with name '" + op + "' found!");
 
                     index--;
                     var reduced = parse_operators(ops, operands, index, false);
@@ -273,26 +288,26 @@ ftl_js_parser = /*
                     ops = ops.slice(index, ops.length)
                     operands = [reduced].concat(operands.slice(index + 1, operands.length))
                     return parse_operators(ops, operands, ops.length, true)
-                  }
+            	    }
 
-                  for (var i = 0; i < f.params.length; i++) {
-                    if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
-                      operands[i] = new ExprRefFn(operands[i], f.params[i].params, f.params[i].isTail());
-                    }
+            	    for (var i = 0; i < f.params.length; i++) {
+            	      if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
+            	        operands[i] = new ExprRefFn(operands[i], f.params[i].params, f.params[i].isTail());
+            	      }
                   }
 
                   current_index += index;
                   return CompositionFn.createCompositionFn(TupleFn.createTupleFn(operands.slice(0, f.params.length)), f);
                 }
 
-                var ops = extractList(rest, 1);
-                var params = [operand].concat(extractList(rest, 3));
-                if (ops.length == 0)
-                  throw new Error('No ops found!')
+            	  var ops = extractList(rest, 1);
+            	  var params = [operand].concat(extractList(rest, 3));
+            	  if (ops.length == 0)
+            	    throw new Error('No ops found!')
                 console.log('ops:', ops)
-                console.log('operands', params)
-                stop_index = ops.length;
-                return parse_operators(ops, params, ops.length, true);
+            	  console.log('operands', params)
+            	  stop_index = ops.length;
+            	  return parse_operators(ops, params, ops.length, true);
             },
           "_",
           peg$literalExpectation("_", false),
@@ -305,6 +320,7 @@ ftl_js_parser = /*
           "]",
           peg$literalExpectation("]", false),
           function(id, index) {
+              console.log('got ArrayElementSelector', index);
               return new ArrayElementSelectorFn(id, index);
             },
           function(elms) {
@@ -319,6 +335,9 @@ ftl_js_parser = /*
               return new ConstFn(ret)
             },
           function(id, params) {
+
+              // CallExpression
+
               var f = functions[id.name];
               if (f) {
                 var f_params = f.params;
@@ -353,7 +372,6 @@ ftl_js_parser = /*
           peg$literalExpectation("{", false),
           "}",
           peg$literalExpectation("}", false),
-          function() {return text()},
           function() {return {type:'native', script: text()}},
           peg$anyExpectation(),
           function(name) {return new RefFn(name)},
@@ -384,8 +402,6 @@ ftl_js_parser = /*
           function() { return new ConstFn(true) },
           function() { return new ConstFn(false) },
           function(literal) { return literal },
-          ".",
-          peg$literalExpectation(".", false),
           function() {
                 return new ConstFn(parseFloat(text()));
               },
@@ -452,86 +468,87 @@ ftl_js_parser = /*
         ],
 
         peg$bytecode = [
-          peg$decode("%;o/?#;!.\" &\"/1$;o/($8#: #!!)(#'#(\"'#&'#"),
-          peg$decode("%;\"/_#$%;n/,#;\"/#$+\")(\"'#&'#06*%;n/,#;\"/#$+\")(\"'#&'#&/)$8\":!\"\"! )(\"'#&'#"),
-          peg$decode(";#.) &;$.# &;+"),
-          peg$decode("%;J.# &;I/f#;m/]$;A/T$;m/K$2\"\"\"6\"7#/<$;m/3$;,/*$8':$'#&$ )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-          peg$decode("%;F/q#;m/h$;1.) &;A.# &;-/S$;m/J$;%.\" &\"/<$;m/3$;(/*$8':%'#$\" )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-          peg$decode("%2&\"\"6&7'/N#;m/E$;&.\" &\"/7$2(\"\"6(7)/($8$:*$!!)($'#(#'#(\"'#&'#"),
-          peg$decode("%;'/\x8F#$%;m/D#2+\"\"6+7,/5$;m/,$;'/#$+$)($'#(#'#(\"'#&'#0N*%;m/D#2+\"\"6+7,/5$;m/,$;'/#$+$)($'#(#'#(\"'#&'#&/)$8\":-\"\"! )(\"'#&'#"),
-          peg$decode("%%;A/;#;m/2$2.\"\"6.7//#$+#)(#'#(\"'#&'#.\" &\"/;#;m/2$;*/)$8#:0#\"\" )(#'#(\"'#&'#"),
-          peg$decode(";?.# &;)"),
-          peg$decode("%21\"\"6172/C#;m/:$;*/1$;m/($8$:3$!!)($'#(#'#(\"'#&'#"),
-          peg$decode("%;4.# &;,/J#%;m/,#;)/#$+\")(\"'#&'#.\" &\"/)$8\":4\"\"! )(\"'#&'#"),
-          peg$decode("%;*/' 8!:5!! )"),
-          peg$decode(";9.G &;>.A &;=.; &;A.5 &;:./ &;;.) &;%.# &;8"),
-          peg$decode("%%<21\"\"6172=.##&&!&'#/B#;O/9$$;O0#*;O&/)$8#:6#\"! )(#'#(\"'#&'#"),
-          peg$decode("%;A/' 8!:7!! )"),
-          peg$decode("%;A/2#;%/)$8\":8\"\"! )(\"'#&'#"),
-          peg$decode(";/.# &;."),
-          peg$decode(";2.# &;3"),
-          peg$decode("%;0/\x89#$%;m/>#;-/5$;m/,$;0/#$+$)($'#(#'#(\"'#&'#/K#0H*%;m/>#;-/5$;m/,$;0/#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":9\"\"! )(\"'#&'#"),
-          peg$decode("%;0/;#;m/2$;-/)$8#::#\"\" )(#'#(\"'#&'#"),
-          peg$decode(";5.) &;7.# &;6"),
-          peg$decode("%;-/;#;m/2$;,/)$8#:;#\"\" )(#'#(\"'#&'#"),
-          peg$decode("%;,/;#;m/2$;-/)$8#:<#\"\" )(#'#(\"'#&'#"),
-          peg$decode("%;,/\x89#$%;m/>#;-/5$;m/,$;,/#$+$)($'#(#'#(\"'#&'#/K#0H*%;m/>#;-/5$;m/,$;,/#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":=\"\"! )(\"'#&'#"),
-          peg$decode("%2>\"\"6>7?/k#2@\"\"6@7A.R &%;V/H#$;N0#*;N&/8$%<;C=.##&&!&'#/#$+#)(#'#(\"'#&'#/'$8\":B\" )(\"'#&'#"),
-          peg$decode("%;A/\x93#;m/\x8A$2C\"\"6C7D/{$2@\"\"6@7A.H &%;V/8#$;N0#*;N&/($8\":E\"!%)(\"'#&'#.# &;A/A$;m/8$2F\"\"6F7G/)$8&:H&\"%\")(&'#(%'#($'#(#'#(\"'#&'#"),
-          peg$decode(";G./ &;R.) &;S.# &;\\"),
-          peg$decode("%2C\"\"6C7D/X#%;m/,#;</#$+\")(\"'#&'#.\" &\"/7$2F\"\"6F7G/($8#:I#!!)(#'#(\"'#&'#"),
-          peg$decode("%;,/\x8F#$%;m/D#2+\"\"6+7,/5$;m/,$;,/#$+$)($'#(#'#(\"'#&'#0N*%;m/D#2+\"\"6+7,/5$;m/,$;,/#$+$)($'#(#'#(\"'#&'#&/)$8\":J\"\"! )(\"'#&'#"),
-          peg$decode("%;A/r#;m/i$2C\"\"6C7D/Z$;m/Q$$;&/&#0#*;&&&&#/;$;m/2$2F\"\"6F7G/#$+')(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-          peg$decode("%;A/;#;m/2$;%/)$8#:K#\"\" )(#'#(\"'#&'#"),
-          peg$decode("%2L\"\"6L7M/\u0152#;m/\u0149$%$%%<2L\"\"6L7M.) &2N\"\"6N7O=.##&&!&'#/,#;@/#$+\")(\"'#&'#0T*%%<2L\"\"6L7M.) &2N\"\"6N7O=.##&&!&'#/,#;@/#$+\")(\"'#&'#&/& 8!:P! )/\xCC$$;?0#*;?&/\xBC$;m/\xB3$%$%%<2L\"\"6L7M.) &2N\"\"6N7O=.##&&!&'#/,#;@/#$+\")(\"'#&'#0T*%%<2L\"\"6L7M.) &2N\"\"6N7O=.##&&!&'#/,#;@/#$+\")(\"'#&'#&/& 8!:P! )/6$2N\"\"6N7O/'$8':Q' )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-          peg$decode("1\"\"5!7R"),
-          peg$decode("%%<;P=.##&&!&'#/1#;B/($8\":S\"! )(\"'#&'#"),
-          peg$decode("<%;C/9#$;D0#*;D&/)$8\":U\"\"! )(\"'#&'#=.\" 7T"),
-          peg$decode(";K.5 &2V\"\"6V7W.) &2>\"\"6>7?"),
-          peg$decode(";C.# &;N"),
-          peg$decode("2X\"\"6X7Y"),
-          peg$decode("2Z\"\"6Z7["),
-          peg$decode("2\\\"\"6\\7]"),
-          peg$decode("%2^\"\"6^7_/8#%<;C=.##&&!&'#/#$+\")(\"'#&'#"),
-          peg$decode("%2`\"\"6`7a/8#%<;C=.##&&!&'#/#$+\")(\"'#&'#"),
-          peg$decode("2b\"\"6b7c"),
-          peg$decode(";L.# &;M"),
-          peg$decode("4d\"\"5!7e"),
-          peg$decode("4f\"\"5!7g"),
-          peg$decode("4h\"\"5!7i"),
-          peg$decode("4j\"\"5!7k"),
-          peg$decode(";Q.) &;G.# &;R"),
-          peg$decode(";I.) &;J.# &;F"),
-          peg$decode("%;H/& 8!:l! ).. &%;E/& 8!:m! )"),
-          peg$decode("%;Z/>#%<;C.# &;N=.##&&!&'#/#$+\")(\"'#&'#.M &%;T/C#%<;C.# &;N=.##&&!&'#/($8\":n\"!!)(\"'#&'#"),
-          peg$decode("%;U/T#2o\"\"6o7p/E$$;N0#*;N&/5$;W.\" &\"/'$8$:q$ )($'#(#'#(\"'#&'#.\x91 &%4r\"\"5!7s.\" &\"/Z#2o\"\"6o7p/K$$;N/&#0#*;N&&&#/5$;W.\" &\"/'$8$:q$ )($'#(#'#(\"'#&'#.? &%;U/5#;W.\" &\"/'$8\":q\" )(\"'#&'#"),
-          peg$decode("2@\"\"6@7A.Q &%4r\"\"5!7s.\" &\"/<#;V/3$$;N0#*;N&/#$+#)(#'#(\"'#&'#"),
-          peg$decode("4t\"\"5!7u"),
-          peg$decode("%;X/,#;Y/#$+\")(\"'#&'#"),
-          peg$decode("3v\"\"5!7w"),
-          peg$decode("%4x\"\"5!7y.\" &\"/9#$;N/&#0#*;N&&&#/#$+\")(\"'#&'#"),
-          peg$decode("%3z\"\"5\"7{/@#%$;[/&#0#*;[&&&#/\"!&,)/#$+\")(\"'#&'#"),
-          peg$decode("4|\"\"5!7}"),
-          peg$decode("%2~\"\"6~7\x7F/G#$;]0#*;]&/7$2~\"\"6~7\x7F/($8#:\x80#!!)(#'#(\"'#&'#.W &%2\x81\"\"6\x817\x82/G#$;^0#*;^&/7$2\x81\"\"6\x817\x82/($8#:\x80#!!)(#'#(\"'#&'#"),
-          peg$decode("%%<2~\"\"6~7\x7F./ &2\x83\"\"6\x837\x84.# &;f=.##&&!&'#/,#;@/#$+\")(\"'#&'#.B &%2\x83\"\"6\x837\x84/,#;`/#$+\")(\"'#&'#.# &;_"),
-          peg$decode("%%<2\x81\"\"6\x817\x82./ &2\x83\"\"6\x837\x84.# &;f=.##&&!&'#/,#;@/#$+\")(\"'#&'#.B &%2\x83\"\"6\x837\x84/,#;`/#$+\")(\"'#&'#.# &;_"),
-          peg$decode("%2\x83\"\"6\x837\x84/,#;g/#$+\")(\"'#&'#"),
-          peg$decode(";a.N &%2@\"\"6@7A/8#%<;N=.##&&!&'#/#$+\")(\"'#&'#.# &;e"),
-          peg$decode(";b.# &;c"),
-          peg$decode("2\x81\"\"6\x817\x82.} &2~\"\"6~7\x7F.q &2\x83\"\"6\x837\x84.e &2\x85\"\"6\x857\x86.Y &2\x87\"\"6\x877\x88.M &2\x89\"\"6\x897\x8A.A &2\x8B\"\"6\x8B7\x8C.5 &2\x8D\"\"6\x8D7\x8E.) &2\x8F\"\"6\x8F7\x90"),
-          peg$decode("%%<;d.# &;f=.##&&!&'#/,#;@/#$+\")(\"'#&'#"),
-          peg$decode(";b.; &;N.5 &2\x91\"\"6\x917\x92.) &2\x93\"\"6\x937\x94"),
-          peg$decode("%2\x91\"\"6\x917\x92/F#%%;[/,#;[/#$+\")(\"'#&'#/\"!&,)/#$+\")(\"'#&'#"),
-          peg$decode("4\x95\"\"5!7\x96"),
-          peg$decode("2\x97\"\"6\x977\x98.5 &2\x99\"\"6\x997\x9A.) &2\x9B\"\"6\x9B7\x9C"),
-          peg$decode("2\x9D\"\"6\x9D7\x9E.M &2\x9F\"\"6\x9F7\xA0.A &2\xA1\"\"6\xA17\xA2.5 &2\xA3\"\"6\xA37\xA4.) &2\xA5\"\"6\xA57\xA6"),
-          peg$decode("<;k.# &;j=.\" 7\xA7"),
-          peg$decode("%2\xA8\"\"6\xA87\xA9/q#$%%<;f=.##&&!&'#/,#;@/#$+\")(\"'#&'#0B*%%<;f=.##&&!&'#/,#;@/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
-          peg$decode("%2\xAA\"\"6\xAA7\xAB/\x8C#$%%<2\xAC\"\"6\xAC7\xAD=.##&&!&'#/,#;@/#$+\")(\"'#&'#0H*%%<2\xAC\"\"6\xAC7\xAD=.##&&!&'#/,#;@/#$+\")(\"'#&'#&/2$2\xAC\"\"6\xAC7\xAD/#$+#)(#'#(\"'#&'#"),
-          peg$decode("%2\xAA\"\"6\xAA7\xAB/\x98#$%%<2\xAC\"\"6\xAC7\xAD.# &;f=.##&&!&'#/,#;@/#$+\")(\"'#&'#0N*%%<2\xAC\"\"6\xAC7\xAD.# &;f=.##&&!&'#/,#;@/#$+\")(\"'#&'#&/2$2\xAC\"\"6\xAC7\xAD/#$+#)(#'#(\"'#&'#"),
-          peg$decode("%$;h.# &;i0)*;h.# &;i&/\xA5#$%$;g/&#0#*;g&&&#/E#$;h.# &;i/,#0)*;h.# &;i&&&#/#$+\")(\"'#&'#0\\*%$;g/&#0#*;g&&&#/E#$;h.# &;i/,#0)*;h.# &;i&&&#/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
-          peg$decode("$%$;h.# &;i0)*;h.# &;i&/,#;g/#$+\")(\"'#&'#/L#0I*%$;h.# &;i0)*;h.# &;i&/,#;g/#$+\")(\"'#&'#&&&#"),
-          peg$decode("$;h.) &;g.# &;i0/*;h.) &;g.# &;i&")
+          peg$decode("%;p/?#;!.\" &\"/1$;p/($8#: #!!)(#'#(\"'#&'#"),
+          peg$decode("%;\"/_#$%;o/,#;\"/#$+\")(\"'#&'#06*%;o/,#;\"/#$+\")(\"'#&'#&/)$8\":!\"\"! )(\"'#&'#"),
+          peg$decode(";#./ &;$.) &;%.# &;,"),
+          peg$decode("%2\"\"\"6\"7#/\xF3#;n/\xEA$%$%;B/2#2$\"\"6$7%/#$+\")(\"'#&'#0<*%;B/2#2$\"\"6$7%/#$+\")(\"'#&'#&/& 8!:&! )/\x9D$2'\"\"6'7(.5 &;B./ &%;./' 8!:)!!\")/v$%;n/W#2*\"\"6*7+/H$;n/?$;B.0 &%;./( 8!:,!\"'&)/#$+$)($'#(#'#(\"'#&'#.\" &\"/*$8%:-%#\"! )(%'#($'#(#'#(\"'#&'#"),
+          peg$decode("%;K.# &;J/f#;n/]$;B/T$;n/K$2.\"\"6.7//<$;n/3$;-/*$8':0'#&$ )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
+          peg$decode("%;G/q#;n/h$;2.) &;B.# &;./S$;n/J$;&.\" &\"/<$;n/3$;)/*$8':1'#$\" )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
+          peg$decode("%22\"\"6273/N#;n/E$;'.\" &\"/7$24\"\"6475/($8$:6$!!)($'#(#'#(\"'#&'#"),
+          peg$decode("%;(/\x8F#$%;n/D#27\"\"6778/5$;n/,$;(/#$+$)($'#(#'#(\"'#&'#0N*%;n/D#27\"\"6778/5$;n/,$;(/#$+$)($'#(#'#(\"'#&'#&/)$8\":9\"\"! )(\"'#&'#"),
+          peg$decode("%%;B/;#;n/2$2:\"\"6:7;/#$+#)(#'#(\"'#&'#.\" &\"/;#;n/2$;+/)$8#:<#\"\" )(#'#(\"'#&'#"),
+          peg$decode(";@.# &;*"),
+          peg$decode("%2=\"\"6=7>/C#;n/:$;+/1$;n/($8$:?$!!)($'#(#'#(\"'#&'#"),
+          peg$decode("%;5.# &;-/J#%;n/,#;*/#$+\")(\"'#&'#.\" &\"/)$8\":@\"\"! )(\"'#&'#"),
+          peg$decode("%;+/' 8!:A!! )"),
+          peg$decode(";:.G &;?.A &;>.; &;B.5 &;;./ &;<.) &;&.# &;9"),
+          peg$decode("%%<2=\"\"6=7>=.##&&!&'#/B#;P/9$$;P0#*;P&/)$8#:B#\"! )(#'#(\"'#&'#"),
+          peg$decode("%;B/' 8!:C!! )"),
+          peg$decode("%;B/2#;&/)$8\":D\"\"! )(\"'#&'#"),
+          peg$decode(";0.# &;/"),
+          peg$decode(";3.# &;4"),
+          peg$decode("%;1/\x89#$%;n/>#;./5$;n/,$;1/#$+$)($'#(#'#(\"'#&'#/K#0H*%;n/>#;./5$;n/,$;1/#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":E\"\"! )(\"'#&'#"),
+          peg$decode("%;1/;#;n/2$;./)$8#:F#\"\" )(#'#(\"'#&'#"),
+          peg$decode(";6.) &;8.# &;7"),
+          peg$decode("%;./;#;n/2$;-/)$8#:G#\"\" )(#'#(\"'#&'#"),
+          peg$decode("%;-/;#;n/2$;./)$8#:H#\"\" )(#'#(\"'#&'#"),
+          peg$decode("%;-/\x89#$%;n/>#;./5$;n/,$;-/#$+$)($'#(#'#(\"'#&'#/K#0H*%;n/>#;./5$;n/,$;-/#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":I\"\"! )(\"'#&'#"),
+          peg$decode("%2J\"\"6J7K/k#2L\"\"6L7M.R &%;W/H#$;O0#*;O&/8$%<;D=.##&&!&'#/#$+#)(#'#(\"'#&'#/'$8\":N\" )(\"'#&'#"),
+          peg$decode("%;B/\x93#;n/\x8A$2O\"\"6O7P/{$2L\"\"6L7M.H &%;W/8#$;O0#*;O&/($8\":Q\"!%)(\"'#&'#.# &;B/A$;n/8$2R\"\"6R7S/)$8&:T&\"%\")(&'#(%'#($'#(#'#(\"'#&'#"),
+          peg$decode(";H./ &;S.) &;T.# &;]"),
+          peg$decode("%2O\"\"6O7P/X#%;n/,#;=/#$+\")(\"'#&'#.\" &\"/7$2R\"\"6R7S/($8#:U#!!)(#'#(\"'#&'#"),
+          peg$decode("%;-/\x8F#$%;n/D#27\"\"6778/5$;n/,$;-/#$+$)($'#(#'#(\"'#&'#0N*%;n/D#27\"\"6778/5$;n/,$;-/#$+$)($'#(#'#(\"'#&'#&/)$8\":V\"\"! )(\"'#&'#"),
+          peg$decode("%;B/r#;n/i$2O\"\"6O7P/Z$;n/Q$$;'/&#0#*;'&&&#/;$;n/2$2R\"\"6R7S/#$+')(''#(&'#(%'#($'#(#'#(\"'#&'#"),
+          peg$decode("%;B/;#;n/2$;&/)$8#:W#\"\" )(#'#(\"'#&'#"),
+          peg$decode("%2X\"\"6X7Y/\u0152#;n/\u0149$%$%%<2X\"\"6X7Y.) &2Z\"\"6Z7[=.##&&!&'#/,#;A/#$+\")(\"'#&'#0T*%%<2X\"\"6X7Y.) &2Z\"\"6Z7[=.##&&!&'#/,#;A/#$+\")(\"'#&'#&/& 8!:&! )/\xCC$$;@0#*;@&/\xBC$;n/\xB3$%$%%<2X\"\"6X7Y.) &2Z\"\"6Z7[=.##&&!&'#/,#;A/#$+\")(\"'#&'#0T*%%<2X\"\"6X7Y.) &2Z\"\"6Z7[=.##&&!&'#/,#;A/#$+\")(\"'#&'#&/& 8!:&! )/6$2Z\"\"6Z7[/'$8':\\' )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
+          peg$decode("1\"\"5!7]"),
+          peg$decode("%%<;Q=.##&&!&'#/1#;C/($8\":^\"! )(\"'#&'#"),
+          peg$decode("<%;D/9#$;E0#*;E&/)$8\":`\"\"! )(\"'#&'#=.\" 7_"),
+          peg$decode(";L.5 &2a\"\"6a7b.) &2J\"\"6J7K"),
+          peg$decode(";D.# &;O"),
+          peg$decode("2c\"\"6c7d"),
+          peg$decode("2e\"\"6e7f"),
+          peg$decode("2g\"\"6g7h"),
+          peg$decode("%2i\"\"6i7j/8#%<;D=.##&&!&'#/#$+\")(\"'#&'#"),
+          peg$decode("%2k\"\"6k7l/8#%<;D=.##&&!&'#/#$+\")(\"'#&'#"),
+          peg$decode("2m\"\"6m7n"),
+          peg$decode(";M.# &;N"),
+          peg$decode("4o\"\"5!7p"),
+          peg$decode("4q\"\"5!7r"),
+          peg$decode("4s\"\"5!7t"),
+          peg$decode("4u\"\"5!7v"),
+          peg$decode(";R.) &;H.# &;S"),
+          peg$decode(";J.) &;K.# &;G"),
+          peg$decode("%;I/& 8!:w! ).. &%;F/& 8!:x! )"),
+          peg$decode("%;[/>#%<;D.# &;O=.##&&!&'#/#$+\")(\"'#&'#.M &%;U/C#%<;D.# &;O=.##&&!&'#/($8\":y\"!!)(\"'#&'#"),
+          peg$decode("%;V/T#2$\"\"6$7%/E$$;O0#*;O&/5$;X.\" &\"/'$8$:z$ )($'#(#'#(\"'#&'#.\x91 &%4{\"\"5!7|.\" &\"/Z#2$\"\"6$7%/K$$;O/&#0#*;O&&&#/5$;X.\" &\"/'$8$:z$ )($'#(#'#(\"'#&'#.? &%;V/5#;X.\" &\"/'$8\":z\" )(\"'#&'#"),
+          peg$decode("2L\"\"6L7M.Q &%4{\"\"5!7|.\" &\"/<#;W/3$$;O0#*;O&/#$+#)(#'#(\"'#&'#"),
+          peg$decode("4}\"\"5!7~"),
+          peg$decode("%;Y/,#;Z/#$+\")(\"'#&'#"),
+          peg$decode("3\x7F\"\"5!7\x80"),
+          peg$decode("%4\x81\"\"5!7\x82.\" &\"/9#$;O/&#0#*;O&&&#/#$+\")(\"'#&'#"),
+          peg$decode("%3\x83\"\"5\"7\x84/@#%$;\\/&#0#*;\\&&&#/\"!&,)/#$+\")(\"'#&'#"),
+          peg$decode("4\x85\"\"5!7\x86"),
+          peg$decode("%2\x87\"\"6\x877\x88/G#$;^0#*;^&/7$2\x87\"\"6\x877\x88/($8#:\x89#!!)(#'#(\"'#&'#.W &%2\x8A\"\"6\x8A7\x8B/G#$;_0#*;_&/7$2\x8A\"\"6\x8A7\x8B/($8#:\x89#!!)(#'#(\"'#&'#"),
+          peg$decode("%%<2\x87\"\"6\x877\x88./ &2\x8C\"\"6\x8C7\x8D.# &;g=.##&&!&'#/,#;A/#$+\")(\"'#&'#.B &%2\x8C\"\"6\x8C7\x8D/,#;a/#$+\")(\"'#&'#.# &;`"),
+          peg$decode("%%<2\x8A\"\"6\x8A7\x8B./ &2\x8C\"\"6\x8C7\x8D.# &;g=.##&&!&'#/,#;A/#$+\")(\"'#&'#.B &%2\x8C\"\"6\x8C7\x8D/,#;a/#$+\")(\"'#&'#.# &;`"),
+          peg$decode("%2\x8C\"\"6\x8C7\x8D/,#;h/#$+\")(\"'#&'#"),
+          peg$decode(";b.N &%2L\"\"6L7M/8#%<;O=.##&&!&'#/#$+\")(\"'#&'#.# &;f"),
+          peg$decode(";c.# &;d"),
+          peg$decode("2\x8A\"\"6\x8A7\x8B.} &2\x87\"\"6\x877\x88.q &2\x8C\"\"6\x8C7\x8D.e &2\x8E\"\"6\x8E7\x8F.Y &2\x90\"\"6\x907\x91.M &2\x92\"\"6\x927\x93.A &2\x94\"\"6\x947\x95.5 &2\x96\"\"6\x967\x97.) &2\x98\"\"6\x987\x99"),
+          peg$decode("%%<;e.# &;g=.##&&!&'#/,#;A/#$+\")(\"'#&'#"),
+          peg$decode(";c.; &;O.5 &2\x9A\"\"6\x9A7\x9B.) &2\x9C\"\"6\x9C7\x9D"),
+          peg$decode("%2\x9A\"\"6\x9A7\x9B/F#%%;\\/,#;\\/#$+\")(\"'#&'#/\"!&,)/#$+\")(\"'#&'#"),
+          peg$decode("4\x9E\"\"5!7\x9F"),
+          peg$decode("2\xA0\"\"6\xA07\xA1.5 &2\xA2\"\"6\xA27\xA3.) &2\xA4\"\"6\xA47\xA5"),
+          peg$decode("2\xA6\"\"6\xA67\xA7.M &2\xA8\"\"6\xA87\xA9.A &2\xAA\"\"6\xAA7\xAB.5 &2\xAC\"\"6\xAC7\xAD.) &2\xAE\"\"6\xAE7\xAF"),
+          peg$decode("<;l.# &;k=.\" 7\xB0"),
+          peg$decode("%2\xB1\"\"6\xB17\xB2/q#$%%<;g=.##&&!&'#/,#;A/#$+\")(\"'#&'#0B*%%<;g=.##&&!&'#/,#;A/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
+          peg$decode("%2\xB3\"\"6\xB37\xB4/\x8C#$%%<2\xB5\"\"6\xB57\xB6=.##&&!&'#/,#;A/#$+\")(\"'#&'#0H*%%<2\xB5\"\"6\xB57\xB6=.##&&!&'#/,#;A/#$+\")(\"'#&'#&/2$2\xB5\"\"6\xB57\xB6/#$+#)(#'#(\"'#&'#"),
+          peg$decode("%2\xB3\"\"6\xB37\xB4/\x98#$%%<2\xB5\"\"6\xB57\xB6.# &;g=.##&&!&'#/,#;A/#$+\")(\"'#&'#0N*%%<2\xB5\"\"6\xB57\xB6.# &;g=.##&&!&'#/,#;A/#$+\")(\"'#&'#&/2$2\xB5\"\"6\xB57\xB6/#$+#)(#'#(\"'#&'#"),
+          peg$decode("%$;i.# &;j0)*;i.# &;j&/\xA5#$%$;h/&#0#*;h&&&#/E#$;i.# &;j/,#0)*;i.# &;j&&&#/#$+\")(\"'#&'#0\\*%$;h/&#0#*;h&&&#/E#$;i.# &;j/,#0)*;i.# &;j&&&#/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
+          peg$decode("$%$;i.# &;j0)*;i.# &;j&/,#;h/#$+\")(\"'#&'#/L#0I*%$;i.# &;j0)*;i.# &;j&/,#;h/#$+\")(\"'#&'#&&&#"),
+          peg$decode("$;i.) &;h.# &;j0/*;i.) &;h.# &;j&")
         ],
 
         peg$currPos          = 0,
@@ -943,6 +960,7 @@ ftl_js_parser = /*
 
       return stack[0];
     }
+
 
     // The following functions are used for parsing
     function join(value) {

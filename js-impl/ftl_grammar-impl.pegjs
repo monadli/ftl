@@ -7,39 +7,56 @@
  */
 
 {
-  var functions = {};
-
-  function join(value) {
-    if (Array.isArray(value))
-      return value.join("")
-    return value
+function import_statement(path, id, as) {
+  
+  function createParameters(size) {
+    var params = [];
+    for (var i = 0; i < size; i++)
+      params.push('_' + i);
+    return params;
   }
 
-  function extractOptional(optional, index) {
-    return optional ? optional[index] : null;
-  }
+  console.log('inside import_statement')
 
-  function extractList(list, index) {
-    var result = new Array(list.length), i;
+  if (path.length > 0) {
+    path = path.substr(0, path.length - 1);
 
-    for (i = 0; i < list.length; i++) {
-      result[i] = list[i][index];
+    if (ftl_modules.includes(path)) {
     }
 
-    return result;
-  }
+    // javascript native module
+    else {
 
-  function buildList(first, rest, index) {
-    return [first].concat(extractList(rest, index));
-  }
+      var module = eval(path);
+      if (!module) {
+          throw "No module " + id + " found!";
+      } else {
+      console.log('found module', path)
+    }
 
-  function optionalList(value) {
-    return value !== null ? value : [];
-  }
+      // all functions
+      if (id == '*') {
+        var names = Object.getOwnPropertyNames(module);
+        for (let name of names) {
+          var elm = module[name];
+          if (typeof(elm) == 'function') {
+            functions[name] = new NativeFunctionFn(name, createParameters(elm.length), elm);
+            console.log('created native function ' + name + ' for ' + module + '.' + name)
+          }
+        }
+      }
 
-  function buildFirstRest(first, rest) {
-    return (Array.isArray(rest) && rest.length == 0) ? first : buildList(first, rest, 1)
+      else {
+        
+      }
+    }
   }
+}
+
+  var functions = {};
+  var ftl_modules = [];
+
+
 
   function getValueString(value) {
     if (Array.isArray(value))
@@ -356,7 +373,12 @@
         // value from input or from default expression
         var val = this._getInputElement(input, i);
         if (val == null)
-          list[i].apply(input);
+          val = list[i].apply(input);
+
+        // resolve any tail
+        else if (val instanceof TailFn)
+          val = val.apply();
+
         tuple.addKeyValue(list[i].name, val)
       }
 
@@ -364,69 +386,76 @@
     }
   }
 
-  /**
-   * Native javascript function.
-   */
-  class NativeFunctionFn extends Fn {
+/**
+ * Native javascript function.
+ */
+class NativeFunctionFn extends Fn {
 
-    // name: function name
-    // params: parameter names
-    // script: script body
-    constructor(name, params, script) {
-      super()
-      this._name = name;
-      this._params = params;
-      var ins = params;
-      var param_list = [];
-      this._params = params instanceof TupleFn ? ins.list : [ins];
-      param_list = this.extractParams(this._params);
+  // name: function name
+  // params: parameter names
+  // script: script body
+  constructor(name, params, script) {
+    super()
 
-      for (var i = 0; i < ins.length; i++) {
-        param_list.push('_' + (i + 1));
-      }
-      console.log("parameter list:", param_list) 
-      console.log("script:", script) 
-      
-      this.internal = eval("(function(" + param_list.join(',') + ")" + script + ")");
-      this._param_list = param_list
+    this._name = name;
+    this._params = params;
+
+    var ins = params;
+    var param_list = [];
+    this._params = params instanceof TupleFn ? ins.list : (Array.isArray(params) ? params : [ins]);
+    param_list = this.extractParams(this._params);
+
+    for (var i = 0; i < ins.length; i++) {
+      param_list.push('_' + (i + 1));
     }
 
-    // extracts parameter names
-    // @params array of parameter list
-    extractParams(params) {
-      var param_list = [];
-      if (params == null)
-        return param_list;
-      for (var i = 0; i < params.length; i++) {
-        var param = params[i];
-        if (param instanceof RefFn)
-          param_list.push(param.name);
-        else
-          param_list.push(param.id);
-      }
-      return param_list;
-    }
+    console.log("parameter list:", param_list) 
+    console.log("parameters:", params)
+    console.log("script:", script)
 
-    get name() {return this._name}
-
-    /**
-     * Parameters in list
-     */
-    get params() { return this._params; }
-
-    apply(input) {
-      console.log("tuple to native function: ", input)
-      if (this._param_list.length == 1 && this._param_list[0] == 'raw')
-        var res = this.internal.apply(null, [input])
-      else {
-        var input_array = (input instanceof Tuple)? input.toList() : [input];
-        var res = this.internal.apply(null, input_array);
-      }
-
-   	  console.log("output of native function: ", res)
-      return res
-    }
+    this.internal = (typeof script == 'function') ? script
+        : eval("(function(" + param_list.join(',') + ")" + script + ")");
+    this._param_list = param_list;
   }
+
+  // extracts parameter names
+  // @params array of parameter list
+  extractParams(params) {
+    var param_list = [];
+    if (params == null)
+      return param_list;
+    for (var i = 0; i < params.length; i++) {
+      var param = params[i];
+	  if (typeof param == 'string')
+	    param_list.push(param)
+      else if (param instanceof RefFn)
+        param_list.push(param.name);
+      else
+        param_list.push(param.id);
+    }
+    return param_list;
+  }
+
+  get name() {return this._name}
+
+  /**
+   * Parameters in list
+   */
+  get params() { return this._params; }
+
+  apply(input) {
+    console.log("tuple to native function: ", input)
+    if (this._param_list.length == 1 && this._param_list[0] == 'raw')
+      var res = this.internal.apply(null, [input])
+    else {
+      var input_array = (input instanceof Tuple)? input.toList() : [input];
+      var res = this.internal.apply(null, input_array);
+    }
+
+    console.log("output of native function: ", res)
+    return res
+  }
+}
 
   /**
    * Function function.
@@ -540,19 +569,27 @@
     }
   }
 
-  /**
-   * Expression function.
-   */
-  class ExprFn {
-    constructor(id, elm) {
-      this.id = id;
-      this.elm = elm;
-    }
-
-    apply(input) {
-      return this.elm.apply(input);
-    }
+/**
+ * Expression function.
+ */
+class ExprFn {
+  constructor(id, elm) {
+    this.id = id;
+    this.elm = elm;
   }
+
+  get name() {
+    return this.id;
+  }
+
+  hasRef() {
+    return this.elm instanceof RefFn
+  }
+
+  apply(input) {
+    return this.elm.apply(input);
+  }
+}
 
   /**
    * Composition function.
@@ -851,8 +888,50 @@ class ArrayElementSelectorFn extends Fn {
       }
     }
   }
+
+  class ImportStatement {
+    constructor(path, id, as) {
+      this._path = path;
+      this._id = id;
+      this._as = as;
+    }
+  }
+
+// The following functions are used for parsing
+
+function join(value) {
+  if (Array.isArray(value))
+    return value.join("")
+  return value
 }
 
+function extractOptional(optional, index) {
+  return optional ? optional[index] : null;
+}
+
+function extractList(list, index) {
+  var result = new Array(list.length), i;
+
+  for (i = 0; i < list.length; i++) {
+    result[i] = list[i][index];
+  }
+
+  return result;
+}
+
+function buildList(first, rest, index) {
+  return [first].concat(extractList(rest, index));
+}
+
+function optionalList(value) {
+  return value !== null ? value : [];
+}
+
+function buildFirstRest(first, rest) {
+  return (Array.isArray(rest) && rest.length == 0) ? first : buildList(first, rest, 1)
+}
+
+}
 
 // start
 Start
@@ -865,7 +944,10 @@ Declarations
   } 
 
 Declaration
-  = VariableDeclaration / FunctionDeclaration / Executable
+  = ImportDeclaration / VariableDeclaration / FunctionDeclaration / Executable
+
+ImportDeclaration
+  = "import" _ path:((Identifier ".")* {return text()} ) id: ("*" / Identifier / Operator { return text()}) as:(_ "as" _ (Identifier / Operator {return text()}))? { import_statement(path, id, extractOptional(as, 3))}
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module.
 VariableDeclaration
@@ -1121,7 +1203,20 @@ CallExpression
 
     var f = functions[id.name];
     if (f) {
-      var params_len = (f.params instanceof TupleFn || Array.isArray(f.params)) ? f.params.length : 1;
+      var f_params = f.params;
+      if (!Array.isArray(f_params)) {
+        if (f_params instanceof TupleFn) {
+          f_params = f_params.list
+        } else
+          f_params = [f_params]
+      }
+
+      var params_len = f_params.length;
+      for (var i = 0; i < f_params.length; i++) {
+        var p = f_params[i];
+        if (p instanceof ExprFn && !p.hasRef())
+          params_len--;
+      }
       var param_list = params.apply();
       var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
 

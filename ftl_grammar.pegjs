@@ -15,7 +15,10 @@ Declarations
   = first:Declaration rest:(__ Declaration)*
 
 Declaration
-  = VariableDeclaration / FunctionDeclaration / Executable
+  = ImportDeclaration / VariableDeclaration / FunctionDeclaration / Executable
+
+ImportDeclaration
+  = "import" _ (NamespaceIdentifier ".")* (Identifier / Operator) (_ "as" _ Identifier / Operator)?
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module.
 VariableDeclaration
@@ -151,6 +154,9 @@ IdentifierStart
 IdentifierPart
   = IdentifierStart
   / DecimalDigit
+
+NamespaceIdentifier
+  = first:LowerLetter (rest:LowerLetter / "_")*
 
 // Tokens
 FalseToken      = "false"

@@ -4,15 +4,74 @@
 
 var functions = {};
 var executables = [];
+var ftl_modules = [];
 
 function initialize() {
   functions = {};
   executables = [];
 }
 
+ftl = {
+ import_statement: function(path, id, as) {
+
+  function createParameters(size) {
+    var params = [];
+    for (var i = 0; i < size; i++)
+      params.push('_' + i);
+    return params;
+  }
+
+  function import_function(module, name) {
+    var elm = module[name];
+    if (elm instanceof Fn) {
+      functions[name] = elm;
+      console.log('imported function ' + path + '.' + name)
+    }
+    else if (typeof(elm) == 'function') {
+      functions[name] = new NativeFunctionFn(name, createParameters(elm.length), elm);
+      console.log('created native function for ' + path + '.' + name)
+    }
+  }
+
+  console.log('inside import_statement')
+
+  if (path.length > 0) {
+    path = path.substr(0, path.length - 1);
+
+    // load_module needs to be provided
+    var module = load_module(path);
+
+    // javascript native module
+    if (!module) {
+      module = eval(path);
+    }
+
+    if (!module) {
+      throw "No module '" + id + "' found!";
+    } else {
+      console.log('found module', path)
+    }
+
+    // all functions
+    if (id == '*') {
+      var names = Object.getOwnPropertyNames(module);
+      for (let name of names) {
+        import_function(module, name);
+      }
+    }
+
+    else
+      import_function(module, id && id.name)
+  }
+}
+};
 function getValueString(value) {
-  if (Array.isArray(value))
+  if (!value)
+    return 'null';
+  else if (Array.isArray(value))
     return '[' + value.toString() + ']'
+  else if (typeof value == 'string')
+    return "'" + value.toString() + "'"
   else
     return value.toString()
 }
@@ -326,7 +385,12 @@ class ParameterMappingFn extends Fn {
       // value from input or from default expression
       var val = this._getInputElement(input, i);
       if (val == null)
-        list[i].apply(input);
+        val = list[i].apply(input);
+
+      // resolve any tail
+      else if (val instanceof TailFn)
+        val = val.apply();
+
       tuple.addKeyValue(list[i].name, val)
     }
 
@@ -346,19 +410,23 @@ class NativeFunctionFn extends Fn {
     super()
     this._name = name;
     this._params = params;
+
     var ins = params;
     var param_list = [];
-    this._params = params instanceof TupleFn ? ins.list : [ins];
+    this._params = params instanceof TupleFn ? ins.list : (Array.isArray(params) ? params : [ins]);
     param_list = this.extractParams(this._params);
 
     for (var i = 0; i < ins.length; i++) {
       param_list.push('_' + (i + 1));
     }
+
     console.log("parameter list:", param_list) 
-    console.log("script:", script) 
-      
-    this.internal = eval("(function(" + param_list.join(',') + ")" + script + ")");
-    this._param_list = param_list
+    console.log("parameters:", params)
+    console.log("script:", script)
+
+    this.internal = (typeof script == 'function') ? script
+        : eval("(function(" + param_list.join(',') + ")" + script + ")");
+    this._param_list = param_list;
   }
 
   // extracts parameter names
@@ -369,7 +437,9 @@ class NativeFunctionFn extends Fn {
       return param_list;
     for (var i = 0; i < params.length; i++) {
       var param = params[i];
-      if (param instanceof RefFn)
+      if (typeof param == 'string')
+        param_list.push(param)
+      else if (param instanceof RefFn)
         param_list.push(param.name);
       else
         param_list.push(param.id);
@@ -498,7 +568,9 @@ class TupleFn extends Fn {
 
       else {
         var tp = typeof(tpl);
-        if (tp == 'number' || tp == 'string' || tp == 'boolean')
+
+		    // TODO: change to test if tple instanceof Fn
+        if (tp == 'number' || tp == 'string' || tp == 'boolean' || Array.isArray(tpl))
           var res = tpl 
         else
           var res = tpl.apply(input, context);
@@ -721,6 +793,8 @@ class ExprRefFn extends WrapperFn {
   }
 
   apply(input) {
+	  // TODO: if this.wrapped is a simple RefFn, maybe just resolve it from input as
+	  // return pass_through.bind(ConstFn(... resolved reference...))
     if (this._isTail) {
       return pass_through.bind(new TailFn(this.wrapped, input));
     } else
