@@ -7,56 +7,55 @@
  */
 
 {
-function import_statement(path, id, as) {
+
+// ftl functions and classes.
+var ftl = (function() {
+
+  function importStatement(path, id, as) {
   
-  function createParameters(size) {
-    var params = [];
-    for (var i = 0; i < size; i++)
-      params.push('_' + i);
-    return params;
-  }
-
-  console.log('inside import_statement')
-
-  if (path.length > 0) {
-    path = path.substr(0, path.length - 1);
-
-    if (ftl_modules.includes(path)) {
+    function createParameters(size) {
+      var params = [];
+      for (var i = 0; i < size; i++)
+        params.push('_' + i);
+      return params;
     }
 
-    // javascript native module
-    else {
+    console.log('inside importStatement')
 
-      var module = eval(path);
-      if (!module) {
+    if (path.length > 0) {
+      path = path.substr(0, path.length - 1);
+
+      if (modules.includes(path)) {
+      }
+
+      // javascript native module
+      else {
+
+        var module = eval(path);
+        if (!module) {
           throw "No module " + id + " found!";
-      } else {
-      console.log('found module', path)
-    }
+        } else {
+          console.log('found module', path)
+        }
 
-      // all functions
-      if (id == '*') {
-        var names = Object.getOwnPropertyNames(module);
-        for (let name of names) {
-          var elm = module[name];
-          if (typeof(elm) == 'function') {
-            functions[name] = new NativeFunctionFn(name, createParameters(elm.length), elm);
-            console.log('created native function ' + name + ' for ' + module + '.' + name)
+        // all functions
+        if (id == '*') {
+          var names = Object.getOwnPropertyNames(module);
+          for (let name of names) {
+            var elm = module[name];
+            if (typeof(elm) == 'function') {
+              functions[name] = new NativeFunctionFn(name, createParameters(elm.length), elm);
+              console.log('created native function ' + name + ' for ' + module + '.' + name)
+            }
           }
         }
-      }
 
-      else {
+        else {
         
+        }
       }
     }
   }
-}
-
-  var functions = {};
-  var ftl_modules = [];
-
-
 
   function getValueString(value) {
     if (Array.isArray(value))
@@ -101,6 +100,53 @@ function import_statement(path, id, as) {
     }
 
     return this.f.apply(tpl);
+  }
+
+  /**
+   * A module holds a list of defined identifiers that can be seen from the outside
+   * (except the ones starts with '_' which are private to the module)
+   *
+   * Any imported identifies are private to the module.
+   *
+   */
+  class Module {
+  
+    // creates a module with name, such as 'ftl.lang'
+    constructor(name) {
+      this._name = name;
+      this._functions = {};
+      this._executables = [];
+    }
+
+    get name() {
+      return this._name;
+    }
+
+    // Sets a module name.
+    // A module can have the name set once only.
+    set name(name) {
+      if (!this._name) {
+        this._name = name
+      } else {
+        throw new Error("The module name already set as " + this._name);
+      }
+    }
+
+    addFn(name, f) {
+      if (this._functions[name] != null)
+        throw { message: "'" + name + "' exists and can not be declared again!"}
+      this._functions[name] = f;
+    }
+
+    getFn(name) {
+      return this._functions[name];
+    }
+
+    addExecutable(exec) {
+      this._executables.push(exec);
+    }
+
+    get executables() { return this._executables }
   }
 
   class Tuple {
@@ -167,10 +213,10 @@ function import_statement(path, id, as) {
     }
 
     get(key) {
-//      if (key.startsWith('_')) {
-//        var ind = parseInt(key.substring(1))
-//        return ind < this._list.length ? this._list[ind] : null
-//      }
+      // if (key.startsWith('_')) {
+      //   var ind = parseInt(key.substring(1))
+      //   return ind < this._list.length ? this._list[ind] : null
+      // }
       return this._map.get(key);
     }
 
@@ -222,7 +268,7 @@ function import_statement(path, id, as) {
         buf.push(last)
 
       return '(' + buf.join(', ') + ')'
-	}
+    }
   }
 
   /**
@@ -293,9 +339,6 @@ function import_statement(path, id, as) {
     constructor(name, val) {
       super(val);
       this._name = name;
-      if (functions[name] != null)
-        throw { message: "'" + name + "' exists and can not be declared again for var/const!"}
-      functions[name] = this; 
     }
 
     get name() {return this._name}
@@ -322,15 +365,13 @@ function import_statement(path, id, as) {
   /**
    * Named expression.
    */
-  class NamedExpressionFn {
+  class NamedExpressionFn extends Fn {
     constructor(id, expr) {
       this.id = id;
       this.expr = expr;
     }
 
-    get id() {
-        return this.id;
-    }
+    get id() { return this.id }
 
     apply(tuple) {
       return this.expr.apply(tuple);
@@ -386,76 +427,76 @@ function import_statement(path, id, as) {
     }
   }
 
-/**
- * Native javascript function.
- */
-class NativeFunctionFn extends Fn {
-
-  // name: function name
-  // params: parameter names
-  // script: script body
-  constructor(name, params, script) {
-    super()
-
-    this._name = name;
-    this._params = params;
-
-    var ins = params;
-    var param_list = [];
-    this._params = params instanceof TupleFn ? ins.list : (Array.isArray(params) ? params : [ins]);
-    param_list = this.extractParams(this._params);
-
-    for (var i = 0; i < ins.length; i++) {
-      param_list.push('_' + (i + 1));
-    }
-
-    console.log("parameter list:", param_list) 
-    console.log("parameters:", params)
-    console.log("script:", script)
-
-    this.internal = (typeof script == 'function') ? script
-        : eval("(function(" + param_list.join(',') + ")" + script + ")");
-    this._param_list = param_list;
-  }
-
-  // extracts parameter names
-  // @params array of parameter list
-  extractParams(params) {
-    var param_list = [];
-    if (params == null)
-      return param_list;
-    for (var i = 0; i < params.length; i++) {
-      var param = params[i];
-	  if (typeof param == 'string')
-	    param_list.push(param)
-      else if (param instanceof RefFn)
-        param_list.push(param.name);
-      else
-        param_list.push(param.id);
-    }
-    return param_list;
-  }
-
-  get name() {return this._name}
-
   /**
-   * Parameters in list
+   * Native javascript function.
    */
-  get params() { return this._params; }
+  class NativeFunctionFn extends Fn {
 
-  apply(input) {
-    console.log("tuple to native function: ", input)
-    if (this._param_list.length == 1 && this._param_list[0] == 'raw')
-      var res = this.internal.apply(null, [input])
-    else {
-      var input_array = (input instanceof Tuple)? input.toList() : [input];
-      var res = this.internal.apply(null, input_array);
+    // name: function name
+    // params: parameter names
+    // script: script body
+    constructor(name, params, script) {
+      super()
+
+      this._name = name;
+      this._params = params;
+
+      var ins = params;
+      var param_list = [];
+      this._params = params instanceof TupleFn ? ins.list : (Array.isArray(params) ? params : [ins]);
+      param_list = this.extractParams(this._params);
+
+      for (var i = 0; i < ins.length; i++) {
+        param_list.push('_' + (i + 1));
+      }
+
+      console.log("parameter list:", param_list) 
+      console.log("parameters:", params)
+      console.log("script:", script)
+
+      this.internal = (typeof script == 'function') ? script
+          : eval("(function(" + param_list.join(',') + ")" + script + ")");
+      this._param_list = param_list;
     }
 
-    console.log("output of native function: ", res)
-    return res
+    // extracts parameter names
+    // @params array of parameter list
+    extractParams(params) {
+      var param_list = [];
+      if (params == null)
+        return param_list;
+      for (var i = 0; i < params.length; i++) {
+        var param = params[i];
+        if (typeof param == 'string')
+          param_list.push(param)
+        else if (param instanceof RefFn)
+          param_list.push(param.name);
+        else
+          param_list.push(param.id);
+      }
+      return param_list;
+    }
+
+    get name() { return this._name }
+
+    /**
+     * Parameters in list
+     */
+    get params() { return this._params; }
+
+    apply(input) {
+      console.log("tuple to native function: ", input)
+      if (this._param_list.length == 1 && this._param_list[0] == 'raw')
+        var res = this.internal.apply(null, [input])
+      else {
+        var input_array = (input instanceof Tuple)? input.toList() : [input];
+        var res = this.internal.apply(null, input_array);
+      }
+
+      console.log("output of native function: ", res)
+      return res
+    }
   }
-}
 
   /**
    * Function function.
@@ -471,13 +512,9 @@ class NativeFunctionFn extends Fn {
       return this._recursive
     }
 
-    get name() {
-      return this._name;
-    }
+    get name() { return this._name; }
 
-    get params() {
-      return this.wrapped.elements[0].params.list;
-    }
+    get params() { return this.wrapped.elements[0].params.list; }
   
     apply(input, context) {
       var res = super.apply(input);
@@ -533,13 +570,9 @@ class NativeFunctionFn extends Fn {
     }
 
     // deprecated
-    get list() {
-      return this.tp;
-    }
+    get list() { return this.tp }
 
-    get tuple() {
-      return this.tp;
-    }
+    get tuple() { return this.tp }
 
     apply(input, context) {
       var tuple = new Tuple()
@@ -569,27 +602,26 @@ class NativeFunctionFn extends Fn {
     }
   }
 
-/**
- * Expression function.
- */
-class ExprFn {
-  constructor(id, elm) {
-    this.id = id;
-    this.elm = elm;
-  }
+  /**
+   * Expression function.
+   */
+  class ExprFn extends Fn {
+    constructor(id, elm) {
+      super();
+      this.id = id;
+      this.elm = elm;
+    }
 
-  get name() {
-    return this.id;
-  }
+    get name() { return this.id }
 
-  hasRef() {
-    return this.elm instanceof RefFn
-  }
+    hasRef() {
+      return this.elm instanceof RefFn
+    }
 
-  apply(input) {
-    return this.elm.apply(input);
+    apply(input) {
+      return this.elm.apply(input);
+    }
   }
-}
 
   /**
    * Composition function.
@@ -633,9 +665,7 @@ class ExprFn {
       this.funs = (Array.isArray(elms) ? elms : [elms]).concat(this.funs);
     }
 
-    get elements() {
-      return this.funs;
-    }
+    get elements() { return this.funs }
 
     apply(tuple, context) {
       console.log("composition input:", tuple);
@@ -670,10 +700,11 @@ class ExprFn {
    * Function capturing any reference.
    */
   class RefFn extends Fn {
-    constructor(name) {
+    constructor(module, name) {
       super()
       this._type = "RefFn"
       this._name = name;
+      this._module_name = module.name;
       if (name.endsWith('$')) {
         this._name = name.substr(0, name.length - 1);
         this._tail = true;
@@ -698,13 +729,9 @@ class ExprFn {
       return this._tail ? this._tail : false;
     }
 
-    set params(params) {
-      this._params = params
-    }
+    get params() { return this._params }
 
-    get params() {
-      return this._params;
-    }
+    set params(params) { this._params = params }
 
     isValueType() {
       return this._refType == 'value'
@@ -750,7 +777,10 @@ class ExprFn {
       }
 
       // must be a function
-      e = functions[this._name];
+      var ref_module = ftl.getModule(this._module_name);
+
+      // ref_module will not be available during parsing
+      e = ref_module && ref_module.getFn(this._name);
       if (e) {
         console.log("actual f ", e)
         console.log("tuple to " + this._name, input)
@@ -781,7 +811,7 @@ class ExprFn {
 
     apply(input) {
       if (this._isTail) {
-        return pass_through.bind(new TailFn(this.wrapped, input));
+        return pass_through.bind(new ftl.TailFn(this.wrapped, input));
       } else
         return function_ref.bind({f: this.wrapped, closure: input, params: this._params});;
     }
@@ -831,41 +861,42 @@ class ExprFn {
     }
   }
 
-/**
- * Array element selector.
- *
- * @parameter name - name of a list
- * @ index - index of element
- */
-class ArrayElementSelectorFn extends Fn {
-  constructor(name, index) {
-    super()
-    this._type = "ArrayElementSelectorFn"
-    this._name = name.name;
-    this._index = (index instanceof RefFn) ? index.name : parseInt(index);
+  /**
+   * Array element selector.
+   *
+   * @parameter name - name of a list
+   * @ index - index of element
+   */
+  class ArrayElementSelectorFn extends Fn {
+    constructor(module, name, index) {
+      super()
+      this._type = "ArrayElementSelectorFn"
+      this._name = name.name;
+      this._module_name = module.name;
+      this._index = (index instanceof RefFn) ? index.name : parseInt(index);
+    }
+
+    get name() {
+      return this._name;
+    }
+
+    apply(input) {
+      var list;
+      if (input && input instanceof Tuple)
+        list = input.get(this._name);
+
+      if (!list)
+        list = modules.get(this._module_name).getFn(this._name);
+
+      if (list instanceof VarFn)
+        list = list._val;
+
+      var i = typeof(this._index) == 'number' ? this._index : input.get(this._index)
+      return list[i];
+    }
   }
 
-  get name() {
-    return this._name;
-  }
-
-  apply(input) {
-    var list;
-    if (input && input instanceof Tuple)
-      list = input.get(this._name);
-
-    if (!list)
-      list = functions[this._name];
-
-    if (list instanceof VarFn)
-      list = list._val;
-
-    var i = typeof(this._index) == 'number' ? this._index : input.get(this._index)
-    return list[i];
-  }
-}
-
-/**
+  /**
    * Simple type function.
    */
   class SimpleTypeFn {
@@ -896,6 +927,53 @@ class ArrayElementSelectorFn extends Fn {
       this._as = as;
     }
   }
+
+  // runtime modules
+  var modules = new Map();
+
+  // returns module with name.
+  function getModule(name)  {
+    return modules.get(name)
+  }
+
+  // adds a module with name.
+  function addModule(name, module) {
+    if (modules.has(name))
+      throw new Error("Module with name '" + name + "' already exists!");
+    modules.set(name, module);
+  }
+
+  return {
+    Module: Module,
+    Tuple: Tuple,
+    Fn: Fn,
+    WrapperFn: WrapperFn,
+    ConstFn: ConstFn,
+    ImmutableValFn: ImmutableValFn,
+    VarFn: VarFn,
+    NamedExpressionFn: NamedExpressionFn,
+    LiteralExpressionFn: LiteralExpressionFn,
+    ParameterMappingFn: ParameterMappingFn,
+    NativeFunctionFn: NativeFunctionFn,
+    FunctionFn: FunctionFn,
+    PartialFunctionFn: PartialFunctionFn,
+    TupleFn: TupleFn,
+    ExprFn: ExprFn,
+    CompositionFn: CompositionFn,
+    RefFn: RefFn,
+    ExprRefFn: ExprRefFn,
+    TailFn: TailFn,
+    ArrayElementSelectorFn: ArrayElementSelectorFn,
+    SimpleTypeFn: SimpleTypeFn,
+    getModule: getModule,
+    addModule: addModule,
+    importStatement: importStatement
+  }
+})();
+
+// this is the module created during parsing
+var module = new ftl.Module('')
+ftl.addModule('', module);
 
 // The following functions are used for parsing
 
@@ -931,28 +1009,37 @@ function buildFirstRest(first, rest) {
   return (Array.isArray(rest) && rest.length == 0) ? first : buildList(first, rest, 1)
 }
 
+// end of script for parser generation
 }
 
 // start
 Start
-  = ___ program:Declarations? ___ { return program } 
+  = ___ ModuleDeclaration? ___ program:Declarations? ___ { return program } 
+
+ModuleDeclaration
+  = ModuleToken _ module_name: ((NamespaceIdentifier ".")* NamespaceIdentifier { return text() }) {
+    console.log("module name: '" + module_name + "'");
+    module.name = module_name;
+  } 
 
 // all allowed declarations
 Declarations
   = first:Declaration rest:(__ Declaration)* {
     return buildList(first, rest, 1)
-  } 
+  }
 
 Declaration
   = ImportDeclaration / VariableDeclaration / FunctionDeclaration / Executable
 
 ImportDeclaration
-  = "import" _ path:((Identifier ".")* {return text()} ) id: ("*" / Identifier / Operator { return text()}) as:(_ "as" _ (Identifier / Operator {return text()}))? { import_statement(path, id, extractOptional(as, 3))}
+  = "import" _ path:((Identifier ".")* {return text()} ) id: ("*" / Identifier / Operator { return text()}) as:(_ "as" _ (Identifier / Operator {return text()}))? { ftl.importStatement(path, id, extractOptional(as, 3))}
 
-// Variable or constant declaration at module level, which can be referenced in any functions within the same module.
+// Variable or constant declaration at module level, which can be referenced in any functions within the same module or outside the module.
 VariableDeclaration
   = modifier:(ConstToken / VarToken) _ id:Identifier _ "=" _ expr:PrimaryExpression {
-    return modifier=='const' ? new ImmutableValFn(id.name, expr) : new VarFn(id.name, expr)
+    var ret = modifier =='const' ? new ftl.ImmutableValFn(id.name, expr) : new ftl.VarFn(id.name, expr)
+    module.addFn(name, ret); 
+    return ret
   }
 
 // Function declaration
@@ -967,20 +1054,20 @@ FunctionDeclaration
 
     var is_operator = id.type == 'OperatorDeclaration' || id.type == 'PostfixOperatorDeclaration';
     if (is_operator)
-    	console.log('parameter list from operator: ', id.operands)
-  	console.log('parameter list from function: ', optionalList(params))
+      console.log('parameter list from operator: ', id.operands)
+    console.log('parameter list from function: ', optionalList(params))
 
     var param_list = is_operator ? id.operands : optionalList(params);
     console.log('parameter list: ', param_list)
     var name = id.name
-    var ret = body.script ? new NativeFunctionFn(name, param_list, body.script) :
-        new FunctionFn(name, param_list, body);
+    var ret = body.script ? new ftl.NativeFunctionFn(name, param_list, body.script) :
+        new ftl.FunctionFn(name, param_list, body);
+    module.addFn(name, ret);
 
-    functions[name] = ret;
     return ret;
   }
 
-Tuple = "(" _ elms:ParameterList? ")" { return TupleFn.createTupleFn(elms) }
+Tuple = "(" _ elms:ParameterList? ")" { return ftl.TupleFn.createTupleFn(elms) }
 
 ParameterList
   = first:Parameter rest:(_ "," _ Parameter)* {
@@ -995,7 +1082,7 @@ Parameter
         iid = iid.name;
       if (iid == null)
         return expr;
-      return new ExprFn(iid, expr)
+      return new ftl.ExprFn(iid, expr)
     }
 
 FunctionBody
@@ -1014,17 +1101,23 @@ Expression
     if (t == null)
       return first;
     
-    return CompositionFn.createCompositionFn(first, t);
+    return ftl.CompositionFn.createCompositionFn(first, t);
   }
 
 Executable
   = expr:Expression {
       var res = expr.apply()
-      if (res && res instanceof TailFn)
+      if (res && res instanceof ftl.TailFn)
         res = res.apply();
       if (res)
         console.log('executable result: ', res)
-      expr.result = res;
+
+      // attach results to expression for display in pegjs online
+      // if result is not the expression itself, which is possible
+      // when expr contains unresolved references
+      if (res != expr)
+        expr.result = res;
+      module.addExecutable(expr);
       return expr
     }
 
@@ -1074,7 +1167,7 @@ PreInfixOperatorDeclaration
       return {
         type: 'OperatorDeclaration',
         name: name,
-        operands: TupleFn.createTupleFn(operands)
+        operands: ftl.TupleFn.createTupleFn(operands)
       }
     }
 
@@ -1099,8 +1192,8 @@ UnaryOperatorExpression
       console.log('op', op)
       console.log('expr', expr)
       if (op == '-' && expr instanceof ConstFn)
-        return new ConstFn(-1 * expr.value);
-      return CompositionFn.createCompositionFn(expr, functions[op.name]);
+        return new ftl.ConstFn(-1 * expr.value);
+      return CompositionFn.createCompositionFn(expr, module.getFn(op.name));
     }
 
 // postfix operator
@@ -1109,27 +1202,27 @@ PostfixOperatorExpression
       console.log('PostfixOperatorExpression: op', op)
       console.log('PostfixOperatorExpression: expr', expr)
       if (op == '-' && expr instanceof ConstFn)
-        return new ConstFn(-1 * expr.value);
-      var op_fn = functions[op];
+        return new ftl.ConstFn(-1 * expr.value);
+      var op_fn = module.getFn(op);
       if (!op_fn)
-        op_fn = new RefFn(op);
-      return CompositionFn.createCompositionFn(expr, op_fn);
+        op_fn = new ftl.RefFn(module, op);
+      return ftl.CompositionFn.createCompositionFn(expr, op_fn);
   }
 
 // n-ary operator expression
 N_aryOperatorExpression
   = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+ {
-  
+
       var current_index = 0;
       var stop_index = 0;
       var parse_operators = function(ops, operands, index, full) {
         var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-   	    var f = functions[op];
+        var f = module.getFn(op);
 
         // no corresponding function found for single op
-  	    if (!f) {
-  	      if (index == 1)
-  	        throw new Error("No function with name '" + op + "' found!");
+        if (!f) {
+          if (index == 1)
+            throw new Error("No function with name '" + op + "' found!");
 
           index--;
           var reduced = parse_operators(ops, operands, index, false);
@@ -1140,35 +1233,35 @@ N_aryOperatorExpression
           ops = ops.slice(index, ops.length)
           operands = [reduced].concat(operands.slice(index + 1, operands.length))
           return parse_operators(ops, operands, ops.length, true)
-  	    }
+        }
 
-  	    for (var i = 0; i < f.params.length; i++) {
-  	      if (f.params[i] instanceof RefFn && f.params[i].isRefType()) {
-  	        operands[i] = new ExprRefFn(operands[i], f.params[i].params, f.params[i].isTail());
-  	      }
+        for (var i = 0; i < f.params.length; i++) {
+          if (f.params[i] instanceof ftl.RefFn && f.params[i].isRefType()) {
+            operands[i] = new ftl.ExprRefFn(operands[i], f.params[i].params, f.params[i].isTail());
+          }
         }
 
         current_index += index;
-        return CompositionFn.createCompositionFn(TupleFn.createTupleFn(operands.slice(0, f.params.length)), f);
+        return ftl.CompositionFn.createCompositionFn(ftl.TupleFn.createTupleFn(operands.slice(0, f.params.length)), f);
       }
 
-  	  var ops = extractList(rest, 1);
-  	  var params = [operand].concat(extractList(rest, 3));
-  	  if (ops.length == 0)
-  	    throw new Error('No ops found!')
+      var ops = extractList(rest, 1);
+      var params = [operand].concat(extractList(rest, 3));
+      if (ops.length == 0)
+        throw new Error('No ops found!')
       console.log('ops:', ops)
-  	  console.log('operands', params)
-  	  stop_index = ops.length;
-  	  return parse_operators(ops, params, ops.length, true);
+      console.log('operands', params)
+      stop_index = ops.length;
+      return parse_operators(ops, params, ops.length, true);
   }
 
 TupleSelector
-  = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new RefFn(text()) }
+  = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new ftl.RefFn(module, text()) }
 
 ArrayElementSelector
   = id: Identifier _ "[" index:("0" / (NonZeroDigit DecimalDigit* {return text()}) / Identifier) _ "]" {
     console.log('got ArrayElementSelector', index);
-    return new ArrayElementSelectorFn(id, index);
+    return new ftl.ArrayElementSelectorFn(module, id, index);
   }
 
 Literal
@@ -1180,7 +1273,7 @@ Literal
 ArrayLiteral
   = "[" elms:(_ LiteralList)? "]" {
     var lst = extractOptional(elms, 1);
-    return lst == null ? new ConstFn([]) : lst
+    return lst == null ? new ftl.ConstFn([]) : lst
   }
 
 LiteralList
@@ -1189,7 +1282,7 @@ LiteralList
     var ret = [];
     for (var i = 0; i < elms.length; i++)
       ret.push(elms[i].value);
-    return new ConstFn(ret)
+    return new ftl.ConstFn(ret)
   }
 
 // expression for getting member of variable
@@ -1201,11 +1294,11 @@ CallExpression
 
     // CallExpression
 
-    var f = functions[id.name];
+    var f = module.getFn(id.name);
     if (f) {
       var f_params = f.params;
       if (!Array.isArray(f_params)) {
-        if (f_params instanceof TupleFn) {
+        if (f_params instanceof ftl.TupleFn) {
           f_params = f_params.list
         } else
           f_params = [f_params]
@@ -1214,16 +1307,16 @@ CallExpression
       var params_len = f_params.length;
       for (var i = 0; i < f_params.length; i++) {
         var p = f_params[i];
-        if (p instanceof ExprFn && !p.hasRef())
+        if (p instanceof ftl.ExprFn && !p.hasRef())
           params_len--;
       }
       var param_list = params.apply();
-      var actual_params_len = param_list instanceof Tuple ? param_list.size: 1;
+      var actual_params_len = param_list instanceof ftl.Tuple ? param_list.size: 1;
 
       if (actual_params_len >= params_len) {
-        return new CompositionFn([params, f])
+        return new ftl.CompositionFn([params, f])
       }
-      return new PartialFunctionFn(f, param_list);
+      return new ftl.PartialFunctionFn(f, param_list);
     }
 
     else {
@@ -1243,7 +1336,7 @@ SourceCharacter
   = .
 
 Identifier
-  = !ReservedWord name:IdentifierName {return new RefFn(name)}
+  = !(ReservedWord WhiteSpace) name:IdentifierName {return new ftl.RefFn(module, name)}
 
 IdentifierName "identifier"
   = first:IdentifierStart rest:IdentifierPart* {return first + rest.join("")}
@@ -1258,11 +1351,16 @@ IdentifierPart
   = IdentifierStart
   / DecimalDigit
 
+NamespaceIdentifier
+  = LowerLetter (LowerLetter / "_")* { return text() }
+
 // Tokens
 FalseToken      = "false"
 FunctionToken   = "fn"
 NullToken       = "null"
 TrueToken       = "true" !IdentifierStart
+ModuleToken     = "module" !IdentifierStart
+ImportToken     = "import" !IdentifierStart
 VarToken        = "var" !IdentifierStart
 ConstToken      = "const"
 
@@ -1296,8 +1394,8 @@ NullLiteral
   = NullToken
 
 BooleanLiteral
-  = TrueToken { return new ConstFn(true) }
-  / FalseToken { return new ConstFn(false) }
+  = TrueToken { return new ftl.ConstFn(true) }
+  / FalseToken { return new ftl.ConstFn(false) }
 
 NumericLiteral
   = literal:HexIntegerLiteral !(IdentifierStart / DecimalDigit)
@@ -1305,13 +1403,13 @@ NumericLiteral
 
 DecimalLiteral
   = DecimalIntegerLiteral "." DecimalDigit* ExponentPart? {
-      return new ConstFn(parseFloat(text()));
+      return new ftl.ConstFn(parseFloat(text()));
     }
   / [-]? "." DecimalDigit+ ExponentPart? {
-      return new ConstFn(parseFloat(text()));
+      return new ftl.ConstFn(parseFloat(text()));
     }
   / DecimalIntegerLiteral ExponentPart? {
-      return new ConstFn(parseFloat(text()));
+      return new ftl.ConstFn(parseFloat(text()));
     }
 
 DecimalIntegerLiteral
@@ -1337,8 +1435,8 @@ HexDigit
   = [0-9a-f]i
 
 StringLiteral
-  = '"' chars:DoubleStringCharacter* '"' { var str = text(); return new ConstFn(str.substr(1, str.length - 2)) }
-  / "'" chars:SingleStringCharacter* "'" { var str = text(); return new ConstFn(str.substr(1, str.length - 2)) }
+  = '"' chars:DoubleStringCharacter* '"' { var str = text(); return new ftl.ConstFn(str.substr(1, str.length - 2)) }
+  / "'" chars:SingleStringCharacter* "'" { var str = text(); return new ftl.ConstFn(str.substr(1, str.length - 2)) }
 
 DoubleStringCharacter
   = !('"' / "\\" / LineTerminator) SourceCharacter

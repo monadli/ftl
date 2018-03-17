@@ -8,7 +8,7 @@
 
 // start
 Start
-  = ___ program:Declarations? ___ 
+  = ___ ModuleDeclaration? ___ program:Declarations? ___ 
 
 // all allowed declarations
 Declarations
@@ -17,8 +17,11 @@ Declarations
 Declaration
   = ImportDeclaration / VariableDeclaration / FunctionDeclaration / Executable
 
+ModuleDeclaration
+  = ModuleToken _ (NamespaceIdentifier ".")* NamespaceIdentifier 
+
 ImportDeclaration
-  = "import" _ (NamespaceIdentifier ".")* (Identifier / Operator) (_ "as" _ Identifier / Operator)?
+  = ImportToken _ (NamespaceIdentifier ".")* (Identifier / Operator) (_ "as" _ Identifier / Operator)?
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module.
 VariableDeclaration
@@ -140,7 +143,7 @@ SourceCharacter
   = .
 
 Identifier
-  = !ReservedWord name:IdentifierName
+  = !(ReservedWord WhiteSpace) name:IdentifierName
 
 IdentifierName "identifier"
   = first:IdentifierStart rest:IdentifierPart*
@@ -156,13 +159,15 @@ IdentifierPart
   / DecimalDigit
 
 NamespaceIdentifier
-  = first:LowerLetter (rest:LowerLetter / "_")*
+  = LowerLetter (LowerLetter / "_")*
 
 // Tokens
 FalseToken      = "false"
 FunctionToken   = "fn"
 NullToken       = "null"
 TrueToken       = "true" !IdentifierStart
+ModuleToken     = "module" !IdentifierStart
+ImportToken     = "import" !IdentifierStart
 VarToken        = "var" !IdentifierStart
 ConstToken      = "const"
 
@@ -188,7 +193,9 @@ ReservedWord
   / BooleanLiteral
 
 Keyword
-  = VarToken
+  = ModuleToken
+  / ImportToken 
+  / VarToken
   / ConstToken
   / FunctionToken
 
@@ -202,6 +209,7 @@ BooleanLiteral
 NumericLiteral
   = literal:HexIntegerLiteral !(IdentifierStart / DecimalDigit)
   / literal:DecimalLiteral !(IdentifierStart / DecimalDigit)
+  / literal:DecimalIntegerLiteral
 
 DecimalLiteral
   = DecimalIntegerLiteral "." DecimalDigit* ExponentPart?

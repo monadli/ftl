@@ -1,20 +1,255 @@
+<!DOCTYPE html>
 <html>
 <head>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.34.0/codemirror.css">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.34.0/codemirror.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.34.0/addon/display/autorefresh.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.34.0/mode/javascript/javascript.js"></script>
+<!--script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.34.0/mode/textile/textile.js"></script-->
 <script src="ftl-js-core.js"></script>
 <script src="ftl-js-parser.js"></script>
+<script id='module:ftl.lang' type='application/ftl'>
+//
+// basic arithmetic operators
+//
+
+// unary -
+fn -(val) { return -val }
+
+fn x + y { return x + y }
+fn x - y { return x - y }
+fn x * y { return x * y }
+fn x / y { return x / y }
+fn x % y { return x % y }
+
+//
+// basic logic operators
+//
+fn x == y { return x == y }
+fn x != y { return x != y }
+fn x < y { return x < y }
+fn x > y { return x < y }
+fn x || y$() { return x || y() }
+fn x && y { return x && y }
+
+// fractorial
+fn x! -> x < 2 ? 1 : (((x - 1)!) * x)
+
+// ternary operator with if_true and otherwise marked as tail functions
+fn condition ? if_true$() : otherwise$() { return condition ? if_true() : otherwise() }
+
+//
+// tuple functions
+//
+
+// operator '.' for sub-element resolution
+fn a . b(raw) ->  b(a)
+
+//
+// list functions
+//
+
+// length of list
+fn len(list) {
+  return list.length;
+}
+
+// append item to list and return
+fn list += item {
+  list.push(item)
+  return list
+}
+
+// internal map
+fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : map(src, append(mapped, mapper(src[index])), index + 1, mapper)
+
+// map operator that returns a new list with list element mapped with mapper function
+fn list => mapper(item) -> _map(list, [], 0, mapper)
+
+// internal reduce
+fn _reduce(accu, list, index, reducer) -> index == len(list) ? accu : _reduce(reducer(accu, list[index]), list, index + 1, reducer)
+
+// reduce operator that returns reduced from list with reducer function
+fn list =|> reducer(i1, i2) -> (list[0], list, 1, reducer) -> reduce
+
+// internal filter
+fn _filter(list, filtered, index, predicate) ->
+ index == len(list) ? filtered : _filter(list, (list[index], predicate, filtered) -> _1(_0) ? (_2 += _0) : _2, index + 1, predicate)
+
+// filter operator
+fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
+
+</script>
+<script id='module:is_prime' type='application/ftl'>
+fn x % y {
+  return x % y
+}
+
+fn x > y {
+  return x > y
+}
+
+fn x < y {
+  return x < y
+}
+
+fn x == y {
+  return x == y
+}
+
+fn x || y() {
+  return x || y()
+}
+
+fn x + y {
+  return x + y
+}
+
+
+fn x - y {
+  return x - y
+}
+
+fn condition ? if_true$() : otherwise$() {
+  return condition ? if_true() : otherwise()
+}
+
+/**
+ * Internal recursive function computing if a number n is prime number based on a divisor.
+ *
+ * Default value of divisor is 2. 
+ */
+fn _is_prime(n, divisor:2) -> (divisor == (n - 1)) ? true : ((n % divisor == 0) ? false : _is_prime(n, divisor + 1))
+
+// test if a number is a prime number
+fn is_prime(n) -> (n < 2) ? false : ((n == 2) ? true : _is_prime(n))
+
+// apply is_prime to 31 to test if 31 is a prime number
+is_prime(31)
+</script>
+<script id='module:call_function' type='application/ftl'>
+// any function can take a tuple resulted from previous functional tuple and takes only consecutive parameters it needs
+var t = (2.34, b:4.3, c:"test", d:4, e:true, f:[1, 3], g:[])
+
+fn sin(x) { return Math.sin(x) }
+
+// a functional tuple can contain element selector from result of previous functional tuple
+// for variable t, its member is queryable in next ft 
+t -> (_0 -> sin, c -> sin)
+
+(3.13, 2.12) -> sin
+</script>
+<script id='module:filter' type='application/ftl'>
+
+fn a > b {
+  return a > b
+}
+
+fn a + b {
+  return a + b
+}
+
+fn condition ? if_true$() : otherwise$() {
+  return condition ? if_true() : otherwise()
+}
+
+fn x == y {
+  return x == y
+}
+
+fn len(list) {
+  return list.length;
+}
+
+fn list += item {
+  list.push(item)
+  return list
+}
+
+fn _filter(list, filtered, index, predicate) ->
+ index == len(list) ? filtered : _filter(list, (list[index], predicate, filtered) -> _1(_0) ? (_2 += _0) : _2, index + 1, predicate)
+
+// another option
+//fn _filter(list, filtered, index, predicate) ->
+// index == len(list) ? filtered : _filter(list, predicate(list[index]) ? (filtered += list[index]) : filtered, index + 1, predicate)
+
+/**
+ * Filter that takes a list and predicate.
+ *
+ * @input 
+ */
+fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
+
+[-1, 2, 3, 0, -4, 5] |=> (item > 0)
+</script>
+
 <script>
+var editor;
+var editor2;
+function init() {
+  var code_area = document.getElementById('ftl.lang');
+  code_area.value = document.getElementById('module:ftl.lang').text;
+  editor = CodeMirror.fromTextArea(code_area, {
+      lineNumbers: true,
+      autoRefresh: true,
+      theme: 'paraiso-light',
+      styleActiveLine: true,
+      fixedGutter:true,
+      lint:true,
+      readOnly:true,
+      coverGutterNextToScrollbar:false,
+      gutters: ['CodeMirror-lint-markers']
+  });
+
+  code_area = document.getElementById('ftl_src');
+  editor2 = CodeMirror.fromTextArea(code_area, {
+      lineNumbers: true,
+      autoRefresh: true,
+      theme: 'paraiso-light',
+      styleActiveLine: true,
+      fixedGutter:true,
+      lint:true,
+      coverGutterNextToScrollbar:false,
+      gutters: ['CodeMirror-lint-markers']
+  });
+}
+
+function initialize() {
+  functions = {};
+  executables = [];
+}
+
+function reqListener (e) {
+  console.log(this.responseText);
+}
+
+function load_module(module) {
+  var module_path = 'module:' + module;
+  var file_req = new XMLHttpRequest();
+  file_req.addEventListener("load", reqListener);
+  file_req.open("GET", module_path);
+  file_req.send();
+}
+
 function run() {
   initialize();
-  ftl_js_parser.parse(document.getElementById("ftl_src").value)
+  var module = ftl.parser.parse(editor2.getValue());
+
+  /// add module into modules
+  ftl.addModule(module.name, module);
+
   var out_area = document.getElementById('out_area');
   out_area.value = '';
-  executables.forEach(function(executable) {
-    var res = executable.apply()
-    if (typeof(res) != 'undefined' && res instanceof TailFn) {
+  module.executables.forEach(function(exec) {
+    var res = exec.apply()
+    if (typeof(res) != 'undefined' && res instanceof ftl.TailFn) {
       res = res.apply();
     }
     if (typeof(res) != 'undefined') {
-      if (res instanceof RefFn) {
+      if (res instanceof ftl.RefFn) {
         out_area.value += 'reference ' + res.name + ' undefined\r\n';
       } else
         out_area.value += res + '\r\n';
@@ -23,14 +258,48 @@ function run() {
 }
 </script>
 </head>
-<body>
-<h3>FTL Editor</h3>
-<textarea id='ftl_src' style='width:80%; height:400px'>
-</textarea>
-<div>
+<body onload='init()'>
+<h3>FTL Demo</h3>
+<ul class="nav nav-tabs">
+  <li id='lang_tab_holder'><a id='try' data-toggle="tab" href="#ftl_lang_pane">ftl.lang</a></li>
+  <li id='demo_tab_holder' class="active dropdown">
+   <a id='demo_tab' class='dropdown-toggle' data-toggle="dropdown" href="#"'>demos<span class="caret"></span></a>
+    <ul class="dropdown-menu">
+        <li><a href="#" ftl='is_prime'>1. is_prime</a></li>
+        <li><a href="#" ftl='call_function'>2. call_function</a></li>
+        <li><a href="#" ftl='filter'>3. filter</a></li>                        
+      </ul>  
+  </li>
+</ul>
+
+<div class="tab-content">
+ <div id='ftl_lang_pane' class="tab-pane fade" style='border-style: groove;border-width: 2px; margin-right:10px'>
+  <textarea id='ftl.lang' style='width:800px;height:400px'>
+  </textarea>
+ </div>
+
+ <div id='ftl_src_pane' class="tab-pane fade in active" style='border-style: groove;border-width: 2px; margin-right:10px'>
+  <textarea id='ftl_src' style='width:800px;height:400px'>
+  </textarea>
+ </div>
+</div>
+
 <button onclick='run()'>Run</button>
 </div>
-<textarea id='out_area' style='width:80%; height:200px'>
+
+<textarea id='out_area' style='width:800px; height:200px; margin-top:20px'>
 </textarea>
+<script>
+$('ul.dropdown-menu li a').click(function (e) {
+    var id = e.target.attributes['ftl'].value;
+    document.getElementById('demo_tab').innerHTML=id + '<span class="caret"></span>';
+    document.getElementById('ftl_lang_pane').className='tab-pane fade';
+    document.getElementById('ftl_src_pane').className='tab-pane fade in active';
+    document.getElementById('demo_tab_holder').className='active dropdown';
+    document.getElementById('lang_tab_holder').className = null;
+    editor2.setValue(document.getElementById('module:' + id).text);
+//    e.preventDefault();
+});
+</script>
 </body>
 </html>
