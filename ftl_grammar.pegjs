@@ -10,6 +10,9 @@
 Start
   = ___ ModuleDeclaration? ___ program:Declarations? ___ 
 
+ModuleDeclaration
+  = ModuleToken _ ModulePath NamespaceIdentifier 
+
 // all allowed declarations
 Declarations
   = first:Declaration rest:(__ Declaration)*
@@ -17,11 +20,24 @@ Declarations
 Declaration
   = ImportDeclaration / VariableDeclaration / FunctionDeclaration / Executable
 
-ModuleDeclaration
-  = ModuleToken _ (NamespaceIdentifier ".")* NamespaceIdentifier 
+ModulePath
+  = (NamespaceIdentifier ".")*
+
+ImportSingleItem
+  = ModulePath id:(Identifier / Operator) as:(_ "as" _ (Identifier / Operator))?
+
+ImportMultiItems
+  = ImportItem (_ "," _ ImportItem)*
+
+ImportList
+  = ModulePath NamespaceIdentifier _ "[" _ ImportMultiItems? _ "]"
+
+ImportItem
+  = ImportList
+  / ImportSingleItem
 
 ImportDeclaration
-  = ImportToken _ (NamespaceIdentifier ".")* (Identifier / Operator) (_ "as" _ Identifier / Operator)?
+  = ImportToken _ ImportMultiItems
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module.
 VariableDeclaration
@@ -121,7 +137,7 @@ Literal
   / StringLiteral
 
 ArrayLiteral
-  = "[" elms:(_ LiteralList)? "]"
+  = "[" elms:(_ LiteralList)? _ "]"
 
 LiteralList
   = first:PrimaryExpression rest:(_ "," _ PrimaryExpression)*

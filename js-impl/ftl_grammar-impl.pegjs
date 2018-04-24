@@ -11,52 +11,6 @@
 // ftl functions and classes.
 var ftl = (function() {
 
-  function importStatement(path, id, as) {
-  
-    function createParameters(size) {
-      var params = [];
-      for (var i = 0; i < size; i++)
-        params.push('_' + i);
-      return params;
-    }
-
-    console.log('inside importStatement')
-
-    if (path.length > 0) {
-      path = path.substr(0, path.length - 1);
-
-      if (modules.includes(path)) {
-      }
-
-      // javascript native module
-      else {
-
-        var module = eval(path);
-        if (!module) {
-          throw "No module " + id + " found!";
-        } else {
-          console.log('found module', path)
-        }
-
-        // all functions
-        if (id == '*') {
-          var names = Object.getOwnPropertyNames(module);
-          for (let name of names) {
-            var elm = module[name];
-            if (typeof(elm) == 'function') {
-              functions[name] = new NativeFunctionFn(name, createParameters(elm.length), elm);
-              console.log('created native function ' + name + ' for ' + module + '.' + name)
-            }
-          }
-        }
-
-        else {
-        
-        }
-      }
-    }
-  }
-
   function getValueString(value) {
     if (Array.isArray(value))
       return '[' + value.toString() + ']'
@@ -115,6 +69,7 @@ var ftl = (function() {
     constructor(name) {
       this._name = name;
       this._functions = {};
+      this._imports = {};
       this._executables = [];
     }
 
@@ -132,14 +87,89 @@ var ftl = (function() {
       }
     }
 
+    importStatement(path, items) {
+      items.forEach(item => {
+        if (item.type == 'single') {
+          var name = item.name;
+          var asName = item.asName;
+
+          // import * operator
+          if (name == '*') {
+            var mod = ftl.getModule(path);
+            if (mod == null)
+              throw new Error('Module ' + path + ' does not exist!');
+            var f = mod.getFn(name);
+            if (!f)
+              throw new Error('Operator * not found in ' + path + '!');
+            this.addImport(asName || name, f);
+            return;
+          }
+
+          name = path + '.' + name;
+          var dotIdx = name.lastIndexOf('.');
+          if (dotIdx < 0)
+            throw new Error(name + ' is not a module!');
+
+          var id = name.substring(dotIdx + 1);
+          var moduleName = name.substring(0, dotIdx);
+          var mod = ftl.getModule(moduleName);
+          if (mod == null)
+            throw new Error('Module ' + moduleName + ' does not exist!');
+
+          // import all
+          if (id == '*') {
+            if (asName != null)
+              throw new Error("Importing * (all) can not have alias name!");
+            var fns = mod.getAllFns();
+            fns.keys().forEach(key => {
+              this.addImport(key, fns[key]);
+            });
+          }
+          else {
+            this.addImport(asName || id, mod.getFn(id));
+          }
+        }
+        
+        // import list of items
+        else {
+          var subPath = item.path;
+
+          item.importList.forEach(sub => {
+            this.importStatement(subPath, Array.isArray(sub) ? sub : [sub]);
+          });
+        }
+      });
+    }
+
+    addImport(name, f) {
+      if (!f)
+        throw new Error('Can not import null for ' + name + '!')
+    
+      if (this._imports[name]) {
+        console.log("import " + name + " exists! Overriding.");
+      }
+
+      this._imports[name] = f;
+    }
+
     addFn(name, f) {
       if (this._functions[name] != null)
         throw { message: "'" + name + "' exists and can not be declared again!"}
       this._functions[name] = f;
     }
 
+    // Returns module defined identifier. 
     getFn(name) {
       return this._functions[name];
+    }
+
+    // Returns either module defined or imported identifier. 
+    getAvailableFn(name) {
+      var f = this._functions[name] || this._imports[name];
+    }
+
+    getAllFns() {
+      return this._functions;
     }
 
     addExecutable(exec) {
@@ -966,14 +996,12 @@ var ftl = (function() {
     ArrayElementSelectorFn: ArrayElementSelectorFn,
     SimpleTypeFn: SimpleTypeFn,
     getModule: getModule,
-    addModule: addModule,
-    importStatement: importStatement
+    addModule: addModule
   }
 })();
 
 // this is the module created during parsing
 var module = new ftl.Module('')
-ftl.addModule('', module);
 
 // The following functions are used for parsing
 
@@ -1017,10 +1045,13 @@ Start
   = ___ ModuleDeclaration? ___ program:Declarations? ___ { return program } 
 
 ModuleDeclaration
-  = ModuleToken _ module_name: ((NamespaceIdentifier ".")* NamespaceIdentifier { return text() }) {
+  = ModuleToken _ module_name: (ModulePath NamespaceIdentifier { return text() }) {
     console.log("module name: '" + module_name + "'");
     module.name = module_name;
   } 
+
+ModulePath
+  = (NamespaceIdentifier ".")* { return text() }
 
 // all allowed declarations
 Declarations
@@ -1032,7 +1063,42 @@ Declaration
   = ImportDeclaration / VariableDeclaration / FunctionDeclaration / Executable
 
 ImportDeclaration
-  = "import" _ path:((Identifier ".")* {return text()} ) id: ("*" / Identifier / Operator { return text()}) as:(_ "as" _ (Identifier / Operator {return text()}))? { ftl.importStatement(path, id, extractOptional(as, 3))}
+  = ImportToken _ importItems:ImportMultiItems {
+      console.log(importItems);
+      module.importStatement('', importItems)
+    }
+
+ImportSingleItem
+  = name: (ModulePath (Identifier / Operator (" " Operator)*) { return text() }) as:(_ "as" _ (Identifier / Operator))? {
+
+    // TODO: extract path
+
+    return {
+      type: "single",
+      name: name,
+      asName: extractOptional(as, 3)
+    };
+  }
+
+ImportMultiItems
+  = first:ImportItem rest:(_ "," _ ImportItem)* {
+    var ret = extractList(rest, 3);
+    ret.unshift(first);
+    return ret;
+  }
+
+ImportList
+  = path:(ModulePath NamespaceIdentifier { return text() }) _ "[" _ list:ImportMultiItems? _ "]" {
+    return {
+      type: "list",
+      path: path,
+      importList: list
+    }
+  }
+
+ImportItem
+  = ImportList
+  / ImportSingleItem
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module or outside the module.
 VariableDeclaration
@@ -1271,7 +1337,7 @@ Literal
   / StringLiteral
 
 ArrayLiteral
-  = "[" elms:(_ LiteralList)? "]" {
+  = "[" elms:(_ LiteralList)? _ "]" {
     var lst = extractOptional(elms, 1);
     return lst == null ? new ftl.ConstFn([]) : lst
   }

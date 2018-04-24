@@ -12,6 +12,8 @@
 <script src="ftl-js-core.js"></script>
 <script src="ftl-js-parser.js"></script>
 <script id='module:ftl.lang' type='application/ftl'>
+module ftl.lang
+
 //
 // basic arithmetic operators
 //
@@ -35,11 +37,11 @@ fn x > y { return x < y }
 fn x || y$() { return x || y() }
 fn x && y { return x && y }
 
-// fractorial
-fn x! -> x < 2 ? 1 : (((x - 1)!) * x)
-
 // ternary operator with if_true and otherwise marked as tail functions
 fn condition ? if_true$() : otherwise$() { return condition ? if_true() : otherwise() }
+
+// fractorial
+fn x! -> x < 2 ? 1 : (((x - 1)!) * x)
 
 //
 // tuple functions
@@ -84,38 +86,7 @@ fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
 
 </script>
 <script id='module:is_prime' type='application/ftl'>
-fn x % y {
-  return x % y
-}
-
-fn x > y {
-  return x > y
-}
-
-fn x < y {
-  return x < y
-}
-
-fn x == y {
-  return x == y
-}
-
-fn x || y() {
-  return x || y()
-}
-
-fn x + y {
-  return x + y
-}
-
-
-fn x - y {
-  return x - y
-}
-
-fn condition ? if_true$() : otherwise$() {
-  return condition ? if_true() : otherwise()
-}
+import ftl.lang[%, >, <, ==, ||, +, -]
 
 /**
  * Internal recursive function computing if a number n is prime number based on a divisor.
@@ -143,22 +114,7 @@ t -> (_0 -> sin, c -> sin)
 (3.13, 2.12) -> sin
 </script>
 <script id='module:filter' type='application/ftl'>
-
-fn a > b {
-  return a > b
-}
-
-fn a + b {
-  return a + b
-}
-
-fn condition ? if_true$() : otherwise$() {
-  return condition ? if_true() : otherwise()
-}
-
-fn x == y {
-  return x == y
-}
+import ftl.lang.*
 
 fn len(list) {
   return list.length;
@@ -190,8 +146,9 @@ fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
 var editor;
 var editor2;
 function init() {
+  var ftl_lang = document.getElementById('module:ftl.lang').text;
   var code_area = document.getElementById('ftl.lang');
-  code_area.value = document.getElementById('module:ftl.lang').text;
+  code_area.value = ftl_lang;
   editor = CodeMirror.fromTextArea(code_area, {
       lineNumbers: true,
       autoRefresh: true,
@@ -215,6 +172,10 @@ function init() {
       coverGutterNextToScrollbar:false,
       gutters: ['CodeMirror-lint-markers']
   });
+
+  var module = ftl.parser.parse(ftl_lang);
+  ftl.addModule(module.name, module);
+  console.log('ftl.lang loaded');
 }
 
 function initialize() {
@@ -226,6 +187,7 @@ function reqListener (e) {
   console.log(this.responseText);
 }
 
+// deprecated
 function load_module(module) {
   var module_path = 'module:' + module;
   var file_req = new XMLHttpRequest();

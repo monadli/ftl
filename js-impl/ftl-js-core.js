@@ -1,52 +1,6 @@
 // ftl functions and classes.
 var ftl = (function() {
 
-  function importStatement(path, id, as) {
-  
-    function createParameters(size) {
-      var params = [];
-      for (var i = 0; i < size; i++)
-        params.push('_' + i);
-      return params;
-    }
-
-    console.log('inside importStatement')
-
-    if (path.length > 0) {
-      path = path.substr(0, path.length - 1);
-
-      if (modules.includes(path)) {
-      }
-
-      // javascript native module
-      else {
-
-        var module = eval(path);
-        if (!module) {
-          throw "No module " + id + " found!";
-        } else {
-          console.log('found module', path)
-        }
-
-        // all functions
-        if (id == '*') {
-          var names = Object.getOwnPropertyNames(module);
-          for (let name of names) {
-            var elm = module[name];
-            if (typeof(elm) == 'function') {
-              functions[name] = new NativeFunctionFn(name, createParameters(elm.length), elm);
-              console.log('created native function ' + name + ' for ' + module + '.' + name)
-            }
-          }
-        }
-
-        else {
-        
-        }
-      }
-    }
-  }
-
   function getValueString(value) {
     if (Array.isArray(value))
       return '[' + value.toString() + ']'
@@ -105,6 +59,7 @@ var ftl = (function() {
     constructor(name) {
       this._name = name;
       this._functions = {};
+      this._imports = {};
       this._executables = [];
     }
 
@@ -118,8 +73,73 @@ var ftl = (function() {
       if (!this._name) {
         this._name = name
       } else {
-        throw new Error("module name already set as " + this._name);
+        throw new Error("The module name already set as " + this._name);
       }
+    }
+
+    importStatement(path, items) {
+      items.forEach(item => {
+        if (item.type == 'single') {
+          var name = item.name;
+          var asName = item.asName;
+
+          // import * operator
+          if (name == '*') {
+            var mod = ftl.getModule(path);
+            if (mod == null)
+              throw new Error('Module ' + path + ' does not exist!');
+            var f = mod.getFn(name);
+            if (!f)
+              throw new Error('Operator * not found in ' + path + '!');
+            this.addImport(asName || name, f);
+            return;
+          }
+
+          name = path + '.' + name;
+          var dotIdx = name.lastIndexOf('.');
+          if (dotIdx < 0)
+            throw new Error(name + ' is not a module!');
+
+          var id = name.substring(dotIdx + 1);
+          var moduleName = name.substring(0, dotIdx);
+          var mod = ftl.getModule(moduleName);
+          if (mod == null)
+            throw new Error('Module ' + moduleName + ' does not exist!');
+
+          // import all
+          if (id == '*') {
+            if (asName != null)
+              throw new Error("Importing * (all) can not have alias name!");
+            var fns = mod.getAllFns();
+            fns.keys().forEach(key => {
+              this.addImport(key, fns[key]);
+            });
+          }
+          else {
+            this.addImport(asName || id, mod.getFn(id));
+          }
+        }
+        
+        // import list of items
+        else {
+          var subPath = item.path;
+
+          item.importList.forEach(sub => {
+            this.importStatement(subPath, Array.isArray(sub) ? sub : [sub]);
+          });
+        }
+      });
+    }
+
+    addImport(name, f) {
+      if (!f)
+        throw new Error('Can not import null for ' + name + '!')
+    
+      if (this._imports[name]) {
+        console.log("import " + name + " exists! Overriding.");
+      }
+
+      this._imports[name] = f;
     }
 
     addFn(name, f) {
@@ -128,8 +148,18 @@ var ftl = (function() {
       this._functions[name] = f;
     }
 
+    // Returns module defined identifier. 
     getFn(name) {
       return this._functions[name];
+    }
+
+    // Returns either module defined or imported identifier. 
+    getAvailableFn(name) {
+      var f = this._functions[name] || this._imports[name];
+    }
+
+    getAllFns() {
+      return this._functions;
     }
 
     addExecutable(exec) {
@@ -771,7 +801,6 @@ var ftl = (function() {
 
       // ref_module will not be available during parsing
       e = ref_module && ref_module.getFn(this._name);
-
       if (e) {
         console.log("actual f ", e)
         console.log("tuple to " + this._name, input)
