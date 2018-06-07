@@ -4,6 +4,8 @@ var ftl = (function() {
   function getValueString(value) {
     if (Array.isArray(value))
       return '[' + value.toString() + ']'
+    else if (typeof value == 'string')
+      return "'" + value + "'";
     else
       return value.toString()
   }
@@ -95,7 +97,9 @@ var ftl = (function() {
             return;
           }
 
-          name = path + '.' + name;
+          if (path)
+            name = path + '.' + name;
+
           var dotIdx = name.lastIndexOf('.');
           if (dotIdx < 0)
             throw new Error(name + ' is not a module!');
@@ -111,7 +115,7 @@ var ftl = (function() {
             if (asName != null)
               throw new Error("Importing * (all) can not have alias name!");
             var fns = mod.getAllFns();
-            fns.keys().forEach(key => {
+            Object.keys(fns).forEach(key => {
               this.addImport(key, fns[key]);
             });
           }
@@ -142,9 +146,14 @@ var ftl = (function() {
       this._imports[name] = f;
     }
 
+    // TODO: no need for name
     addFn(name, f) {
       if (this._functions[name] != null)
         throw { message: "'" + name + "' exists and can not be declared again!"}
+
+      if (f instanceof FunctionFn)
+        this.resolveRecursiveRef(f, f.wrapped);
+
       this._functions[name] = f;
     }
 
@@ -155,7 +164,7 @@ var ftl = (function() {
 
     // Returns either module defined or imported identifier. 
     getAvailableFn(name) {
-      var f = this._functions[name] || this._imports[name];
+      return this._functions[name] || this._imports[name];
     }
 
     getAllFns() {
@@ -163,10 +172,27 @@ var ftl = (function() {
     }
 
     addExecutable(exec) {
+      if (exec instanceof RefFn && exec.isValueType())
+        exec.possibleRef = this.getAvailableFn(exec.name);
+
       this._executables.push(exec);
     }
 
     get executables() { return this._executables }
+
+    resolveRecursiveRef(f, expr) {
+      if (expr instanceof RefFn || expr instanceof ArrayElementSelectorFn) {
+        if (expr.name == f.name)
+          expr.possibleRef = f;
+      }
+
+      else if (expr instanceof CompositionFn || expr instanceof TupleFn)
+        expr.elements.forEach(elm => this.resolveRecursiveRef(f, elm));
+
+      else if (expr instanceof WrapperFn) {
+        this.resolveRecursiveRef(f, expr.wrapped);
+      }
+    }
   }
 
   class Tuple {
@@ -177,6 +203,12 @@ var ftl = (function() {
       this._size = 0;
     }
 
+    static fromKeyValue(key, value) {
+      var t = new Tuple();
+      t.addKeyValue(key, value)
+      return t;
+    }
+    
     static fromValue(value) {
       var t = new Tuple();
       t.addValue(value)
@@ -201,6 +233,11 @@ var ftl = (function() {
     addValue(value) {
 //      this._list.push(value)
       this._map.set("_" + this._size++, value);
+    }
+
+    // add key for index
+    setKey(index, key) {
+      this._map.set(key, this._map.get("_" + index));
     }
 
     addKeyValue(key, value) {
@@ -247,6 +284,8 @@ var ftl = (function() {
       return false
     }
 
+    // checks if any element is a reference
+    // it does not go into nested elements
     hasRef() {
       for (var i = 0; i < this._size; i++)
         if (this.get('_' + i) instanceof RefFn)
@@ -345,6 +384,10 @@ var ftl = (function() {
 
     apply(input) {
       return this._val;
+    }
+
+    toString() {
+      return getValueString(this._val);
     }
   }
 
@@ -516,6 +559,10 @@ var ftl = (function() {
       console.log("output of native function: ", res)
       return res
     }
+
+    toString() {
+      return this._name; 
+    }
   }
 
   /**
@@ -586,13 +633,16 @@ var ftl = (function() {
     }
 
     static createTupleFn(elms) {
-      return elms == null ? null : (elms.length == 1 && elms[0] instanceof Fn) ? elms[0] : new TupleFn(elms);
+      return (elms && elms.length == 1 && elms[0] instanceof Fn) ? elms[0] : new TupleFn(elms);
     }
 
     // deprecated
     get list() { return this.tp }
 
+    // TODO: deprecated
     get tuple() { return this.tp }
+
+    get elements() { return this.tp }
 
     apply(input, context) {
       var tuple = new Tuple()
@@ -610,12 +660,32 @@ var ftl = (function() {
 
         else {
           var tp = typeof(tpl);
-          if (tp == 'number' || tp == 'string' || tp == 'boolean')
-            var res = tpl 
+          if (tp == 'number' || tp == 'string' || tp == 'boolean' || Array.isArray(tpl))
+            var res = tpl
           else
             var res = tpl.apply(input, context);
           console.log('res:', res)
-          tuple.addValue(res);
+
+          // TODO should apply to one element tuple only
+          if (res instanceof Tuple) {
+            var keys = res.getNamedKeys();
+            keys.forEach(key => {
+              var val = res.get(key);
+              if (tuple.get(key) == undefined)
+                tuple.addKeyValue(key, val);
+              else
+                tuple.addValue(val);
+            });
+          }
+          else
+            tuple.addValue(res);
+        }
+      }
+
+      for (var i = 0; i < this.tp.length; i++) {
+        var tpl = this.tp[i];
+        if (tpl instanceof RefFn && tuple.get(tpl.name) == undefined) {
+          tuple.setKey(i, tpl.name);
         }
       }
       return tuple
@@ -650,6 +720,7 @@ var ftl = (function() {
     constructor(list) {
       super()
       this.funs = list;
+      this.modifyElements(list);
       this._type = "CompositionFn"
     }
 
@@ -675,17 +746,29 @@ var ftl = (function() {
      * Appends elements.
      */
     appendElements(elms) {
-      this.funs = this.funs.concat(Array.isArray(elms) ? elms : [elms]);
+      var toBeAppended = Array.isArray(elms) ? elms : [elms];
+      this.modifyElements(toBeAppended);
+      this.funs = this.funs.concat(toBeAppended);
     }
 
     /**
      * Prepends elements.
      */
     prependElements(elms) {
-      this.funs = (Array.isArray(elms) ? elms : [elms]).concat(this.funs);
+      var toBePrepended = Array.isArray(elms) ? elms : [elms];
+      this.modifyElements(toBePrepended);
+      this.funs = toBePrepended.concat(this.funs);
     }
 
     get elements() { return this.funs }
+
+    modifyElements(list) {
+      list.forEach(elm => {
+        if (elm instanceof RefFn) {
+          elm.tupleSeq = '_0';
+        }
+      });
+    }
 
     apply(tuple, context) {
       console.log("composition input:", tuple);
@@ -714,6 +797,10 @@ var ftl = (function() {
 
       return res;
     }
+
+    toString() {
+      return 'lambda expression'
+    }
   }
 
   /**
@@ -731,6 +818,7 @@ var ftl = (function() {
       } else {
         this._name = name;
       }
+      this.setAsValueType();
     }
 
     get name() {
@@ -743,6 +831,15 @@ var ftl = (function() {
 
     setAsRefType() {
       this._refType = 'ref'
+    }
+
+    set possibleRef(ref) {
+      this._possibleRef = ref;
+    }
+
+    // tuple seq is '_' + tuple sequence
+    set tupleSeq(seq) {
+      this._tupleSeq = seq;
     }
 
     isTail() {
@@ -770,6 +867,37 @@ var ftl = (function() {
       if (input && input instanceof Tuple)
         e = input.get(this._name);
 
+      if (e == undefined) {
+        // must be a function
+        e = this._possibleRef;
+
+        if (e) {
+          console.log("actual f ", e)
+          console.log("tuple to " + this._name, input)
+
+          var res = e.apply((this._params == null ? input : this._params.apply(input)), context);
+          console.log("result of RefFn: ", res)
+          return res;
+        }
+      }
+
+      // use to indicate if return value with ref name.
+      // This is a temporary solution. The composition chain should be examined before execution
+      // to determine whether the tuple preceding the tuple that contains this RefFn has the referenced name or not.
+      // If not, wrap this RefFn with ExprFn with the name in this RefFn (See ParameterList and Parameter in grammar).
+      var wrapWithKey = false;
+      if (e == undefined && this._params == undefined && this._tupleSeq && input) {
+        
+        if (input instanceof Tuple) {
+          e = input.get(this._tupleSeq);
+          wrapWithKey = true;
+        }
+        else if (this._tupleSeq == '_0') {
+          e = input;
+          wrapWithKey = true;
+        }
+      }
+
       if (e !== undefined) {
         if (this._params != null) {
           if (typeof(e) == 'function') {
@@ -788,28 +916,17 @@ var ftl = (function() {
           // e not a function but an Fn
           else {
             var tpl = this._params.apply(input);
-            if (!(tpl instanceof Tuple))
+            if (this._params instanceof RefFn)
+              tpl = Tuple.fromKeyValue(this._params.name, tpl);
+            else if (!(tpl instanceof Tuple))
               tpl = Tuple.fromValue(tpl);
             return e.apply(tpl);
           }
         }
-        return e;
+        return wrapWithKey? Tuple.fromKeyValue(this._name, e) : e;
       }
 
-      // must be a function
-      var ref_module = ftl.getModule(this._module_name);
-
-      // ref_module will not be available during parsing
-      e = ref_module && ref_module.getFn(this._name);
-      if (e) {
-        console.log("actual f ", e)
-        console.log("tuple to " + this._name, input)
-
-        var res = e.apply((this._params == null ? input : this._params.apply(input)), context);
-        console.log("result of RefFn: ", res)
-        return res;
-      }
-      else if (this._name == '_0' && input && !(input instanceof Tuple))
+      if (this._name == '_0' && input && !(input instanceof Tuple))
         return input;
 
       // can not find ref, return itself
@@ -900,19 +1017,29 @@ var ftl = (function() {
       return this._name;
     }
 
+    set possibleRef(ref) {
+      this._possibleRef = ref;
+    }
+
     apply(input) {
       var list;
       if (input && input instanceof Tuple)
         list = input.get(this._name);
 
       if (!list)
-        list = modules.get(this._module_name).getFn(this._name);
+        list = this._possibleRef;
 
       if (list instanceof VarFn)
         list = list._val;
 
-      var i = typeof(this._index) == 'number' ? this._index : input.get(this._index)
-      return list[i];
+      if (list) {
+        var i = typeof(this._index) == 'number' ? this._index : input.get(this._index)
+        return list[i];
+      }
+
+      // no reference found
+      else
+        return this;
     }
   }
 
@@ -986,7 +1113,6 @@ var ftl = (function() {
     ArrayElementSelectorFn: ArrayElementSelectorFn,
     SimpleTypeFn: SimpleTypeFn,
     getModule: getModule,
-    addModule: addModule,
-    importStatement: importStatement
+    addModule: addModule
   }
 })();

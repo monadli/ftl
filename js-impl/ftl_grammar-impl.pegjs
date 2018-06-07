@@ -13,9 +13,11 @@ var ftl = (function() {
 
   function getValueString(value) {
     if (Array.isArray(value))
-      return '[' + value.toString() + ']'
+      return '[' + value.toString() + ']';
+    else if (typeof value == 'string')
+      return "'" + value + "'";
     else
-      return value.toString()
+      return value.toString();
   }
 
   function pass_through() {
@@ -105,7 +107,9 @@ var ftl = (function() {
             return;
           }
 
-          name = path + '.' + name;
+          if (path)
+            name = path + '.' + name;
+
           var dotIdx = name.lastIndexOf('.');
           if (dotIdx < 0)
             throw new Error(name + ' is not a module!');
@@ -121,7 +125,7 @@ var ftl = (function() {
             if (asName != null)
               throw new Error("Importing * (all) can not have alias name!");
             var fns = mod.getAllFns();
-            fns.keys().forEach(key => {
+            Object.keys(fns).forEach(key => {
               this.addImport(key, fns[key]);
             });
           }
@@ -165,7 +169,7 @@ var ftl = (function() {
 
     // Returns either module defined or imported identifier. 
     getAvailableFn(name) {
-      var f = this._functions[name] || this._imports[name];
+      return this._functions[name] || this._imports[name];
     }
 
     getAllFns() {
@@ -173,6 +177,9 @@ var ftl = (function() {
     }
 
     addExecutable(exec) {
+      if (exec instanceof RefFn && exec.isValueType())
+        exec.possibleRef = this.getAvailableFn(exec.name);
+
       this._executables.push(exec);
     }
 
@@ -741,6 +748,7 @@ var ftl = (function() {
       } else {
         this._name = name;
       }
+      this.setAsValueType();
     }
 
     get name() {
@@ -753,6 +761,15 @@ var ftl = (function() {
 
     setAsRefType() {
       this._refType = 'ref'
+    }
+
+    set possibleRef(ref) {
+      this._possibleRef = ref;
+    }
+
+    // tuple seq is '_' + tuple sequence
+    set tupleSeq(seq) {
+      this._tupleSeq = seq;
     }
 
     isTail() {
@@ -780,6 +797,24 @@ var ftl = (function() {
       if (input && input instanceof Tuple)
         e = input.get(this._name);
 
+      if (e == undefined) {
+        // must be a function
+        e = this._possibleRef;
+
+        if (e) {
+          console.log("actual f ", e)
+          console.log("tuple to " + this._name, input)
+
+          var res = e.apply((this._params == null ? input : this._params.apply(input)), context);
+          console.log("result of RefFn: ", res)
+          return res;
+        }
+      }
+
+      if (e == undefined && this._tupleSeq && input && input instanceof Tuple) {
+        e = input.get(this._tupleSeq);
+      }
+
       if (e !== undefined) {
         if (this._params != null) {
           if (typeof(e) == 'function') {
@@ -806,20 +841,7 @@ var ftl = (function() {
         return e;
       }
 
-      // must be a function
-      var ref_module = ftl.getModule(this._module_name);
-
-      // ref_module will not be available during parsing
-      e = ref_module && ref_module.getFn(this._name);
-      if (e) {
-        console.log("actual f ", e)
-        console.log("tuple to " + this._name, input)
-
-        var res = e.apply((this._params == null ? input : this._params.apply(input)), context);
-        console.log("result of RefFn: ", res)
-        return res;
-      }
-      else if (this._name == '_0' && input && !(input instanceof Tuple))
+      if (this._name == '_0' && input && !(input instanceof Tuple))
         return input;
 
       // can not find ref, return itself
@@ -910,13 +932,17 @@ var ftl = (function() {
       return this._name;
     }
 
+    set possibleRef(ref) {
+      this._possibleRef = ref;
+    }
+
     apply(input) {
       var list;
       if (input && input instanceof Tuple)
         list = input.get(this._name);
 
       if (!list)
-        list = modules.get(this._module_name).getFn(this._name);
+        list = this._possibleRef;
 
       if (list instanceof VarFn)
         list = list._val;
@@ -1065,7 +1091,7 @@ Declaration
 ImportDeclaration
   = ImportToken _ importItems:ImportMultiItems {
       console.log(importItems);
-      module.importStatement('', importItems)
+      module.importStatement(null, importItems)
     }
 
 ImportSingleItem
@@ -1104,7 +1130,7 @@ ImportItem
 VariableDeclaration
   = modifier:(ConstToken / VarToken) _ id:Identifier _ "=" _ expr:PrimaryExpression {
     var ret = modifier =='const' ? new ftl.ImmutableValFn(id.name, expr) : new ftl.VarFn(id.name, expr)
-    module.addFn(name, ret); 
+    module.addFn(id.name, ret); 
     return ret
   }
 
@@ -1115,7 +1141,7 @@ FunctionDeclaration
 
     // FunctionDeclaration
 
-    console.log('function id: ', id.name)
+    console.log('function id: ', id.name || id)
     console.log('expr: ', body)
 
     var is_operator = id.type == 'OperatorDeclaration' || id.type == 'PostfixOperatorDeclaration';
@@ -1125,7 +1151,8 @@ FunctionDeclaration
 
     var param_list = is_operator ? id.operands : optionalList(params);
     console.log('parameter list: ', param_list)
-    var name = id.name
+    var name = id.name || id
+
     var ret = body.script ? new ftl.NativeFunctionFn(name, param_list, body.script) :
         new ftl.FunctionFn(name, param_list, body);
     module.addFn(name, ret);
@@ -1139,7 +1166,14 @@ ParameterList
   = first:Parameter rest:(_ "," _ Parameter)* {
     console.log("first", first);console.log("rest", rest);
     console.log("param list:", buildList(first, rest, 3));
-    return buildList(first, rest, 3) }
+    var list = buildList(first, rest, 3);
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] instanceof ftl.RefFn) {
+        list[i].tupleSeq = '_' + i;
+      }
+    }
+    return list;
+   }
 
 Parameter
   = id:(Identifier _ ":")? _ expr:Expression {
@@ -1257,9 +1291,7 @@ UnaryOperatorExpression
   = op:Operator _ expr:PrimaryExpression {
       console.log('op', op)
       console.log('expr', expr)
-      if (op == '-' && expr instanceof ConstFn)
-        return new ftl.ConstFn(-1 * expr.value);
-      return CompositionFn.createCompositionFn(expr, module.getFn(op.name));
+      return ftl.CompositionFn.createCompositionFn(expr, module.getAvailableFn(op.name || op));
     }
 
 // postfix operator
@@ -1267,9 +1299,7 @@ PostfixOperatorExpression
   = expr:PrimaryExpression _ op:Operator {
       console.log('PostfixOperatorExpression: op', op)
       console.log('PostfixOperatorExpression: expr', expr)
-      if (op == '-' && expr instanceof ConstFn)
-        return new ftl.ConstFn(-1 * expr.value);
-      var op_fn = module.getFn(op);
+      var op_fn = module.getAvailableFn(op);
       if (!op_fn)
         op_fn = new ftl.RefFn(module, op);
       return ftl.CompositionFn.createCompositionFn(expr, op_fn);
@@ -1283,7 +1313,7 @@ N_aryOperatorExpression
       var stop_index = 0;
       var parse_operators = function(ops, operands, index, full) {
         var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-        var f = module.getFn(op);
+        var f = module.getAvailableFn(op);
 
         // no corresponding function found for single op
         if (!f) {
@@ -1360,7 +1390,7 @@ CallExpression
 
     // CallExpression
 
-    var f = module.getFn(id.name);
+    var f = module.getAvailableFn(id.name);
     if (f) {
       var f_params = f.params;
       if (!Array.isArray(f_params)) {
@@ -1402,7 +1432,11 @@ SourceCharacter
   = .
 
 Identifier
-  = !(ReservedWord WhiteSpace) name:IdentifierName {return new ftl.RefFn(module, name)}
+  = !ReservedWord name:IdentifierName {
+    var ret = new ftl.RefFn(module, name);
+    ret.possibleRef = module.getAvailableFn(name);
+    return ret;
+  }
 
 IdentifierName "identifier"
   = first:IdentifierStart rest:IdentifierPart* {return first + rest.join("")}
@@ -1421,14 +1455,14 @@ NamespaceIdentifier
   = LowerLetter (LowerLetter / "_")* { return text() }
 
 // Tokens
-FalseToken      = "false"
-FunctionToken   = "fn"
-NullToken       = "null"
-TrueToken       = "true" !IdentifierStart
-ModuleToken     = "module" !IdentifierStart
-ImportToken     = "import" !IdentifierStart
-VarToken        = "var" !IdentifierStart
-ConstToken      = "const"
+FalseToken      = "false" !IdentifierPart
+FunctionToken   = "fn" !IdentifierPart
+NullToken       = "null" !IdentifierPart
+TrueToken       = "true" !IdentifierPart
+ModuleToken     = "module" !IdentifierPart
+ImportToken     = "import" !IdentifierPart
+VarToken        = "var" !IdentifierPart
+ConstToken      = "const" !IdentifierPart
 
 AsciiLetter
   = UpperLetter
@@ -1447,14 +1481,13 @@ OperatorSymbol
   = [!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
 
 ReservedWord
-  = Keyword
-  / NullLiteral
-  / BooleanLiteral
-
-Keyword
   = VarToken
   / ConstToken
   / FunctionToken
+  / ModuleToken
+  / ImportToken
+  / NullToken
+  / BooleanLiteral
 
 NullLiteral
   = NullToken

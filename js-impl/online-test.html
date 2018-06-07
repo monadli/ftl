@@ -11,15 +11,14 @@
 <!--script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.34.0/mode/textile/textile.js"></script-->
 <script src="ftl-js-core.js"></script>
 <script src="ftl-js-parser.js"></script>
-<script id='module:ftl.lang' type='application/ftl'>
-module ftl.lang
+<script id='module:ftl.lang' type='application/ftl'>module ftl.lang
 
 //
 // basic arithmetic operators
 //
 
 // unary -
-fn -(val) { return -val }
+fn ---(val) { return -val }
 
 fn x + y { return x + y }
 fn x - y { return x - y }
@@ -33,9 +32,13 @@ fn x % y { return x % y }
 fn x == y { return x == y }
 fn x != y { return x != y }
 fn x < y { return x < y }
-fn x > y { return x < y }
+fn x > y { return x > y }
 fn x || y$() { return x || y() }
 fn x && y { return x && y }
+
+// basic math functions
+fn sin(x) { return Math.sin(x) }
+fn cos(x) { return Math.cos(x) }
 
 // ternary operator with if_true and otherwise marked as tail functions
 fn condition ? if_true$() : otherwise$() { return condition ? if_true() : otherwise() }
@@ -85,8 +88,312 @@ fn _filter(list, filtered, index, predicate) ->
 fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
 
 </script>
+
+<script id='module:basic' type='application/ftl'>import ftl.lang.*
+
+// 1. Comments
+// 1.1 Inline comments start with '//'. Anything after the double slashes are treated as comments.
+
+/** 1.2 Block comments starts with /* and ends with */
+
+// 2. Line and line continuation
+// 2.1 Any statement starts from column 1.
+// 2.2 If a statement is too long, extend into the next line preceding with any number of spaces to make it as a line continuation
+// (There is one exception for native javascript implementation for function)
+ 
+// 3. Basic data types
+
+// 2.1 String. A string can be wrapped with single quote or double quote.
+"Hello, world!"
+'Hello, ftl!'
+
+// 3.2 Number
+3.14159
+
+// 3.3 Boolean. Literal true and false.
+true
+false
+
+// 4. Array. Arrays in ftl are 0 based.
+// 4.1 Empty array
+[]
+
+// 4.2 Array with elements of any type.
+[1, 2, 3.14159, 'hello']
+
+// 5. Operators
+
+// 5.1 FTL has only one pre-defined operator "->".
+
+// 5.2 FTL has a pre-defined character set, from which one can define any operators by one or more characters:
+//     [!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
+
+// 5.3 Some basic arithmetic and logic operators are defined in ftl.lang module. They can be redefined by application though.
+
+// 5.4 Any defined operators do not have precedence. Add brackets for precedence.
+
+// 5.5 Example: expression with arithmetic operators defined in ftl.lang module.
+1 + 2 + (3 * 4)
+
+// 5.6 Example: boolean expression with boolean operators defined in ftl.lang module.
+(1 > 2) || (2 > 1)
+
+// 5.7 String concatenation with + operator.
+"a" + "b" + "c"
+
+// 6. Function definition
+
+// 6.1 A function definition starts with the keyword "fn" followed by function name and parameter list.
+
+// 6.2 A function can be defined with native javascript implementation wrapped by curly brackets:
+fn square_area(x, y) {
+  return x * y;
+}
+
+// 6.3 For javascript native implementation, the starging "{" should be on the same line with function declaration.
+//     The rest lines can start from column 1 without following rules of continuation lines.
+
+// 6.4 A function can also be defined with lambda expression:
+fn lambda_square_area(x, y) -> x * y
+
+// 6.5 Calling a function by passing argument on the right hand side:
+square_area(2, 3)
+
+// 6.6 Calling a function by passing argument on the left hand side:
+(2, 3) -> square_area
+
+// 5. Statements
+
+// There are a few types of statements: 
+
+// 5.1 import statement (as the first line in this module)
+// 2. executable statement (as the simple expressions above)
+// 3. function definition statement starts with "fn"
+</script>
+
+<script id='module:tuple' type='application/ftl'>import ftl.lang.*
+
+// The tuple is the most basic and important data structure in ftl.
+
+// 1. Empty tuple - tuple without elements
+//    Empty tuple is not that useful though.
+()
+
+// 2. Tuple with simple elements
+(1, 2)
+
+// 3. Tuple with one element, which is equivalent to the enclosed element itself:
+(1) == 1
+
+// 4. Optionally, elements can have names.
+(2.34, b:4.3, c:"test", d:4, e:true, f:[1, 3], g:[])
+</script>
+<script id='module:lambda' type='application/ftl'>import ftl.lang.*
+
+// 1. A lambda expression, or lambda. It is composed of an binary operator "->" that takes two tuples.
+//    Here is an example with (x, y) as the anterior tuple, and x + y as the posterior tuple, which is equivalent to a tuple with single element (x + y). 
+(x, y) -> x + y
+
+// 2. A tuple element can be a constant, a tuple selector, a lambda, or a function.
+//    The following is an expression with tuple sequence element selector (sequence selector for short), where _0 selects 0th element and _1 selects 1st element from the anterior tuple.
+//    The sequence selector _0 implies that the tuple is 0-based. 
+//    In essence, _0, _1, ..., are simple functions that takes a tuple and selects an element of specific sequence.
+(1, 2) -> _0 + _1
+
+// 3. Expression with named tuple element selector (name selector for short), where x selects element x and y selects element y from the anterior tuple.
+//    It implies that name selectors are also functions.
+(x:2, y:3) -> x + y
+
+// 4. A named selector is also a sequence selector by default, provided the named element does not exist from input tuple.
+(1, 2) -> (x, y)
+
+// 4.1 The above is equivalent to:
+(1, 2) -> (_0, _1)
+
+// 4.2 Further more, when the name selector fails finding the named element and choose the corresponding sequenced element, it adds the name to the element.
+//     Thus the above expression is equivalent to:
+(1, 2) -> (x:_0, y:_1)
+   
+// 4. Simple swap with tuple element selectors.
+(x:1, y:2) -> (y, x)
+
+// value passing to a function with operator "->", which is equivalent to calling as sin(3.14159):
+(3.14159 -> sin) == sin(3.14159)
+
+// A function can take a tuple containing extra elements, and the function takes only needed elements:
+((3.14159, 'test') -> sin) == sin(3.14159)
+
+// Two consecutive lambdas. The tuple input (1, 2) is passed to the lambda (x, y) -> x + y from left side with the same lambda operator ->.
+(1, 2) -> (x, y) -> x + y
+
+// This is equivalent to the following:
+(1, 2) -> (x:_0, y:_1) -> x + y
+
+// When passing input to the lambda from the left side, they can be viewed as two lambdas:
+//
+// 1. (1, 2) -> (x:x, y:y)
+// 2. (x:x, y:y) -> x + y
+//
+// The first tuple (1, 2) -> (x:x, y:y) produces a tuple (x:1, y:2), making the second tuple equivalent to
+//
+// (x:1, y:2) -> x + y
+//
+// which produces end result 1 + 2
+// The first one is which takes the  -> (x, y) Passing a tuple to the lambda, where x will take 1 and y will take 2, and then the newly formed tuple passes to the expression.
+// This also implies that the operator -> is left associative.
+
+// A constant is a special function, though it can not be expressed as 3(3.14159, 6.28318)
+(3.14159, 6.28318) -> 3 == 3
+
+// Define the lambda into a function, or define a function with lambda.
+fn f(x, y) -> x + y
+
+// Then apply a tuple to the lambda
+(1, 2) -> f
+
+// Swap x and y with lambda expression (x, y) -> (y, x) 
+(1, 2) -> (x, y) -> (y, x)
+</script>
+
+<script id='module:filter-map-reduce' type='application/ftl'>import ftl.lang.*
+
+// 1. Here is a simple mapping operator => defined with native javascript.
+// It overrides the same operator => defined in ftl.lang.
+// It takes two operands, one a list, the other a function named mapper with one argument "item".
+// Inside the mapping operator, each item is applied as "item" to the mapper function.
+// The map operator => below is implemented with javascript wrapped in {...}
+fn list => mapper(item) {
+  var ret = []
+  for (var i = 0; i < list.length; i++)
+    ret.push(mapper(list[i]))
+  return ret
+}
+
+// Applying the mapping operator to a list with a lambda that adds 2 to the each "item".
+// Since in ftl, a lambda can be without formal argument list, the original argument "item" needs to be used.
+[1, 2, 3] => (item + 2)
+
+// 2. Reduce operator |> takes a list and a reducer function with "i1" and "i2" passing to it to perform reduce.
+fn list |> reducer(i1, i2) {
+  var ret = list[0];
+  for (var i = 1; i < list.length; i++)
+    ret = reducer(ret, list[i]);
+  return ret
+}
+
+// Applying reduce
+[1, 2, 3] |> (i1 + i2)
+
+// 3. Filter operator |=> takes a list and a predicate and produce a new list with filtered items:
+fn list |=> predicate(i) {
+  var ret = [];
+  for (var i = 0; i < list.length; i++) {
+    var itm = list[i];
+    if (predicate(itm))
+      ret.push(itm);
+  }
+  return ret;
+}
+
+// Applying filter
+[-1, 2, 3, 0, -4, 5] |=> (i > 0)
+
+// Applying filter, map, and reduce
+[-1, 2, 3, 0, -4, 5] |=> (i > 0) => (item + 2) |> (i1 + i2)
+</script>
+
+<script id='module:n-ary-operator' type='application/ftl'>import ftl.lang[+, -]
+// ftl allows definition of ternary or quadruple or operators with higher number of operands.
+
+// Ternary operator
+fn a - b + c {
+  return a - b + c
+}
+
+// Quadruple operator
+fn a - b + c - d {
+  return a - b + c - d
+}
+
+// Applying operators.
+// The rule is that it will try to find the operator with maximum number of operands first from left to right.
+// The following will find (1 - 2 + 4 -9) instead of (1 - 2 + 4) as the first group of operator expression
+// matching the operator definition a - b + c - d because it has more operands than a - b + c.   
+// The following is equivalent to ((1 - 2 + 4 - 9) + 4) - 5 + 7)
+1 - 2 + 4 - 9 + 4 - 5 + 7
+
+// The following is equivalent to ((1 - 2 + 4 - 9) - 4) - 5 + 7)
+1 - 2 + 4 - 9 - 4 - 5 + 7
+
+// The following is equivalent to (1 - 2 + 4 - 9) - (4 - 5 + 7) since brackets are used for precedence.
+1 - 2 + 4 - 9 - (4 - 5 + 7)
+
+// The following is equivalent to ((1 - 2 + 4 - 9) - 4 + 5 - 7) which takes the first 4 operands to operator a - b + c - d,
+// and then take the result with left 3 operands to the same operator a - b + c - d again.
+1 - 2 + 4 - 9 - 4 + 5 - 7
+</script>
+<script id='module:tail-call-optimization' type='application/ftl'>import ftl.lang.*
+
+// The ternary operator ? : defined in ftl.lang is not intrinsic to ftl, but plays an important role as a basic expression.
+//
+// It takes a predicate that yields a boolean value to decide which of the two branches,
+//  which are two functions, should be invoked:
+//
+//     predicate ? if_true() : otherwise()
+// It is assumed that the outputs of if_true() and otherwise() should have the same type.
+
+// Invocation of the ternary operator
+// if 4 > 0 return 5 * 2 = 10 otherwise return 3 * 3 = 9
+(1, 3, 4, 5) -> _2 > 0 ? (_3 * 2) : (_1 * 3)
+
+// Please note that both if_true() and otherwise() are tail calls, which does not need to be invoked in place,
+// but rather returned to the caller stack to perform. This will reduce the size of calling stacks.
+
+// We allow use of "$" at the end of the function name to indicate tail-call. Thus ftl runtime will do tail call optimization without need of
+// writing code in ftl to achive tail-call optimization.
+
+// Another example is the second operand of operator ||, which is a tail-call.
+</script>
+
+<script id='module:partial-function' type='application/ftl'>import ftl.lang.*
+
+// The following is a function taking two arguments, the string and substring,
+// and returns true if the string contains the substring, false otherwise.
+fn contains(str, sub) {
+  return str.includes(sub);
+}
+
+// A partial function can be created by providing known values of the partial arguments as:
+//   contains('test')
+// It is assumed that the partial arguments fills towards the end part of the whole arguments.
+// Thus the 'test' above is for argument sub, not str.
+// When calling this partial function, only the first one argument needs to be provided. 
+'this is a test' -> contains('test')
+</script>
+
+<script id='module:curry' type='application/ftl'>import ftl.lang.*
+
+// Partial Expression
+// When an expression involves in multiple identities and some are not there, the expression becomes partial expression.
+// Example:
+x -> x * y * z
+
+// In lambda examples, we have
+(x, y, z) -> x * y * z
+
+// And application of (1, 2, 3) to it is:
+(1, 2, 3) -> (x, y, z) -> x * y * z
+
+(1, 2) -> (x:x -> x * y, y) -> x(y)
+
+// We can rewrite it as
+///(1, 2, 3) -> (x:x -> x * y * z, y, z) -> (x:x(y), z) -> x(z)
+///(1, 2, 3) -> (x -> x * y * z, y, z) -> (x(y), z) -> x(z)
+(5, 2, 3) -> (X:x -> x * y * z, y, z) -> (XX:X(y), z) -> XX(z)
+</script>
+
 <script id='module:is_prime' type='application/ftl'>
-import ftl.lang[%, >, <, ==, ||, +, -]
+import ftl.lang[%, >, <, ==, ||, +, -, ? :]
 
 /**
  * Internal recursive function computing if a number n is prime number based on a divisor.
@@ -100,18 +407,6 @@ fn is_prime(n) -> (n < 2) ? false : ((n == 2) ? true : _is_prime(n))
 
 // apply is_prime to 31 to test if 31 is a prime number
 is_prime(31)
-</script>
-<script id='module:call_function' type='application/ftl'>
-// any function can take a tuple resulted from previous functional tuple and takes only consecutive parameters it needs
-var t = (2.34, b:4.3, c:"test", d:4, e:true, f:[1, 3], g:[])
-
-fn sin(x) { return Math.sin(x) }
-
-// a functional tuple can contain element selector from result of previous functional tuple
-// for variable t, its member is queryable in next ft 
-t -> (_0 -> sin, c -> sin)
-
-(3.13, 2.12) -> sin
 </script>
 <script id='module:filter' type='application/ftl'>
 import ftl.lang.*
@@ -198,59 +493,69 @@ function load_module(module) {
 
 function run() {
   initialize();
-  var module = ftl.parser.parse(editor2.getValue());
-
-  /// add module into modules
-  ftl.addModule(module.name, module);
 
   var out_area = document.getElementById('out_area');
   out_area.value = '';
-  module.executables.forEach(function(exec) {
-    var res = exec.apply()
-    if (typeof(res) != 'undefined' && res instanceof ftl.TailFn) {
-      res = res.apply();
-    }
-    if (typeof(res) != 'undefined') {
-      if (res instanceof ftl.RefFn) {
-        out_area.value += 'reference ' + res.name + ' undefined\r\n';
-      } else
-        out_area.value += res + '\r\n';
-    }
-  });
+
+  try {
+    var module = ftl.parser.parse(editor2.getValue());
+
+    module.executables.forEach(function(exec) {
+      out_area.value += (exec instanceof ftl.TupleFn ? 'tuple' : exec.toString()) + ' => '
+      var res = exec.apply()
+      if (typeof(res) != 'undefined' && res instanceof ftl.TailFn) {
+        res = res.apply();
+      }
+      if (typeof(res) != 'undefined') {
+        if (res instanceof ftl.RefFn) {
+          out_area.value += 'reference ' + res.name + ' undefined\r\n';
+        } else if (Array.isArray(res) || typeof res == 'string') {
+          out_area.value += JSON.stringify(res) + '\r\n';
+        } else
+          out_area.value += res + '\r\n';
+      }
+    });
+  } catch (e) {
+    out_area.value += e.message;
+  }
 }
 </script>
 </head>
 <body onload='init()'>
-<h3>FTL Demo</h3>
+<h3>FTL Examples</h3>
 <ul class="nav nav-tabs">
   <li id='lang_tab_holder'><a id='try' data-toggle="tab" href="#ftl_lang_pane">ftl.lang</a></li>
   <li id='demo_tab_holder' class="active dropdown">
-   <a id='demo_tab' class='dropdown-toggle' data-toggle="dropdown" href="#"'>demos<span class="caret"></span></a>
+   <a id='demo_tab' class='dropdown-toggle' data-toggle="dropdown" href="#"'>examples<span class="caret"></span></a>
     <ul class="dropdown-menu">
-        <li><a href="#" ftl='is_prime'>1. is_prime</a></li>
-        <li><a href="#" ftl='call_function'>2. call_function</a></li>
-        <li><a href="#" ftl='filter'>3. filter</a></li>                        
+        <li><a href="#" ftl='basic'>1. basic</a></li>
+        <li><a href="#" ftl='tuple'>2. tuple</a></li>        
+        <li><a href="#" ftl='lambda'>3. lambda</a></li>
+        <li><a href="#" ftl='filter-map-reduce'>4. filter/map/reduce</a></li>
+        <li><a href="#" ftl='n-ary-operator'>5. n-ary operators</a></li>
+        <li><a href="#" ftl='tail-call-optimization'>6. tail-call optimization</a></li>
+        <li><a href="#" ftl='partial-function'>7. partial function</a></li>
+        <li><a href="#" ftl='curry'>8. curry</a></li>
+        <li><a href="#" ftl='is_prime'>9. is_prime</a></li>
+        <li><a href="#" ftl='filter'>10. filter</a></li>                        
       </ul>  
   </li>
 </ul>
 
 <div class="tab-content">
  <div id='ftl_lang_pane' class="tab-pane fade" style='border-style: groove;border-width: 2px; margin-right:10px'>
-  <textarea id='ftl.lang' style='width:800px;height:400px'>
-  </textarea>
+  <textarea id='ftl.lang' style='width:800px;height:400px'></textarea>
  </div>
 
  <div id='ftl_src_pane' class="tab-pane fade in active" style='border-style: groove;border-width: 2px; margin-right:10px'>
-  <textarea id='ftl_src' style='width:800px;height:400px'>
-  </textarea>
+  <textarea id='ftl_src' style='width:800px;height:400px'></textarea>
  </div>
 </div>
 
 <button onclick='run()'>Run</button>
 </div>
 
-<textarea id='out_area' style='width:800px; height:200px; margin-top:20px'>
-</textarea>
+<textarea id='out_area' style='width:800px; height:200px; margin-top:20px'></textarea>
 <script>
 $('ul.dropdown-menu li a').click(function (e) {
     var id = e.target.attributes['ftl'].value;
