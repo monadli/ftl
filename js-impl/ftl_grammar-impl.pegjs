@@ -976,14 +976,6 @@ var ftl = (function() {
     }
   }
 
-  class ImportStatement {
-    constructor(path, id, as) {
-      this._path = path;
-      this._id = id;
-      this._as = as;
-    }
-  }
-
   // runtime modules
   var modules = new Map();
 
@@ -1286,7 +1278,8 @@ OperatorExpression
   / N_aryOperatorExpression
   / PostfixOperatorExpression
 
-// unary prefix operator expression 
+// unary prefix operator expression
+// It is expected that result of unary operator generates single element, not a tuple.
 UnaryOperatorExpression
   = op:Operator _ expr:PrimaryExpression {
       console.log('op', op)
@@ -1295,6 +1288,7 @@ UnaryOperatorExpression
     }
 
 // postfix operator
+// It is expected that result of postfix operator generates single element, not a tuple.
 PostfixOperatorExpression
   = expr:PrimaryExpression _ op:Operator {
       console.log('PostfixOperatorExpression: op', op)
@@ -1306,6 +1300,7 @@ PostfixOperatorExpression
   }
 
 // n-ary operator expression
+// It is expected that result of n-ary operators generates single element, not a tuple.
 N_aryOperatorExpression
   = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+ {
 

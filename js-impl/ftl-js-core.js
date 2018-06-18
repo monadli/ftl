@@ -1,6 +1,8 @@
 // ftl functions and classes.
 var ftl = (function() {
 
+  var TupleSelectorPattern = /_\d+$/;
+
   function getValueString(value) {
     if (Array.isArray(value))
       return '[' + value.toString() + ']'
@@ -8,6 +10,11 @@ var ftl = (function() {
       return "'" + value + "'";
     else
       return value.toString()
+  }
+
+  // Tells an element is a pure identifier.
+  function is_elm_pure_ref(module, elm) {
+    return elm instanceof RefFn && elm.isPureId() && !elm.params && !module.hasFn(elm.name);
   }
 
   function pass_through() {
@@ -160,6 +167,11 @@ var ftl = (function() {
     // Returns module defined identifier. 
     getFn(name) {
       return this._functions[name];
+    }
+
+    // Tells if module contains a function with name.
+    hasFn(name) {
+      return this.getAvailableFn(name) != null;
     }
 
     // Returns either module defined or imported identifier. 
@@ -354,6 +366,10 @@ var ftl = (function() {
 
     apply(input) {
       return this._wrapped.apply(input);
+    }
+
+    toString() {
+      return this._wrapped.toString();
     }
   }
 
@@ -632,6 +648,8 @@ var ftl = (function() {
       this._type="TupleFn"
     }
 
+    // Returns a tuple with elements.
+    // If there is only one any Fn, returns it without wrapping into a tuple.
     static createTupleFn(elms) {
       return (elms && elms.length == 1 && elms[0] instanceof Fn) ? elms[0] : new TupleFn(elms);
     }
@@ -643,6 +661,20 @@ var ftl = (function() {
     get tuple() { return this.tp }
 
     get elements() { return this.tp }
+
+    get size() {
+      return !this.tp ? 0 : this.tp.length;
+    }
+
+    // Tells if this TupleFn contains a named ExprFn element.
+    hasName(name) {
+      for (var i = 0; i < this.tp.length; i++) {
+        if (this.tp[i] instanceof ExprFn && this.tp[i].name == name)
+          return true;
+      }
+
+      return false;
+    }
 
     apply(input, context) {
       var tuple = new Tuple()
@@ -694,6 +726,8 @@ var ftl = (function() {
 
   /**
    * Expression function.
+   * 
+   * This is always an element in a TupleFn.
    */
   class ExprFn extends Fn {
     constructor(id, elm) {
@@ -720,7 +754,7 @@ var ftl = (function() {
     constructor(list) {
       super()
       this.funs = list;
-      this.modifyElements(list);
+//      this.modifyElements(list);
       this._type = "CompositionFn"
     }
 
@@ -742,12 +776,119 @@ var ftl = (function() {
       }
     }
 
+    resolveInternalReferences(module) {
+      this.resolveReferences(module, this.funs);
+    }
+
+    // resolves names in elms[]
+    resolveReferences(module, elms) {
+      if (elms.length < 2)
+        return elms;
+
+      var prev = elms[0];
+      for (var i = 1; i < elms.length; i++) {
+
+        var elm = elms[i];
+
+        // single pure ref
+        if (is_elm_pure_ref(module, elm)) {
+          // wrap elm into ExprFn and then into TupleFn
+          var newElm = new TupleFn([new ExprFn(elm.name, elm)]);
+          elm.name = "_0";
+          elms.splice(i, 1, newElm);
+          if (!(prev instanceof TupleFn) || prev instanceof TupleFn && !prev.hasName(elm.name)) {
+            elm.name = "_0";
+          }
+          elm = newElm;
+        }
+        
+        // tuple
+        else if (elm instanceof TupleFn && elm.size > 0) {
+
+          // check if all elements are refs
+          var allRef = true;
+          for (var j = 0; j < elm.list.length; j++) {
+            var em = elm.list[j];
+            if (!is_elm_pure_ref(module, em)) {
+              allRef = false;
+              break;
+            }
+          }
+
+          if (allRef) {
+            var newElms = [];
+            for (var j = 0; j < elm.list.length; j++) {
+              var em = elm.list[j];
+              newElms.push(new ExprFn(em.name, em));
+            }
+
+            elm.tp = newElms;
+
+            var hasAnyName = false;
+            var siz = 1;
+            // check all refs can be found from prev tuple
+            // otherwise renames to be sequences.
+            if (prev instanceof TupleFn) {
+              siz = prev.size;
+              for (var j = 0; j < prev.list.length; j++) {
+                var em = prev.list[j];
+                if (em instanceof ExprFn) {
+                  hasAnyName = true;
+                  break;
+                }
+              }
+            }
+
+            if (!hasAnyName) {
+              if (siz > elm.elements.length)
+                siz = elm.elements.length;
+              for (var j = 0; j < siz; j++) {
+                elm.elements[j].elm.name = '_' + j;
+              }
+            }
+          }
+
+          // not all elements are pure refs
+          else {
+            for (var j = 0; j < elm.list.length; j++) {
+              var em = elm.list[j];
+              if (em instanceof TupleFn) {
+                this.resolveReferences(module, [prev, em]);
+              }
+              
+              // other cases are composition fn
+              else if (em instanceof CompositionFn) {
+                this.resolveReferences(module, [prev].concat(em.elements));
+              }
+
+              else if (em instanceof ExprFn) {
+                if (em.elm instanceof TupleFn) {
+                  var arr = [prev, em.elm];
+                  this.resolveReferences(module, arr);
+                  em.elm = arr[1];
+                }
+
+                else if (em.elm instanceof CompositionFn) {
+                  var arr = [prev].concat(em.elm.elements);
+                  this.resolveReferences(module, arr);
+                  em.elm.elements.splice(0, arr.length - 1)
+                  em.elm.appendElements(arr.slice(1));
+                  console.log(em.elm.elements)
+                }
+              }
+            }
+          }
+        }
+        prev = elm;
+      }
+    }
+
     /**
      * Appends elements.
      */
     appendElements(elms) {
       var toBeAppended = Array.isArray(elms) ? elms : [elms];
-      this.modifyElements(toBeAppended);
+      //this.modifyElements(toBeAppended);
       this.funs = this.funs.concat(toBeAppended);
     }
 
@@ -825,6 +966,10 @@ var ftl = (function() {
       return this._name;
     }
 
+    set name(name) {
+      this._name = name;
+    }
+
     setAsValueType() {
       this._refType = 'value'
     }
@@ -840,6 +985,16 @@ var ftl = (function() {
     // tuple seq is '_' + tuple sequence
     set tupleSeq(seq) {
       this._tupleSeq = seq;
+    }
+
+    // Tells this RefFn is purely an identifier, excluding tuple sequence selector such as "_1"
+    isPureId() {
+      return !this.isTupleSelector() && this.isValueType() && !this.isTail();
+    }
+
+    // Tells if this is a tuple selector such as "_0", "_1", etc.
+    isTupleSelector() {
+      return this.name.match(TupleSelectorPattern) != null;
     }
 
     isTail() {
@@ -881,23 +1036,6 @@ var ftl = (function() {
         }
       }
 
-      // use to indicate if return value with ref name.
-      // This is a temporary solution. The composition chain should be examined before execution
-      // to determine whether the tuple preceding the tuple that contains this RefFn has the referenced name or not.
-      // If not, wrap this RefFn with ExprFn with the name in this RefFn (See ParameterList and Parameter in grammar).
-      var wrapWithKey = false;
-      if (e == undefined && this._params == undefined && this._tupleSeq && input) {
-        
-        if (input instanceof Tuple) {
-          e = input.get(this._tupleSeq);
-          wrapWithKey = true;
-        }
-        else if (this._tupleSeq == '_0') {
-          e = input;
-          wrapWithKey = true;
-        }
-      }
-
       if (e !== undefined) {
         if (this._params != null) {
           if (typeof(e) == 'function') {
@@ -923,7 +1061,7 @@ var ftl = (function() {
             return e.apply(tpl);
           }
         }
-        return wrapWithKey? Tuple.fromKeyValue(this._name, e) : e;
+        return e;
       }
 
       if (this._name == '_0' && input && !(input instanceof Tuple))
@@ -1064,14 +1202,6 @@ var ftl = (function() {
         }
         return this.internal.apply(null, match);
       }
-    }
-  }
-
-  class ImportStatement {
-    constructor(path, id, as) {
-      this._path = path;
-      this._id = id;
-      this._as = as;
     }
   }
 

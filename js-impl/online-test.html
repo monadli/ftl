@@ -164,7 +164,7 @@ square_area(2, 3)
 
 // 5. Statements
 
-// There are a few types of statements: 
+// There are a few types of statements:
 
 // 5.1 import statement (as the first line in this module)
 // 2. executable statement (as the simple expressions above)
@@ -186,6 +186,7 @@ square_area(2, 3)
 (1) == 1
 
 // 4. Optionally, elements can have names.
+// Names can be used in tuples in any location except the end tuple, such as the end of a function, or operands, etc. 
 (2.34, b:4.3, c:"test", d:4, e:true, f:[1, 3], g:[])
 </script>
 <script id='module:lambda' type='application/ftl'>import ftl.lang.*
@@ -253,6 +254,11 @@ fn f(x, y) -> x + y
 
 // Swap x and y with lambda expression (x, y) -> (y, x) 
 (1, 2) -> (x, y) -> (y, x)
+
+// tests
+import ftl.lang.*
+
+1 -> x -> x + 2
 </script>
 
 <script id='module:filter-map-reduce' type='application/ftl'>import ftl.lang.*
@@ -390,6 +396,9 @@ x -> x * y * z
 ///(1, 2, 3) -> (x:x -> x * y * z, y, z) -> (x:x(y), z) -> x(z)
 ///(1, 2, 3) -> (x -> x * y * z, y, z) -> (x(y), z) -> x(z)
 (5, 2, 3) -> (X:x -> x * y * z, y, z) -> (XX:X(y), z) -> XX(z)
+
+// what about (1, 2) -> (x:(x, y), y) -> x(y) == (1, 2)
+
 </script>
 
 <script id='module:is_prime' type='application/ftl'>
