@@ -29,7 +29,7 @@ fn x % y { return x % y }
 //
 // basic logic operators
 //
-fn x == y { return x == y }
+fn x == y { return x == y || x instanceof Tuple && x.equals(y) }
 fn x != y { return x != y }
 fn x < y { return x < y }
 fn x > y { return x > y }
@@ -121,6 +121,9 @@ false
 // 4.2 Array with elements of any type.
 [1, 2, 3.14159, 'hello']
 
+// 4.3 Multi-dimentional array
+[[1, 2], [3, 4]]
+
 // 5. Operators
 
 // 5.1 FTL has only one pre-defined operator "->".
@@ -181,6 +184,12 @@ square_area(2, 3)
 
 // 2. Tuple with simple elements
 (1, 2)
+
+// 3. Tuple equality (nested tuples are equivalent to unnested ones)
+(1, 2) == (1, 2)
+((1, 2), 3) == (1, 2, 3)
+(1, 2, 3) == (1, (2, 3))
+
 
 // 3. Tuple with one element, which is equivalent to the enclosed element itself:
 (1) == 1
@@ -390,15 +399,14 @@ x -> x * y * z
 // And application of (1, 2, 3) to it is:
 (1, 2, 3) -> (x, y, z) -> x * y * z
 
-(1, 2) -> (x:x -> x * y, y) -> x(y)
-
 // We can rewrite it as
-///(1, 2, 3) -> (x:x -> x * y * z, y, z) -> (x:x(y), z) -> x(z)
-///(1, 2, 3) -> (x -> x * y * z, y, z) -> (x(y), z) -> x(z)
-(5, 2, 3) -> (X:x -> x * y * z, y, z) -> (XX:X(y), z) -> XX(z)
+(1, 2, 3) -> (x, y, z) -> (x:x -> x * y * z, y, z) -> (x:x(y), z) -> x(z)
 
-// what about (1, 2) -> (x:(x, y), y) -> x(y) == (1, 2)
+// or simply
+(x:1, y:2, z:3) -> (x:x -> x * y * z, y, z) -> (x:x(y), z) -> x(z)
 
+// or
+(1, 2, 3) -> (x:_0 * y * z, y:_1, z:_2) -> (x:x(y), z:z) -> x(z)
 </script>
 
 <script id='module:is_prime' type='application/ftl'>
@@ -417,8 +425,7 @@ fn is_prime(n) -> (n < 2) ? false : ((n == 2) ? true : _is_prime(n))
 // apply is_prime to 31 to test if 31 is a prime number
 is_prime(31)
 </script>
-<script id='module:filter' type='application/ftl'>
-import ftl.lang.*
+<script id='module:filter' type='application/ftl'>import ftl.lang.*
 
 fn len(list) {
   return list.length;
@@ -525,6 +532,8 @@ function run() {
       }
     });
   } catch (e) {
+    if (e.stack)
+      console.log(e.stack);
     out_area.value += e.message;
   }
 }

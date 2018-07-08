@@ -241,7 +241,7 @@ ftl.parser = /*
                   iid = iid.name;
                 if (iid == null)
                   return expr;
-                return new ftl.ExprFn(iid, expr)
+                return new ftl.NamedExprFn(iid, expr)
               },
           "->",
           peg$literalExpectation("->", false),
@@ -258,7 +258,7 @@ ftl.parser = /*
             },
           function(expr) {
                 if (expr instanceof ftl.CompositionFn)
-                  expr.resolveInternalReferences(module);
+                  expr.preprocess(module);
                 module.addExecutable(expr);
                 return expr
               },
@@ -337,7 +337,7 @@ ftl.parser = /*
                 }
 
                 var ops = extractList(rest, 1);
-                var params = [operand].concat(extractList(rest, 3));
+                var params = [new ftl.OperandFn(operand)].concat(extractList(rest, 3).map(operand => new ftl.OperandFn(operand)));
                 if (ops.length == 0)
                   throw new Error('No ops found!')
                 console.log('ops:', ops)
@@ -383,7 +383,7 @@ ftl.parser = /*
                 var params_len = f_params.length;
                 for (var i = 0; i < f_params.length; i++) {
                   var p = f_params[i];
-                  if (p instanceof ftl.ExprFn && !p.hasRef())
+                  if (p instanceof ftl.NamedExprFn && !p.hasRef())
                     params_len--;
                 }
                 var param_list = params.apply();
