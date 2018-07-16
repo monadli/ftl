@@ -160,10 +160,10 @@ var ftl = (function() {
       if (this._functions[name] != null)
         throw { message: "'" + name + "' exists and can not be declared again!"}
 
-      if (f instanceof FunctionFn)
-        this.resolveRecursiveRef(f, f.wrapped);
-
       this._functions[name] = f;
+
+      if (f instanceof FunctionFn)
+        f.wrapped.preprocess(this);
     }
 
     // Returns module defined identifier. 
@@ -186,9 +186,7 @@ var ftl = (function() {
     }
 
     addExecutable(exec) {
-      if (exec instanceof RefFn && exec.isValueType())
-        exec.possibleRef = this.getAvailableFn(exec.name);
-
+      exec.preprocess(this);
       this._executables.push(exec);
     }
 
@@ -373,8 +371,8 @@ var ftl = (function() {
     preprocess(model, inputFn) {
     }
 
-    // Applies function with input.
-    apply(input) {
+    // Applies function with input and context.
+    apply(input, context) {
       return null;
     }
   }
@@ -396,8 +394,8 @@ var ftl = (function() {
       this._wrapped.preprocess(model, inputFn);
     }
 
-    apply(input) {
-      return this._wrapped.apply(input);
+    apply(input, context) {
+      return this._wrapped.apply(input, context);
     }
 
     toString() {
@@ -500,7 +498,7 @@ var ftl = (function() {
       return input instanceof Tuple ? input.get('_' + idx) : idx == 0 ? input : null;
     }
 
-    apply(input) {
+    apply(input, context) {
       var tuple = new Tuple();
 
       var list = (this.params instanceof RefFn) ? [this._params] : this._params.list
@@ -509,7 +507,7 @@ var ftl = (function() {
         // value from input or from default expression
         var val = this._getInputElement(input, i);
         if (val == null)
-          val = list[i].apply(input);
+          val = list[i].apply(input, context);
 
         // resolve any tail
         else if (val instanceof TailFn)
@@ -626,7 +624,6 @@ var ftl = (function() {
           res._recursive = true;
           return res;
         }
-        var prev = res;
         if (res.nextTail)
           res = res.executeRecursive(this);
         else {
@@ -659,7 +656,7 @@ var ftl = (function() {
   class TupleFn extends Fn {
     constructor(tp) {
       super()
-      this.tp = tp;
+      this.tp = tp || [];
       console.log("arg to TupleFn constructor", tp)
       this._type="TupleFn"
     }
@@ -1029,8 +1026,12 @@ var ftl = (function() {
             elm = newElm;
           }
 
-          elm.preprocess(module, prev);
+          // preprocess any fn except function
+          if (!(elm instanceof FunctionFn || elm instanceof NativeFunctionFn))
+              elm.preprocess(module, prev);
+
         }
+
         prev = elm;
       }
     }

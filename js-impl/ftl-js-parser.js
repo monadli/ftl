@@ -257,8 +257,6 @@ ftl.parser = /*
               return ftl.CompositionFn.createCompositionFn(first, t);
             },
           function(expr) {
-                if (expr instanceof ftl.CompositionFn)
-                  expr.preprocess(module);
                 module.addExecutable(expr);
                 return expr
               },

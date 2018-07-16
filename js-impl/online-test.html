@@ -32,7 +32,9 @@ fn x % y { return x % y }
 fn x == y { return x == y || x instanceof Tuple && x.equals(y) }
 fn x != y { return x != y }
 fn x < y { return x < y }
+fn x <= y { return x <= y }
 fn x > y { return x > y }
+fn x >= y { return x >= y }
 fn x || y$() { return x || y() }
 fn x && y { return x && y }
 
@@ -41,10 +43,13 @@ fn sin(x) { return Math.sin(x) }
 fn cos(x) { return Math.cos(x) }
 
 // ternary operator with if_true and otherwise marked as tail functions
-fn condition ? if_true$() : otherwise$() { return condition ? if_true() : otherwise() }
+fn condition ? if_true() : otherwise() { return condition ? if_true() : otherwise() }
 
-// fractorial
-fn x! -> x < 2 ? 1 : (((x - 1)!) * x)
+// ternary operator with if_true and otherwise marked as tail functions
+fn condition ?? if_true$() :: otherwise$() { return condition ? if_true() : otherwise() }
+
+// factorial
+fn x! -> x < 2 ?? 1 :: (((x - 1)!) * x)
 
 //
 // tuple functions
@@ -367,7 +372,17 @@ fn a - b + c - d {
 // We allow use of "$" at the end of the function name to indicate tail-call. Thus ftl runtime will do tail call optimization without need of
 // writing code in ftl to achive tail-call optimization.
 
-// Another example is the second operand of operator ||, which is a tail-call.
+// The form that is defined to use tail optimization in ftl-lang is as:
+//   fn condition ?? if_true$() :: otherwise$() { return condition ? if_true() : otherwise() }
+
+// An example is factorial defined as recursive function using the ternary operator with tail optimization:
+//   fn x! -> x < 2 ?? 1 :: (((x - 1)!) * x)
+// or
+//   fn x! -> x > 1 ?? (((x - 1)!) * x) :: 1
+4!
+
+// Another example of using tail optimization is the operator || where the second operand is always tail
+// when the result of the first operand yields false.
 </script>
 
 <script id='module:partial-function' type='application/ftl'>import ftl.lang.*
