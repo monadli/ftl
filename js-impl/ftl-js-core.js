@@ -751,15 +751,41 @@ var ftl = (function() {
         // detect and replace function
         for (var i = 0; i < this.tp.length; i++) {
           var elm = this.tp[i];
-          if (elm instanceof RefFn && elm.isPureId() && inputFn instanceof TupleFn) {
-            if (inputFn.hasName(elm.name)) {
-              var e = inputFn.getElement(elm.name)
-              if (e.elm.name == elm.name)
-                this.tp.splice(i, 1, e);
-              else
-                this.tp.splice(i, 1, new NamedExprFn(elm.name, elm));
+          if (elm instanceof OperandFn)
+            elm = elm.wrapped;
+          if (elm instanceof RefFn) {
+            if (inputFn instanceof TupleFn && inputFn.hasName(elm.name)) {
+              if (elm.isPureId()) {
+                var e = inputFn.getElement(elm.name)
+                if (e.elm.name == elm.name)
+                  this.tp.splice(i, 1, e);
+                else
+                  this.tp.splice(i, 1, new NamedExprFn(elm.name, elm));
+              }
             } else if (module.hasFn(elm.name)) {
-              this.tp.splice(i, 1, module.getAvailableFn(elm.name));
+              // full function
+              var f = module.getAvailableFn(elm.name);
+              if (elm.params) {
+                var f_params = f.params;
+                if (!Array.isArray(f_params)) {
+                  if (f_params instanceof ftl.TupleFn) {
+                    f_params = f_params.list
+                  } else
+                    f_params = [f_params]
+                }
+
+                var params_len = f_params.length;
+                for (var j = 0; j < f_params.length; j++) {
+                  var p = f_params[j];
+                  if (p instanceof NamedExprFn && !p.hasRef())
+                    params_len--;
+                }
+                var param_list = elm.params.apply();
+                var actual_params_len = param_list instanceof ftl.Tuple ? param_list.size: 1;
+
+                f = (actual_params_len >= params_len) ? new CompositionFn([elm.params, f]) : new PartialFunctionFn(f, param_list);
+              }
+              this.tp[i] = f;
             }
           }
         }

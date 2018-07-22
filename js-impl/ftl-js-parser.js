@@ -367,36 +367,8 @@ ftl.parser = /*
           function(id, params) {
 
               // CallExpression
-
-              var f = module.getAvailableFn(id.name);
-              if (f) {
-                var f_params = f.params;
-                if (!Array.isArray(f_params)) {
-                  if (f_params instanceof ftl.TupleFn) {
-                    f_params = f_params.list
-                  } else
-                    f_params = [f_params]
-                }
-
-                var params_len = f_params.length;
-                for (var i = 0; i < f_params.length; i++) {
-                  var p = f_params[i];
-                  if (p instanceof ftl.NamedExprFn && !p.hasRef())
-                    params_len--;
-                }
-                var param_list = params.apply();
-                var actual_params_len = param_list instanceof ftl.Tuple ? param_list.size: 1;
-
-                if (actual_params_len >= params_len) {
-                  return new ftl.CompositionFn([params, f])
-                }
-                return new ftl.PartialFunctionFn(f, param_list);
-              }
-
-              else {
-                id.params = params;
-                return id;
-              }
+              id.params = params;
+              return id;
             },
           "{",
           peg$literalExpectation("{", false),
