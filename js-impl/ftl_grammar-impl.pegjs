@@ -1152,7 +1152,7 @@ FunctionDeclaration
     return ret;
   }
 
-Tuple = "(" _ elms:ParameterList? ")" { return ftl.TupleFn.createTupleFn(elms) }
+Tuple = "(" _ elms:ParameterList? ")" { return new ftl.TupleFn(...elms) }
 
 ParameterList
   = first:Parameter rest:(_ "," _ Parameter)* {
@@ -1304,6 +1304,7 @@ PostfixOperatorExpression
 N_aryOperatorExpression
   = operand:PrimaryExpression rest: (_ Operator _ PrimaryExpression)+ {
 
+      // N_aryOperatorExpression
       var current_index = 0;
       var stop_index = 0;
       var parse_operators = function(ops, operands, index, full) {
@@ -1347,7 +1348,7 @@ N_aryOperatorExpression
   }
 
 TupleSelector
-  = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new ftl.RefFn(module, text()) }
+  = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) { return new ftl.TupleSelectorFn(text()) }
 
 ArrayElementSelector
   = id: Identifier _ "[" index:("0" / (NonZeroDigit DecimalDigit* {return text()}) / Identifier) _ "]" {

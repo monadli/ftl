@@ -221,7 +221,7 @@ ftl.parser = /*
           peg$literalExpectation("(", false),
           ")",
           peg$literalExpectation(")", false),
-          function(elms) { return ftl.TupleFn.createTupleFn(elms) },
+          function(elms) { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(...elms) },
           function(first, rest) {
               console.log("first", first);console.log("rest", rest);
               console.log("param list:", buildList(first, rest, 3));
@@ -254,7 +254,7 @@ ftl.parser = /*
               if (t == null)
                 return first;
               
-              return ftl.CompositionFn.createCompositionFn(first, t);
+              return new ftl.PipeFn(first, t);
             },
           function(expr) {
                 module.addExecutable(expr);
@@ -276,7 +276,7 @@ ftl.parser = /*
                 return {
                   type: 'OperatorDeclaration',
                   name: name,
-                  operands: ftl.TupleFn.createTupleFn(operands)
+                  operands: new ftl.TupleFn(...operands)
                 }
               },
           function(operand, op) {
@@ -290,64 +290,28 @@ ftl.parser = /*
           function(op, expr) {
                 console.log('op', op)
                 console.log('expr', expr)
-                return ftl.CompositionFn.createCompositionFn(expr, module.getAvailableFn(op.name || op));
+                return new ftl.PipeFn(expr, module.getAvailableFn(op.name || op));
               },
           function(expr, op) {
                 console.log('PostfixOperatorExpression: op', op)
                 console.log('PostfixOperatorExpression: expr', expr)
                 var op_fn = module.getAvailableFn(op);
                 if (!op_fn)
-                  op_fn = new ftl.RefFn(module, op);
-                return ftl.CompositionFn.createCompositionFn(expr, op_fn);
+                  op_fn = new ftl.RefFn(op);
+                return new ftl.PipeFn(expr, op_fn);
             },
           function(operand, rest) {
 
-                var current_index = 0;
-                var stop_index = 0;
-                var parse_operators = function(ops, operands, index, full) {
-                  var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-                  var f = module.getAvailableFn(op);
-
-                  // no corresponding function found for single op
-                  if (!f) {
-                    if (index == 1)
-                      throw new Error("No function with name '" + op + "' found!");
-
-                    index--;
-                    var reduced = parse_operators(ops, operands, index, false);
-                    
-                    if (current_index == stop_index)
-                      return reduced;
-
-                    ops = ops.slice(index, ops.length)
-                    operands = [reduced].concat(operands.slice(index + 1, operands.length))
-                    return parse_operators(ops, operands, ops.length, true)
-                  }
-
-                  for (var i = 0; i < f.params.length; i++) {
-                    if (f.params[i] instanceof ftl.RefFn && f.params[i].isRefType()) {
-                      operands[i] = new ftl.ExprRefFn(operands[i], f.params[i].params, f.params[i].isTail());
-                    }
-                  }
-
-                  current_index += index;
-                  return ftl.CompositionFn.createCompositionFn(ftl.TupleFn.createTupleFn(operands.slice(0, f.params.length)), f);
-                }
-
+                // N_aryOperatorExpression
                 var ops = extractList(rest, 1);
                 var params = [new ftl.OperandFn(operand)].concat(extractList(rest, 3).map(operand => new ftl.OperandFn(operand)));
-                if (ops.length == 0)
-                  throw new Error('No ops found!')
-                console.log('ops:', ops)
-                console.log('operands', params)
-                stop_index = ops.length;
-                return parse_operators(ops, params, ops.length, true);
+                return new N_aryOperatorExpressionFn(ops, params)
             },
           "_",
           peg$literalExpectation("_", false),
           "0",
           peg$literalExpectation("0", false),
-          function() { return new ftl.RefFn(module, text()) },
+          function() { return new ftl.TupleSelectorFn(text().substring(1)) },
           function(id) {return text()},
           function(id, index) {
               console.log('got ArrayElementSelector', index);
@@ -368,7 +332,7 @@ ftl.parser = /*
 
               // CallExpression
               id.params = params;
-              return id;
+              return new ftl.CallExprFn(id.name, params);
             },
           "{",
           peg$literalExpectation("{", false),
@@ -378,7 +342,7 @@ ftl.parser = /*
           function() {return {type:'native', script: text()}},
           peg$anyExpectation(),
           function(name) {
-            var ret = new ftl.RefFn(module, name);
+            var ret = new ftl.RefFn(name);
             ret.possibleRef = module.getAvailableFn(name);
             return ret;
           },
@@ -981,6 +945,9 @@ ftl.parser = /*
     // this is the module created during parsing
     var module = new ftl.Module('')
 
+    // this is for building function / operator parameters
+    var dummy_param_tuple = new ftl.TupleFn();
+
     // The following functions are used for parsing
 
     function join(value) {
@@ -994,9 +961,9 @@ ftl.parser = /*
     }
 
     function extractList(list, index) {
-      var result = new Array(list.length), i;
+      var result = new Array(list.length);
 
-      for (i = 0; i < list.length; i++) {
+      for (var i = 0; i < list.length; i++) {
         result[i] = list[i][index];
       }
 
@@ -1013,6 +980,63 @@ ftl.parser = /*
 
     function buildFirstRest(first, rest) {
       return (Array.isArray(rest) && rest.length == 0) ? first : buildList(first, rest, 1)
+    }
+
+    /**
+     * This function is transient during parsing and building.
+     */
+    class N_aryOperatorExpressionFn extends ftl.Fn {
+      constructor(ops, operands) {
+        if (ops.length == 0)
+          throw new ftl.FnConstructionError('No ops found!')
+
+        super();
+        this.ops = ops;
+        this.operands = operands;
+      }
+
+      build(module, inputFn) {
+        var current_index = 0;
+        var stop_index = this.ops.length;
+
+        // This is used to parse operators and operands recursively.
+        // It is called from index = length of operators down to 1.
+        function parse_operators(ops, operands, index, full) {
+
+          // operand at index 1 is for operator at 
+          var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
+          var f = module.getAvailableFn(op);
+
+          // no corresponding function found for single op
+          if (!f) {
+            if (index == 1)
+              throw new ftl.FtlBuildError("No function with name '" + op + "' found!");
+
+            index--;
+            var reduced = parse_operators(ops, operands, index, false);
+            
+            if (current_index == stop_index)
+              return reduced;
+
+            ops = ops.slice(index, ops.length)
+            operands = [reduced].concat(operands.slice(index + 1, operands.length))
+            return parse_operators(ops, operands, ops.length, true)
+          }
+
+          //for (var i = 0; i < f.params.fnodes.length; i++) {
+          //  if (f.params.fnodes[0] instanceof ftl.NamedExprFn && f.params.fnode(i).isRefType()) {
+          //    operands[i] = new ftl.ExprRefFn(operands[i], f.params.fnode(i), f.params.fnode(i).isTail());
+          //  }
+          //}
+
+          current_index += index;
+          var operands_tuple = new ftl.TupleFn(...operands.slice(0, f.params.fnodes.length)).build(module, dummy_param_tuple);
+          
+          return new ftl.PipeFn(operands_tuple, f);
+        }
+
+        return parse_operators(this.ops, this.operands, this.ops.length, true);
+      }
     }
 
     // end of script for parser generation
