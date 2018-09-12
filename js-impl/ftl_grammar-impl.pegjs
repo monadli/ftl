@@ -1231,6 +1231,8 @@ OperandValueDeclaration
 
 OperandReferenceDeclaration
   = id:Identifier params:Tuple {
+
+      // #OperandReferenceDeclaration
       id.setAsRefType();
       id.params = params;
       return id
@@ -1429,8 +1431,9 @@ SourceCharacter
 
 Identifier
   = !ReservedWord name:IdentifierName {
+
+    // #Identifier
     var ret = new ftl.RefFn(module, name);
-    ret.possibleRef = module.getAvailableFn(name);
     return ret;
   }
 

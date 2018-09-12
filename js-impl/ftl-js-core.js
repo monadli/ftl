@@ -19,58 +19,35 @@ var ftl = (function() {
     return elm instanceof RefFn && elm.isPureId() && !elm.params;
   } 
 
-  function pass_through() {
-    return this;
+  /**
+   * Converts a javascript arguments into a tuple.
+   */
+  function js_args_to_tuple(args) {
+    var ret = new Tuple();
+    for (var i = 0; i < args.length; i++)
+      ret.addValue(args[i]);
+    return ret;
   }
 
-  function function_ref(arg) {
-    console.log("function_ref arguments", arg)
-    console.log("function_ref closure", this.closure)
 
-    var len = arguments.length;
-    if (len == 0)
-      return this.f.apply(this.closure)
-
-    var tpl = new Tuple();
-    
-    // has parameters
-    // no named parameters
-    var start = 0;
-    if (this.params instanceof RefFn) {
-      if (this.params.name === 'raw')
-        return this.f.apply(arg);
-
-      tpl.addKeyValue(this.params.name, arg);
-      start = 1;
-    } else if (this.params instanceof TupleFn) {
-      var keys = this.params.list;
-      start = keys.length;
-
-      for (var i = 0; i < arguments.length; i++)
-        tpl.addKeyValue(keys[i].name, arguments[i]);
-    }
-
-    for (var i = start; i < arguments.length; i++) {
-        tpl.addValue(arguments[i]);
-    }
-
-    return this.f.apply(tpl);
+  function pass_through() {
+    return this;
   }
 
   /**
    * Error thrown at any function construction.
    */
   class FnConstructionError extends Error {
-    constructor(...params) {
-      super(...params);
+    constructor(... params) {
+      super(... params);
       var start = this.stack.indexOf(' at new ') + 8;
       this.message = this.stack.substring(start, this.stack.indexOf(' ', start)) + ': ' + this.message;
     }
   }
 
   class FtlBuildError extends Error {
-    constructor(...params) {
-      super(...params);
+    constructor(... params) {
+      super(... params);
     }
   }
 
@@ -201,7 +178,7 @@ var ftl = (function() {
     }
 
     addExecutable(exec) {
-      this._executables.push(exec.build(this));
+      this._executables.push(exec.build(this, null));
     }
 
     get executables() { return this._executables }
@@ -410,7 +387,7 @@ var ftl = (function() {
   class ComposedFn extends Fn {
 
     // fnodes: function items
-    constructor(...fnodes) {
+    constructor(... fnodes) {
       if (!Array.isArray(fnodes))
         throw new FnConstructionError('fnodes is not an array!');
 
@@ -531,7 +508,8 @@ var ftl = (function() {
     constructor(name, params, script) {
       super();
       this.name = name;
-      this.params = params;
+      this.paramsInfo = params;
+      this.params = params.clone();
       this.script = script;
     }
 
@@ -567,7 +545,7 @@ var ftl = (function() {
 
     // This is called by module when adding a function into module 
     buildFunction(module) {
-      this.params = this.params.build(module, new TupleFn())
+      this.params = this.params.build(module, new TupleFn());
 
       if (typeof this.script != 'function') {
         var param_list = [];
@@ -664,8 +642,8 @@ var ftl = (function() {
    * Tuple function that contains list of elements.
    */
   class TupleFn extends ComposedFn {
-    constructor(...fnodes) {
-      super(...fnodes)
+    constructor(... fnodes) {
+      super(... fnodes)
     }
 
     // Tells if this TupleFn contains a NamedExprFn element.
@@ -698,19 +676,24 @@ var ftl = (function() {
         var fnode = this.fnodes[i];
         this.fnodes[i] = fnode.build(module, inputFn);
         pure_refs = pure_refs && fnode instanceof RefFn && !fnode.name.startsWith('_');
-        has_any_refs = has_any_refs || pure_refs && (inputFn != null && inputFn != undefined && inputFn instanceof TupleFn && inputFn.hasName(fnode.name));
+        has_any_refs = has_any_refs || pure_refs && (inputFn != null && inputFn instanceof TupleFn && inputFn.hasName(fnode.name));
       }
 
       if (pure_refs) {
         for (var i = 0; i < this.fnodes.length; i++) {
           var fnode = this.fnodes[i];
-          this.fnodes[i] = new NamedExprFn(fnode.name,  has_any_refs ? fnode : new TupleSelectorFn(i));
+          this.fnodes[i] = new NamedExprFn(fnode.name, inputFn == null || has_any_refs ? fnode : new TupleSelectorFn(i));
         }
       }
 
       // TODO
       // return this.fnodes.length == 1 ? this.fnodes[0] : this;
       return this;
+    }
+
+    // Shallow clone.
+    clone() {
+      return new TupleFn(... this.fnodes);
     }
 
     apply(input, context) {
@@ -772,8 +755,8 @@ var ftl = (function() {
    * Composition function.
    */
   class PipeFn extends ComposedFn {
-    constructor(...elements) {
-      super(...elements)
+    constructor(... elements) {
+      super(... elements)
     }
 
     /**
@@ -947,7 +930,7 @@ var ftl = (function() {
       // expands contained PipeFn elements which may be before or after build
       for (var i = this.fnodes.length; i >= 0; i--)
         if (this.fnodes[i] instanceof PipeFn)
-          this.fnodes.splice(i, 1, ...this.fnodes[i].fnodes);
+          this.fnodes.splice(i, 1, ... this.fnodes[i].fnodes);
 
       return this;
     }
@@ -967,7 +950,7 @@ var ftl = (function() {
 
         // still has unresolved ref
         else if (res instanceof Tuple && res.hasRef()) {
-          return new PipeFn(...[new TupleFn(...res.toList())].concat(this.fnodes.slice(i)))
+          return new PipeFn(... [new TupleFn(... res.toList())].concat(this.fnodes.slice(i)))
         }
 
         res = this.fnodes[i].apply(res, context)
@@ -991,7 +974,7 @@ var ftl = (function() {
       super()
       if (name.endsWith('$')) {
         this.name = name.substr(0, name.length - 1);
-        this._tail = true;
+        this.is_tail = true;
       } else {
         this.name = name;
       }
@@ -1009,21 +992,13 @@ var ftl = (function() {
 
     // Tells this RefFn is purely an identifier, excluding tuple sequence selector such as "_1"
     isPureId() {
-      return !this.isTupleSelector() && this.isValueType() && !this.isTail();
+      return !this.isTupleSelector() && this.isValueType() && !this.is_tail;
     }
 
     // Tells if this is a tuple selector such as "_0", "_1", etc.
     isTupleSelector() {
       return this.name.match(TupleSelectorPattern) != null;
     }
-
-    isTail() {
-      return this._tail ? this._tail : false;
-    }
-
-    get params() { return this._params }
-
-    set params(params) { this._params = params }
 
     isValueType() {
       return this.refType == 'value'
@@ -1042,6 +1017,10 @@ var ftl = (function() {
         return f;
       }
 
+      if (this.isRefType() && this.params) {
+        this.params = this.params.build(module, new TupleFn());
+      }
+
       return this;
     }
 
@@ -1055,25 +1034,25 @@ var ftl = (function() {
         e = input.get(this.name);
 
       if (e !== undefined) {
-        if (this._params != null) {
+        if (this.params != null) {
           if (typeof(e) == 'function') {
             var args = [];
-            if (this._params instanceof RefFn)
-              args.push(input.get(this._params.name))
-            else if (this._params instanceof Fn) {
-              args = this._params.apply(input);
+            if (this.params instanceof RefFn)
+              args.push(input.get(this.params.name))
+            else if (this.params instanceof Fn) {
+              args = this.params.apply(input);
               args = args instanceof Tuple ? args.toList() : [args];
             }
-            else for (var i = 0; i < this._params.size; i++)
-              args.push(input.get(this._params[i].name));
+            else for (var i = 0; i < this.params.size; i++)
+              args.push(input.get(this.params[i].name));
             return e.apply(null, args)
           }
 
           // e not a function but an Fn
           else {
-            var tpl = this._params.apply(input);
-            if (this._params instanceof RefFn)
-              tpl = Tuple.fromKeyValue(this._params.name, tpl);
+            var tpl = this.params.apply(input);
+            if (this.params instanceof RefFn)
+              tpl = Tuple.fromKeyValue(this.params.name, tpl);
             else if (!(tpl instanceof Tuple))
               tpl = Tuple.fromValue(tpl);
             return e.apply(tpl);
@@ -1169,11 +1148,55 @@ var ftl = (function() {
       this.isTail = isTail;
     }
 
+    // This is a function passing to native javascript functions.
+    // The "this" here is not this class instance but a dynamic binding
+    // containg runtime info.
+    // Coincidentally this.params and this.wrapped are the same as
+    // the ones in this class, but this.closure is not.
+    fn_ref(arg) {
+      console.log("fn_ref arguments", arg)
+      console.log("fn_ref closure", this.closure)
+
+      var len = arguments.length;
+      if (len == 0)
+        return this.wrapped.apply(this.closure)
+
+      var tpl = new Tuple();
+      
+      // has parameters
+      // no named parameters
+      
+      var start = 0;
+      if (this.params instanceof RefFn) {
+
+        // TODO
+        if (this.params.name === 'raw')
+          return this.wrapped.apply(arg);
+
+        if (this.params.isRefType()) {
+          tpl = this.params.params.apply(js_args_to_tuple(arguments));
+        } else
+          tpl.addKeyValue(this.params.name, arg);
+        start = 1;
+      } else if (this.params instanceof TupleFn) {
+        tpl = this.params.apply(js_args_to_tuple(arguments));
+        start = this.params.fnodes.length;
+      }
+
+      for (var i = start; i < arguments.length; i++) {
+          tpl.addValue(arguments[i]);
+      }
+
+      var res = this.wrapped.apply(tpl);
+      return (res instanceof Tuple && res.size == 1) ? res.get('_0') : res;
+    }
+
     apply(input) {
       if (this.isTail) {
         return pass_through.bind(new ftl.TailFn(this.wrapped, input));
-      } else
-        return function_ref.bind({f: this.wrapped, closure: input, params: this.params});
+      } else {
+        return this.fn_ref.bind({wrapped: this.wrapped, closure: input, params: this.params});
+      }
     }
   }
 
@@ -1181,32 +1204,32 @@ var ftl = (function() {
     constructor(fn, closure) {
       super(fn);
       this.closure = closure;
-      this.nextTail = null;
+      this._nextTail = null;
     }
 
     set nextTail(nextTail) {
-      this.nextTail = nextTail;
+      this._nextTail = nextTail;
     }
 
     get nextTail() {
-      return this.nextTail;
+      return this._nextTail;
     }
 
     executeRecursive(context) {
-      if (this.nextTail instanceof TupleFn) {
-        var tuple = this.nextTail.tuple;
+      if (this._nextTail instanceof TupleFn) {
+        var tuple = this._nextTail.tuple;
         for (var i = 0; i < tuple.length; i++) {
           var elm = tuple[i];
           if (elm instanceof TailFn) {
             var next = elm.apply(context);
             if (next instanceof TailFn) {
-              this.nextTail = next.nextTail;
+              this._nextTail = next._nextTail;
               tuple[i] = next.wrapped;
             }
 
             // end of recursive
             else {
-              this.nextTail = null;
+              this._nextTail = null;
               tuple[i] = next;
             }
           }
@@ -1279,7 +1302,8 @@ var ftl = (function() {
   }
 
   /**
-   * A function wrapping a operand. This is a place holder to make results of a tuple spread into parent tuple.
+   * A function wrapping a operand. This is a place holder to make sure results of a tuple not 
+   * to spread into parent tuple.
    */
   class OperandFn extends WrapperFn {
     constructor(fn) {
@@ -1292,6 +1316,11 @@ var ftl = (function() {
         return this.wrapped.fnodes[0];
       else
         return this;
+    }
+
+    apply(input) {
+      var res = super.apply(input);
+      return (res instanceof Tuple && res.length == 1) ? res[0] : res;
     }
   }
 

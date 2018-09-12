@@ -221,7 +221,7 @@ ftl.parser = /*
           peg$literalExpectation("(", false),
           ")",
           peg$literalExpectation(")", false),
-          function(elms) { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(...elms) },
+          function(elms) { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(... elms) },
           function(first, rest) {
               console.log("first", first);console.log("rest", rest);
               console.log("param list:", buildList(first, rest, 3));
@@ -263,6 +263,8 @@ ftl.parser = /*
           function(first, rest) { return text() },
           function(id) { id.setAsValueType(); return id },
           function(id, params) {
+
+                // #OperandReferenceDeclaration
                 id.setAsRefType();
                 id.params = params;
                 return id
@@ -276,7 +278,7 @@ ftl.parser = /*
                 return {
                   type: 'OperatorDeclaration',
                   name: name,
-                  operands: new ftl.TupleFn(...operands)
+                  operands: new ftl.TupleFn(... operands)
                 }
               },
           function(operand, op) {
@@ -342,8 +344,9 @@ ftl.parser = /*
           function() {return {type:'native', script: text()}},
           peg$anyExpectation(),
           function(name) {
+
+            // #Identifier
             var ret = new ftl.RefFn(name);
-            ret.possibleRef = module.getAvailableFn(name);
             return ret;
           },
           peg$otherExpectation("identifier"),
@@ -983,9 +986,31 @@ ftl.parser = /*
     }
 
     /**
+     * Type for build only.
+     */
+    class BuildElement extends ftl.Fn {
+      constructor() {
+        super();
+      }
+
+      build() {
+        
+      }
+    }
+
+    class OperandReferenceDeclaration extends BuildElement {
+      constructor(name, params) {
+        this.is_tail = name.endsWith('$');
+        this.name = this.isTail ? name.substring(0, name.length - 1) : name;
+        this.params = params;
+      }
+
+    }
+
+    /**
      * This function is transient during parsing and building.
      */
-    class N_aryOperatorExpressionFn extends ftl.Fn {
+    class N_aryOperatorExpressionFn extends BuildElement {
       constructor(ops, operands) {
         if (ops.length == 0)
           throw new ftl.FnConstructionError('No ops found!')
@@ -1023,14 +1048,15 @@ ftl.parser = /*
             return parse_operators(ops, operands, ops.length, true)
           }
 
-          //for (var i = 0; i < f.params.fnodes.length; i++) {
-          //  if (f.params.fnodes[0] instanceof ftl.NamedExprFn && f.params.fnode(i).isRefType()) {
-          //    operands[i] = new ftl.ExprRefFn(operands[i], f.params.fnode(i), f.params.fnode(i).isTail());
-          //  }
-          //}
+          for (var i = 0; i < f.paramsInfo.fnodes.length; i++) {
+            var fnode = f.paramsInfo.fnodes[i];
+            if (fnode instanceof ftl.RefFn && fnode.isRefType()) {
+              operands[i] = new ftl.ExprRefFn(operands[i], fnode.params, fnode.is_tail);
+            }
+          }
 
           current_index += index;
-          var operands_tuple = new ftl.TupleFn(...operands.slice(0, f.params.fnodes.length)).build(module, dummy_param_tuple);
+          var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fnodes.length)).build(module, dummy_param_tuple);
           
           return new ftl.PipeFn(operands_tuple, f);
         }

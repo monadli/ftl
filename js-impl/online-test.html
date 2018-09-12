@@ -74,23 +74,23 @@ fn list += item {
 }
 
 // internal map
-fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : map(src, append(mapped, mapper(src[index])), index + 1, mapper)
+//fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : map(src, append(mapped, mapper(src[index])), index + 1, mapper)
 
 // map operator that returns a new list with list element mapped with mapper function
-fn list => mapper(item) -> _map(list, [], 0, mapper)
+//fn list => mapper(item) -> _map(list, [], 0, mapper)
 
 // internal reduce
-fn _reduce(accu, list, index, reducer) -> index == len(list) ? accu : _reduce(reducer(accu, list[index]), list, index + 1, reducer)
+//fn _reduce(accu, list, index, reducer) -> index == len(list) ? accu : _reduce(reducer(accu, list[index]), list, index + 1, reducer)
 
 // reduce operator that returns reduced from list with reducer function
-fn list =|> reducer(i1, i2) -> (list[0], list, 1, reducer) -> reduce
+//fn list =|> reducer(i1, i2) -> (list[0], list, 1, reducer) -> reduce
 
 // internal filter
-fn _filter(list, filtered, index, predicate) ->
- index == len(list) ? filtered : _filter(list, (list[index], predicate, filtered) -> _1(_0) ? (_2 += _0) : _2, index + 1, predicate)
+//fn _filter(list, filtered, index, predicate) ->
+// index == len(list) ? filtered : _filter(list, (list[index], predicate, filtered) -> _1(_0) ? (_2 += _0) : _2, index + 1, predicate)
 
 // filter operator
-fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
+//fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
 
 </script>
 
@@ -375,11 +375,15 @@ fn a - b + c - d {
 // The form that is defined to use tail optimization in ftl-lang is as:
 //   fn condition ?? if_true$() :: otherwise$() { return condition ? if_true() : otherwise() }
 
-// An example is factorial defined as recursive function using the ternary operator with tail optimization:
+// Example: factorial defined as recursive function using the ternary operator with tail optimization:
 //   fn x! -> x < 2 ?? 1 :: (((x - 1)!) * x)
 // or
 //   fn x! -> x > 1 ?? (((x - 1)!) * x) :: 1
 4!
+
+// Example: Fibonacci
+fn fib(n) -> (n < 2) ?? n :: (fib(n - 1) + fib(n - 2))
+4 -> fib
 
 // Another example of using tail optimization is the operator || where the second operand is always tail
 // when the result of the first operand yields false.
@@ -532,7 +536,7 @@ function run() {
     var module = ftl.parser.parse(editor2.getValue());
 
     module.executables.forEach(function(exec) {
-      out_area.value += (exec instanceof ftl.TupleFn ? 'tuple' : exec.toString()) + ' => '
+      out_area.value += (exec instanceof ftl.TupleFn || exec.constructor.name == 'Fn' ? 'tuple' : exec.toString()) + ' => '
       var res = exec.apply()
       if (typeof(res) != 'undefined' && res instanceof ftl.TailFn) {
         res = res.apply();
