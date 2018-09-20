@@ -1,6 +1,7 @@
-// ftl functions and classes.
+// ftl core functions and classes.
 var ftl = (function() {
 
+  var version = '0.0.0.1';
   var TupleSelectorPattern = /_\d+$/;
 
   function getValueString(value) {
@@ -319,6 +320,19 @@ var ftl = (function() {
       return true;
     }
 
+    toTupleFn() {
+      var list = [];
+      for (var i = 0; i < this._size; i++) {
+        var elm = this.get('_' + i);
+        if (elm instanceof Fn)
+          list.push(elm);
+        else
+          list.push(new ConstFn(elm));
+      }
+      
+      return new TupleFn(... list);
+    }
+
     toString() {
       if (this._size == 0)
         return "()"
@@ -399,6 +413,10 @@ var ftl = (function() {
 
       super()
       this.fnodes = fnodes || []
+    }
+
+    get size() {
+      return this.fnodes.length;
     }
   }
 
@@ -598,6 +616,7 @@ var ftl = (function() {
 
     // This is called by general build, which simply returns this.
     build(module, inputFn) {
+      
       return this;
     }
 
@@ -950,7 +969,7 @@ var ftl = (function() {
 
         // still has unresolved ref
         else if (res instanceof Tuple && res.hasRef()) {
-          return new PipeFn(... [new TupleFn(... res.toList())].concat(this.fnodes.slice(i)))
+          return new PipeFn(... [res.toTupleFn()].concat(this.fnodes.slice(i)))
         }
 
         res = this.fnodes[i].apply(res, context)
@@ -1091,7 +1110,7 @@ var ftl = (function() {
 
     apply(input) {
       if (!input)
-        return null;
+        return this;
 
       if (input instanceof Tuple)
         return input.get(this.seq);
@@ -1116,7 +1135,8 @@ var ftl = (function() {
 
     build(module, inputFn) {
       if (inputFn instanceof TupleFn && inputFn.hasName(this.name)) {
-        return new PipeFn(this.params, this)
+        this.params = this.params.build(module, inputFn);
+        return this;
       }
 
       else if (module.hasFn(this.name)) {
@@ -1126,15 +1146,28 @@ var ftl = (function() {
 
           var params_len = f_params.fnodes.length;
           var actual_params_len = this.params.fnodes.length;
-
+          var ret = null;
           if (actual_params_len >= params_len)
-            return new ftl.PipeFn(this.params, f)
+            ret = new PipeFn(this.params, f);
+          else if (inputFn instanceof TupleFn && inputFn.size + this.params.size >= params_len)
+            ret = new PipeFn(new TupleFn(... inputFn.slice(0, params_len - this.params.size), ... this.params.fnodes), f);
+          else if (!(inputFn instanceof TupleFn) && this.params.size + 1 >= params_len)
+            ret = new PipeFn(new TupleFn(inputFn, ... this.params.fnodes), f);
           else
-            return new ftl.PartialFunctionFn(f, param_list);          
-        }
+            throw new Error("calling arguments to " + f + " does not match argument number!"); 
 
-        return new PipeFn(params, new RefFn(this.name));
+          return ret.build(module, inputFn);
+        }
       }
+
+      throw new Error(this.name + " can not be resolved.");
+    }
+
+    apply(input) {
+      var f = input.get(this.name);
+      if (!(f instanceof Fn))
+        throw new Error(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
+      return f.apply(this.params.apply(input));
     }
   }
 
