@@ -1,9 +1,3 @@
-fn sin(x) {
-  return Math.sin(x)
-}
-
-sin(3.14)
-
 fn contains(str, sub) {
   return str.includes(sub);
 }

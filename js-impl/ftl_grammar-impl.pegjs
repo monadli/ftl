@@ -11,7 +11,7 @@
 // ftl core functions and classes.
 var ftl = (function() {
 
-  var version = '0.0.0.1';
+  var version = '0.0.0.2';
   var TupleSelectorPattern = /_\d+$/;
 
   function getValueString(value) {
@@ -39,7 +39,6 @@ var ftl = (function() {
       ret.addValue(args[i]);
     return ret;
   }
-
 
   function pass_through() {
     return this;
@@ -1130,6 +1129,27 @@ var ftl = (function() {
     }
   }
 
+  class ExprFn extends WrapperFn {
+    constructor(f, params) {
+      super(f);
+      this.params = params;
+    }
+
+    build(module, inputFn) {
+      super.build((module, inputFn);
+      for (var i = 0; i < this.params.length; i++)
+        this.params[i] = this.params[i].build(module, inputFn);
+      return this;      
+    }
+
+    apply(input) {
+      var ret = super.apply(this.params[0].apply(input));
+      for (var i = 1; i < this.params.length; i++)
+        return ret.apply(this.params[i].apply(input));
+      return ret;
+    }
+  }
+
   /**
    * CallExprFn captures call expressions such as sin(3.14).
    * 
@@ -1145,7 +1165,8 @@ var ftl = (function() {
 
     build(module, inputFn) {
       if (inputFn instanceof TupleFn && inputFn.hasName(this.name)) {
-        this.params = this.params.build(module, inputFn);
+        for (var i = 0; i < this.params.length; i++)
+          this.params[i] = this.params[i].build(module, inputFn);
         return this;
       }
 
@@ -1155,14 +1176,14 @@ var ftl = (function() {
           var f_params = f.params;
 
           var params_len = f_params.fnodes.length;
-          var actual_params_len = this.params.fnodes.length;
+          var actual_params_len = this.params[0].size;
           var ret = null;
           if (actual_params_len >= params_len)
-            ret = new PipeFn(this.params, f);
-          else if (inputFn instanceof TupleFn && inputFn.size + this.params.size >= params_len)
-            ret = new PipeFn(new TupleFn(... inputFn.slice(0, params_len - this.params.size), ... this.params.fnodes), f);
-          else if (!(inputFn instanceof TupleFn) && this.params.size + 1 >= params_len)
-            ret = new PipeFn(new TupleFn(inputFn, ... this.params.fnodes), f);
+            ret = new PipeFn(this.params[0], f);
+          else if (inputFn instanceof TupleFn && inputFn.size + this.params[0].size >= params_len)
+            ret = new PipeFn(new TupleFn(... inputFn.slice(0, params_len - this.params[0].size), ... this.params[0].fnodes), f);
+          else if (!(inputFn instanceof TupleFn) && this.params[0].size + 1 >= params_len)
+            ret = new PipeFn(new TupleFn(inputFn, ... this.params[0].fnodes), f);
           else
             throw new Error("calling arguments to " + f + " does not match argument number!"); 
 
@@ -1177,7 +1198,10 @@ var ftl = (function() {
       var f = input.get(this.name);
       if (!(f instanceof Fn))
         throw new Error(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
-      return f.apply(this.params.apply(input));
+      var ret = f.apply(this.params[0].apply(input));
+      for (var i = 1; i < this.params.length; i++)
+        return ret.apply(this.params[i].apply(input));
+      return ret;
     }
   }
 
@@ -1399,6 +1423,7 @@ var ftl = (function() {
     RefFn: RefFn,
     CallExprFn: CallExprFn,
     ExprRefFn: ExprRefFn,
+    ExprFn: ExprFn,
     TailFn: TailFn,
     OperandFn: OperandFn,
     ArrayElementSelectorFn: ArrayElementSelectorFn,
@@ -1643,7 +1668,16 @@ FunctionDeclaration
     return ret;
   }
 
-Tuple = "(" _ elms:ParameterList? ")" { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(... elms) }
+Tuple
+  = "(" _ elms:ParameterList? ")" { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(... elms) }
+
+ExpressionCurry
+  = expr:Tuple params:(_ Tuple)+ {
+
+    //# ExpressionCurry
+
+    return new ftl.ExprFn(expr, extractList(params, 1))
+  }
 
 ParameterList
   = first:Parameter rest:(_ "," _ Parameter)* {
@@ -1730,6 +1764,7 @@ PrimaryExpression
   / Identifier
   / Literal
   / ArrayLiteral
+  / ExpressionCurry
   / Tuple
   / TupleSelector
 
@@ -1895,12 +1930,11 @@ MemberExpression
   = Identifier _ "[" _ ( ParameterList)+ _ "]"
 
 CallExpression
-  = id: Identifier _ params:Tuple {
+  = id: Identifier params:(_ Tuple)+ {
 
     //# CallExpression
 
-    id.params = params;
-    return new ftl.CallExprFn(id.name, params);
+    return new ftl.CallExprFn(id.name, extractList(params, 1));
   }
 
 // Native javascript block wrapped with "{" and "}"
