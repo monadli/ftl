@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="ftl-js-core.js"></script>
+  <script src="ftl-js-parser.js"></script>
+    
+  <script id='module:ftl.lang' type='application/ftl'>module ftl.lang
+
+//
+// basic arithmetic operators
+//
+
+// unary -
+fn ---(val) { return -val }
+
+fn x + y { return x + y }
+fn x - y { return x - y }
+fn x * y { return x * y }
+fn x / y { return x / y }
+fn x % y { return x % y }
+
+//
+// basic logic operators
+//
+fn x == y {
+  function arrayIdentical(a, b) {
+    var i = a.length;
+    if (i != b.length) return false;
+    while (i--) {
+        if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+  return x == y || x instanceof Array && y instanceof Array && arrayIdentical(x, y)
+  || x instanceof Tuple && x.equals(y) }
+fn x != y { return x != y }
+fn x < y { return x < y }
+fn x <= y { return x <= y }
+fn x > y { return x > y }
+fn x >= y { return x >= y }
+fn x || y$() { return x || y() }
+fn x && y$() { return x && y() }
+
+// basic math functions
+fn sin(x) { return Math.sin(x) }
+fn cos(x) { return Math.cos(x) }
+
+// ternary operator with if_true and otherwise marked as tail functions
+fn condition ? if_true() : otherwise() { return condition ? if_true() : otherwise() }
+
+// ternary operator with if_true and otherwise marked as tail functions
+fn condition ?? if_true$() :: otherwise$() { return condition ? if_true() : otherwise() }
+
+// factorial
+fn x! -> x < 2 ?? 1 :: (((x - 1)!) * x)
+
+//
+// tuple functions
+//
+
+// operator '.' for sub-element resolution
+fn a . b(raw) ->  b(a)
+
+//
+// list functions
+//
+
+// length of list
+fn len(list) {
+  return list.length;
+}
+
+// append item to list and return
+fn list += item {
+  list.push(item)
+  return list
+}
+
+// internal map
+//fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : map(src, append(mapped, mapper(src[index])), index + 1, mapper)
+
+// map operator that returns a new list with list element mapped with mapper function
+//fn list => mapper(item) -> _map(list, [], 0, mapper)
+
+// internal reduce
+//fn _reduce(accu, list, index, reducer) -> index == len(list) ? accu : _reduce(reducer(accu, list[index]), list, index + 1, reducer)
+
+// reduce operator that returns reduced from list with reducer function
+//fn list =|> reducer(i1, i2) -> (list[0], list, 1, reducer) -> reduce
+
+// internal filter
+//fn _filter(list, filtered, index, predicate) ->
+// index == len(list) ? filtered : _filter(list, (list[index], predicate, filtered) -> _1(_0) ? (_2 += _0) : _2, index + 1, predicate)
+
+// filter operator
+//fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
+    </script>
+
+<script id='module:unit.test' type='application/ftl'>import ftl.lang.*
+
+fn square_area(x, y) {
+
+  // module.get('==').apply(1, 2);
+  return x * y;
+}
+
+"Hello, ftl!" == 'Hello, ftl!'
+3.14159 == 3.14159
+true == true
+false == false
+[] == []
+[1, 2, 3.14159, 'hello'] == [1, 2, 3.14159, 'hello']
+1 + 2 + (3 * 4) == 15
+
+// logic operation
+(1 > 2) || (2 > 1) == true
+(2 > 1) || (1 > 2) == true
+(3 > 2) && (2 > 1) == true
+(1 > 2) && (2 > 1) == false
+
+// arithmetic
+"a" + "b" + "c" == 'abc'
+'a' + 'b' + 'c' == "abc"
+square_area(2, 3) == 6
+(2, 3) -> square_area == 6
+
+// expr fn
+((_0, _1) -> _0 + _1)(1, 2) == 3
+((x:_0, y:_1) -> x + y)(1, 2)
+
+(1, 2) -> $(x, y) -> x + y == 3
+
+</script>
+
+<script>
+function init() {
+  var ftl_lang = document.getElementById('module:ftl.lang').text;
+  var module = ftl.parser.parse(ftl_lang);
+  ftl.addModule(module.name, module);
+  console.log('ftl.lang loaded');
+}
+
+function load() {
+  var ftl_code = document.getElementById('module:unit.test').text;
+  var code_area = document.getElementById('code-area');
+  code_area.value = ftl_code;
+
+  init();
+}
+
+function run_test() {
+  var out_area = document.getElementById('out_area');
+  out_area.value = '';
+
+  try {
+    var code_area = document.getElementById('code-area');
+    var module = ftl.parser.parse(code_area.value);
+
+    module.executables.forEach(function(exec) {
+      out_area.value += (exec instanceof ftl.TupleFn || exec.constructor.name == 'Fn' ? 'tuple' : exec.toString()) + ' => '
+      var res = exec.apply(null, context=module);
+      if (typeof(res) != 'undefined' && res instanceof ftl.TailFn) {
+        res = res.apply();
+      }
+      if (typeof(res) != 'undefined') {
+        if (res instanceof ftl.RefFn) {
+          out_area.value += 'reference ' + res.name + ' undefined\r\n';
+        } else if (Array.isArray(res) || typeof res == 'string') {
+          out_area.value += JSON.stringify(res) + '\r\n';
+        } else
+          out_area.value += res + '\r\n';
+      }
+    });
+  } catch (e) {
+    if (e.stack)
+      console.log(e.stack);
+    out_area.value += e.message;
+  }
+}
+</script>
+</head>
+<body onload="load()">
+  <textarea id='code-area' style='width:800px;height:400px'>
+  </textarea>
+  <div>
+    <button onclick='run_test()'>Run</button>
+  </div>
+  <textarea id='out_area' style='width:800px; height:200px; margin-top:20px'>
+  </textarea>
+</body>

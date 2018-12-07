@@ -141,7 +141,7 @@ var ftl = (function() {
     addImport(name, f) {
       if (!f)
         throw new Error('Can not import null for ' + name + '!')
-    
+
       if (this._imports[name]) {
         console.log("import " + name + " exists! Overriding.");
       }
@@ -511,10 +511,6 @@ var ftl = (function() {
     }
   }
 
-  class DummyParamTuple {
-    
-  }
-
   /**
    * Native javascript function.
    */
@@ -571,7 +567,7 @@ var ftl = (function() {
       return params;
     }
 
-    // This is called by module when adding a function into module 
+    // This is called by module when adding a function into module. 
     buildFunction(module) {
       this.params = this.params.build(module, new TupleFn(), true);
       this.params = NativeFunctionFn.buildParameters1(module, this.params);
@@ -686,7 +682,6 @@ var ftl = (function() {
 
     // This is called by general build, which simply returns this.
     build(module, inputFn) {
-      
       return this;
     }
 
@@ -728,8 +723,7 @@ var ftl = (function() {
   }
 
   /**
-   * Tuple function that contains list of position or named elements.
-   * Named elements are after position elements.
+   * Tuple function that contains list of elements, named or non-named.
    */
   class TupleFn extends ComposedFn {
     constructor(... fnodes) {
@@ -741,6 +735,7 @@ var ftl = (function() {
       return this.getElement(name) != null;
     }
 
+    // Returns element with the name. 
     getElement(name) {
       for (var i = 0; i < this.fnodes.length; i++) {
         var fnode = this.fnodes[i];
@@ -751,12 +746,8 @@ var ftl = (function() {
       return null;
     }
 
-    // 1. check duplicate names
-    // 2. make sure position elements are before named elements
-    // 3. check if all elements are pure refs
-    // @checkFnName true to check names against existing fn names for pure refs
-    build(module, inputFn, checkFnName) {
-      var pure_refs = true;
+    // Checks duplicate names
+    build(module, inputFn) {
       var names = new Set();
 
       for (var i = 0; i < this.fnodes.length; i++) {
@@ -766,25 +757,51 @@ var ftl = (function() {
           if (names.has(fnode.name))
             throw new Error("Name " + fnode.name + " is defined more than once!");
           names.add(fnode.name);
-          pure_refs = false;
           continue;
-        }
-
-        else {
-          pure_refs = pure_refs && fnode instanceof RefFn && !fnode.name.startsWith('_') && (inputFn.hasName(fnode.name) || checkFnName || !module.hasFn(fnode.name));
-          if (names.size > 0)
-            throw new Error("Position element at index " + i + " is after named elements!");            
         }
 
         // build the node
         this.fnodes[i] = fnode = fnode.build(module, inputFn);
       }
 
-      if (pure_refs) {
-        for (var i = 0; i < this.fnodes.length; i++) {
-          var fnode = this.fnodes[i];
-          this.fnodes[i] = new NamedExprFn(fnode.name, inputFn.hasName(fnode.name) ? fnode : new TupleSelectorFn(i));
+      // TODO
+      // return this.fnodes.length == 1 ? this.fnodes[0] : this;
+      return this;
+    }
+
+    // Builds the tuple fn as function arguments
+    buildArguments(module, inputFn) {
+
+      function validateArguments(tuple) {
+
+        var names = new Set();
+
+        for (var i = 0; i < tuple.fnodes.length; i++) {
+          var fnode = tuple.fnodes[i];
+
+          if (fnode instanceof NamedExprFn) {
+            if (names.has(fnode.name))
+              throw new Error("Name " + fnode.name + " is defined more than once!");
+            names.add(fnode.name);
+            continue;
+          }
+
+          else if (!(fnode instanceof RefFn))
+            throw new Error("Element at index " + i + " is not an indentifier!");
+
+          else if (names.size > 0)
+            throw new Error("Position element at index " + i + " is after named elements!");
         }
+      }
+
+      validateArgument(this);
+
+      for (var i = 0; i < this.fnodes.length; i++) {
+        var fnode = this.fnodes[i];
+        if (fnode instanceof RefFn)
+          this.fnodes[i] = new NamedExprFn(fnode.name, new TupleSelectorFn(i));
+        else
+          this.fnodes[i] = new NamedExprFn(fnode.name, new SeqSelectorOrDefault(i, node.wrapped));
       }
 
       // TODO
@@ -809,6 +826,10 @@ var ftl = (function() {
           tuple.addValue(fnode.apply(input)); 
         else if (fnode instanceof NamedExprFn) {
           var res = fnode.apply(input, context);
+
+          // if no name is resolved, return itself
+          if (res == fnode)
+            return this;
           tuple.addKeyValue(fnode.name, res);
         }
 
@@ -835,13 +856,97 @@ var ftl = (function() {
     }
   }
 
+  /**
+   * Parameter tuple. It satisfy all tuple requirements, and supports default values after position parameters.
+   */
   class ParamTupleFn extends TupleFn {
     constructor( ... fnodes) {
       super(... fnodes)
     }
 
-    build() {
-      
+    validateInput(inputFn, minSize) {
+      var names = new Set();
+      var pos_sz = 0;
+      for (var i = 0; i < inputFn.size; i++) {
+        if (inputFn.fnodes[i] instanceof NamedExprFn) {
+          names.add(inputFn.fnodes[i].name);
+        } else if (names.size > 0) {
+          throw new Error("Position argument at index " + i + " after named argument!");
+        } else
+          pos_sz = i + 1;
+      }
+
+      // when there are only positioned arguments and are more than minimal
+      if (names.size == 0 && args.size >= minSize)
+        return null;
+
+      var need_new_args = false;
+      var new_args = new Array(params.size);
+      for (var i = 0; i < params.size; i++) {
+        var name = params.fnodes[i].name;
+        if (i < pos_sz) {
+          if (names.has(name)) {
+            throw new Error("Parameter " + name + " is provided with both position and named argument!");
+          }
+
+          new_args[i] = args.fnodes[i];
+        }
+        else if (!names.has(name)) {
+          new_args[i] = params.fnodes[i];
+          need_new_args = true;
+        }
+        else if (i < args.size && args.fnodes[i].name == name) {
+          new_args[i] = args.fnodes[i];
+        }
+        else {
+          new_args[i] = args.getElement(name);
+          need_new_args = true;
+        }
+      }
+
+      if (!need_new_args) {
+        return;
+      } else {
+        return new TupleFn(... new_args);
+      }
+    }
+
+    build(module, inputFn, ignoreInput) {
+      super.build(module, inputFn);
+
+      var default_count = 0;
+      for (var i = 0; i < this.fnodes.length; i++) {
+        var fnode = this.fnodes[i];
+        if (fnode instanceof NamedExprFn) {
+          default_count++;
+          this.fnodes[i] = new NamedExprFn(fnode.name, new SeqSelectorOrDefault(i, node.wrapped));
+        }
+        else if (fnode instanceof RefFn) {
+          if (default_count > 0)
+            throw new Error("Position element at index " + i + " is after named elements!");
+          this.fnodes[i] = new NamedExprFn(fnode.name, new TupleSelectorFn(i));
+        }
+        else throw new Error("Element at index " + i + " is not an id nor id with default value!");
+      }
+
+      // The following is for existanceof input.
+      // This happens for anonymous inline functions.
+      if (!(inputFn instanceof TupleFn))
+        inputFn = new TupleFn(inputFn).build(module, inputFn);
+
+      var min_param_sz = this.params.size;
+      for (var i = 0; i < this.params.size; i++)
+        if (this.params.fnodes[i].wrapped instanceof SeqSelectorOrDefault) {
+          min_param_sz = i;
+          break;
+        }
+
+      if (!ignoreInput) {
+        var new_tuple = this.validateInput(inputFn, this.fnodes.length - default_count);
+        return new_tuple ? new PipeFn(new_tuple, this) : this;
+      }
+
+      return this;
     }
 
     clone() {
@@ -867,6 +972,11 @@ var ftl = (function() {
 
     get isConst() {
       return this.wrapped instanceof ConstFn;
+    }
+
+    apply(input, context) {
+      var ret = super.apply(input, context);
+      return ret == this.wrapped &&  this || ret;
     }
   }
 
@@ -1057,12 +1167,16 @@ var ftl = (function() {
     apply(tuple, context) {
       var res = this.fnodes[0].apply(tuple, context);
 
+      // there is name unresolved
+      if (res == this.fnodes[0])
+        return this;
+
       for (var i = 1; i < this.fnodes.length; i++) {
         if (res instanceof TailFn) {
           return new TailFn(new PipeFn([res._wrapped].concat(this.funs.slice(i))));
         } else if (res instanceof Tuple && res.hasTail()) {
-          var nextTail = new TupleFn(res.toList());
-          res = new TailFn(new PipeFn([nextTail].concat(this.funs.slice(i))));
+          var nextTail = res.toTupleFn();
+          res = new TailFn(new PipeFn(nextTail, ... this.fnodes.slice(i)));
           res.nextTail = nextTail;
           return res;
         }
@@ -1091,7 +1205,7 @@ var ftl = (function() {
   class RefFn extends Fn {
     constructor(name) {
       super()
-      if (name.endsWith('$')) {
+      if (name.endsWith('$') && name.length > 1) {
         this.name = name.substr(0, name.length - 1);
         this.is_tail = true;
       } else {
@@ -1259,6 +1373,10 @@ var ftl = (function() {
         ret = ret.toTupleFn().apply(this.params[i].apply(input));
       return ret instanceof Tuple && ret.size == 1 ? ret.get('_0') : ret;
     }
+
+    toString() {
+      return 'expression'
+    }
   }
 
   /**
@@ -1300,6 +1418,20 @@ var ftl = (function() {
     }
 
     build(module, inputFn) {
+
+      // lambda arguments
+      if (this.name == '$') {
+        if (this.params.length > 1)
+          throw new Error("lambda's arguments followed by tuple!");
+        var list = [];
+        for (var i = 0; i < this.params[0].fnodes.length; i++) {
+          if (!(this.params[0].fnodes[i] instanceof RefFn))
+            throw new Error("lambda's argument is not a qualifier!");
+          list.push(new NamedExprFn(this.params[0].fnodes[i].name, new TupleSelectorFn(i)));
+        }
+        return new TupleFn(... list);
+      }
+
       if (inputFn instanceof TupleFn && inputFn.hasName(this.name)) {
         for (var i = 0; i < this.params.length; i++)
           this.params[i] = this.params[i].build(module, inputFn);
@@ -1321,13 +1453,13 @@ var ftl = (function() {
             return new PipeFn(combined, f);
           else
             return built;
-          /*
+
           var curry_params_len = this.params[0].size;
           var ret = null;
           if (curry_params_len >= params_len)
             ret = new PipeFn(this.params[0], f);
           else if (inputFn instanceof TupleFn && inputFn.size + curry_params_len.size >= params_len) {
-            new TupleFn(... inputFn.slice(0, params_len - this.params[0].size)
+            new TupleFn(... inputFn.slice(0, params_len - this.params[0].size))
             var extra = NativeFunctionFn.validateInput(inputFn, this.params[0]);
             
             ret = new PipeFn(new TupleFn(... inputFn.slice(0, params_len - this.params[0].size), ... this.params[0].fnodes), f);
@@ -1338,7 +1470,6 @@ var ftl = (function() {
             throw new Error("calling arguments to " + f + " does not match argument number!"); 
 
           return ret.build(module, inputFn);
-          */
         }
       }
 

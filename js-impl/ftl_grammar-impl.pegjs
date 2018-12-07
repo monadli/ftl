@@ -188,7 +188,8 @@ var ftl = (function() {
     }
 
     addExecutable(exec) {
-      this._executables.push(exec.build(this, null));
+      // passing empty tuple as input
+      this._executables.push(exec.build(this, new TupleFn()));
     }
 
     get executables() { return this._executables }
@@ -1136,10 +1137,10 @@ var ftl = (function() {
     }
 
     build(module, inputFn) {
-      super.build((module, inputFn);
+      super.build(module, inputFn);
       for (var i = 0; i < this.params.length; i++)
         this.params[i] = this.params[i].build(module, inputFn);
-      return this;      
+      return this;
     }
 
     apply(input) {
@@ -1769,7 +1770,7 @@ PrimaryExpression
   / TupleSelector
 
 Operator
-  = !"->" first:OperatorSymbol rest:OperatorSymbol* {
+  = !"//" !"->" first:OperatorSymbol rest:OperatorSymbol* {
 
     //# Operator
 
