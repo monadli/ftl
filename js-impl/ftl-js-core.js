@@ -201,10 +201,10 @@ var ftl = (function() {
 
   class Tuple {
     constructor() {
+
       // full map of named or unnamed values
-      this._map = new Map();
-//      this._list = []
-      this._size = 0;
+      this._names = new Map();
+      this._values = [];
     }
 
     static fromKeyValue(key, value) {
@@ -230,33 +230,22 @@ var ftl = (function() {
     }
 
     get size() {
-      return this._size;
+      return this._values.length;
     }
 
     // add value without id
     addValue(value) {
-//      this._list.push(value)
-      this._map.set("_" + this._size++, value);
-    }
-
-    // add key for index
-    setKey(index, key) {
-      this._map.set(key, this._map.get("_" + index));
+      this.addKeyValue('_' + this.size, value);
     }
 
     addKeyValue(key, value) {
-//      this._list.push(value)
-      this._map.set("_" + this._size++, value);
-      this._map.set(key, value);
-    }
-
-    replaceValue(key, value) {
-      this._map.set(key, value);
+      this._names.set(key, this.size);
+      this._values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value);
     }
 
     copyAllFrom(anotherTuple) {
       if (anotherTuple == null)
-        return
+        return;
 
       if (anotherTuple instanceof Tuple)
         anotherTuple.toList().forEach(elm => this.addValue(elm));
@@ -264,46 +253,37 @@ var ftl = (function() {
         this.addValue(anotherTuple);
     }
 
-    getNamedKeys() {
-      var keys = [];
-      for (let key of this._map.keys()) {
-        if (!key.startsWith("_"))
-          keys.push(key)
-      }
-      return keys;
+    // returns list of all names
+    //
+    getNames() {
+      return this._names.filter(key => !key.startsWith("_"));
     }
 
+    // returns named element value
     get(key) {
-      // if (key.startsWith('_')) {
-      //   var ind = parseInt(key.substring(1))
-      //   return ind < this._list.length ? this._list[ind] : null
-      // }
-      return this._map.get(key);
+      return this._values[this._names.get(key)];
+    }
+
+    // returns indexed value
+    getIndex(index) {
+      return this._values[index];
     }
 
     hasTail() {
-      for (var i = 0; i < this._size; i++)
-        if (this.get('_' + i) instanceof TailFn)
-          return true;
-      return false
+      return this._values.find(elm => elm instanceof TailFn) !== undefined;
     }
 
     // checks if any element is a reference
     // it does not go into nested elements
     hasRef() {
-      for (var i = 0; i < this._size; i++)
-        if (this.get('_' + i) instanceof RefFn)
-          return true;
-      return false
+      return this._values.find(elm => elm instanceof RefFn) !== undefined;
     }
 
     toList() {
-      var list = [];
-      for (var i = 0; i < this._size; i++)
-        list.push(this.get('_' + i))
-      return list
+      return this._values;
     }
 
+    // Checkes equality of each value in both tuples sequentially. 
     equals(o) {
       if (!(o instanceof Tuple))
         return false;
@@ -311,53 +291,33 @@ var ftl = (function() {
       if (o.size != this.size)
         return false;
 
-      for (var i = 0; i < this._size; i++) {
-        var ith = this.get('_' + i);
-        var oth = o.get('_' + i);
+      for (var i = 0; i < this.size; i++) {
+        var ith = this.getIndex(i);
+        var oth = o.getIndex(i);
         if (ith != oth && (!(ith instanceof Tuple) || !ith.equals(oth)))
-            return false;
+          return false;
       }
       return true;
     }
 
+    // converts into a tuple fn
+    // TODO presesrve names
     toTupleFn() {
-      var list = [];
-      for (var i = 0; i < this._size; i++) {
-        var elm = this.get('_' + i);
-        if (elm instanceof Fn)
-          list.push(elm);
-        else
-          list.push(new ConstFn(elm));
-      }
-      
-      return new TupleFn(... list);
+      return new TupleFn(... this._values.map(elm => elm instanceof Fn ? elm : new ConstFn(elm)));
     }
 
     toString() {
-      if (this._size == 0)
-        return "()"
+      if (this._values.length == 0)
+        return "()";
 
       var buf = []
-      var i = 0
-      var last = null 
-      for (var [key, value] of this._map) {
-        if (key.startsWith('_')) {
-          if (last) {
-            buf.push(last)
-            i++
-          }
-          last = getValueString(value)
-        } else {
-          buf.push(key + ':' + getValueString(value))
-          i++
-          last = null
-        }
-        if (i == this._size)
-          break
-      }
-
-      if (i < this._size && last)
-        buf.push(last)
+      this._names.forEach((value, key, map) => {
+        var value_str = getValueString(this._values[value]);
+        if (!key.startsWith('_'))
+          buf.push(key + ':' + value_str);
+        else
+          buf.push(value_str);
+      });
 
       return '(' + buf.join(', ') + ')'
     }
@@ -457,7 +417,7 @@ var ftl = (function() {
    */
   class ConstFn extends Fn {
     constructor(value) {
-      if (value === undefined || value === null)
+      if (FnUtil.isNone(value))
         throw new FnConstructionError('val is undefined or null!')
 
       super();
@@ -522,8 +482,10 @@ var ftl = (function() {
     constructor(name, params, script) {
       super();
       this.name = name;
-      this.paramsInfo = params;
-      this.params = params.clone();
+
+      // TODO why need it in n-ary operator?
+      this.paramsInfo = params; 
+      this.params = new ParamTupleFn(... params.fnodes);
       this.script = script;
     }
 
@@ -570,7 +532,6 @@ var ftl = (function() {
     // This is called by module when adding a function into module. 
     buildFunction(module) {
       this.params = this.params.build(module, new TupleFn(), true);
-      this.params = NativeFunctionFn.buildParameters1(module, this.params);
 
       if (typeof this.script != 'function') {
         var param_list = [];
@@ -653,7 +614,7 @@ var ftl = (function() {
     }
 
     apply(input) {
-      if ((input === undefined || input == null) && this.params.size > 0)
+      if (FnUtil.isNone(input) && this.params.size > 0)
         throw new Error("Input to native function " + this.name + " does not match!");
       var paramValues = this.params.apply(input).toList();
       var res = this.script.apply(null, paramValues)
@@ -670,14 +631,18 @@ var ftl = (function() {
    */  
   class FunctionFn extends WrapperFn {
     constructor(name, params, expr) {
-      super(new PipeFn(NativeFunctionFn.buildParameters(params), expr));
+      super(new PipeFn(params, expr));
       this.name = name;
       this.params = this.wrapped.fnodes[0];
     }
 
     // This is called by module when adding a function into module 
     buildFunction(module) {
+      this.wrapped.fnodes[0] = (this.wrapped.fnodes[0] instanceof TupleFn) && new ParamTupleFn(... this.wrapped.fnodes[0].fnodes)
+      || new ParamTupleFn(this.wrapped.fnodes[0]); 
+
       this.wrapped = this.wrapped.build(module, new TupleFn());
+      this.params = this.wrapped.fnodes[0];
     }
 
     // This is called by general build, which simply returns this.
@@ -726,7 +691,9 @@ var ftl = (function() {
    * Tuple function that contains list of elements, named or non-named.
    */
   class TupleFn extends ComposedFn {
+    
     constructor(... fnodes) {
+      
       super(... fnodes)
     }
 
@@ -822,34 +789,25 @@ var ftl = (function() {
 
       for (var i = 0; i < len; i++) {
         var fnode = this.fnodes[i];
-        if (fnode instanceof ConstFn || fnode instanceof PipeFn)
-          tuple.addValue(fnode.apply(input)); 
-        else if (fnode instanceof NamedExprFn) {
-          var res = fnode.apply(input, context);
 
-          // if no name is resolved, return itself
-          if (res == fnode)
-            return this;
-          tuple.addKeyValue(fnode.name, res);
-        }
-
+        var res = null;
+        if (fnode instanceof Fn)
+          res = fnode.apply(input);
         else {
           var tp = typeof(fnode);
           if (tp == 'number' || tp == 'string' || tp == 'boolean' || Array.isArray(fnode))
-            var res = fnode
-          else
-            var res = fnode.apply(input, context);
-          console.log('res:', res)
-
-          if (res instanceof Tuple && !(fnode instanceof OperandFn)) {
-            var elms = res.toList();
-            elms.forEach(val => {
-              tuple.addValue(val);
-            });
-          }
-          else
-            tuple.addValue(res);
+            res = fnode;
         }
+
+        if (fnode instanceof NamedExprFn) {
+
+          // if no name is resolved, return itself
+          if (res === fnode.wrapped)
+            return this;
+          tuple.addKeyValue(fnode.name, res);
+        }
+        else
+          tuple.addValue(res);
       }
 
       return tuple;
@@ -877,10 +835,11 @@ var ftl = (function() {
       }
 
       // when there are only positioned arguments and are more than minimal
-      if (names.size == 0 && args.size >= minSize)
+      if (names.size == 0 && inputFn.fnodes.length >= minSize)
         return null;
 
       var need_new_args = false;
+/*
       var new_args = new Array(params.size);
       for (var i = 0; i < params.size; i++) {
         var name = params.fnodes[i].name;
@@ -903,12 +862,8 @@ var ftl = (function() {
           need_new_args = true;
         }
       }
-
-      if (!need_new_args) {
-        return;
-      } else {
-        return new TupleFn(... new_args);
-      }
+*/
+      return need_new_args && new TupleFn(... new_args) || null;
     }
 
     build(module, inputFn, ignoreInput) {
@@ -919,34 +874,91 @@ var ftl = (function() {
         var fnode = this.fnodes[i];
         if (fnode instanceof NamedExprFn) {
           default_count++;
-          this.fnodes[i] = new NamedExprFn(fnode.name, new SeqSelectorOrDefault(i, node.wrapped));
+          this.fnodes[i] = new NamedExprFn(fnode.name, new SeqSelectorOrDefault(i, fnode.wrapped));
         }
         else if (fnode instanceof RefFn) {
           if (default_count > 0)
             throw new Error("Position element at index " + i + " is after named elements!");
           this.fnodes[i] = new NamedExprFn(fnode.name, new TupleSelectorFn(i));
         }
-        else throw new Error("Element at index " + i + " is not an id nor id with default value!");
+        else
+          throw new Error("Element at index " + i + " is not an id nor id with default value!");
       }
 
-      // The following is for existanceof input.
-      // This happens for anonymous inline functions.
-      if (!(inputFn instanceof TupleFn))
-        inputFn = new TupleFn(inputFn).build(module, inputFn);
-
-      var min_param_sz = this.params.size;
-      for (var i = 0; i < this.params.size; i++)
-        if (this.params.fnodes[i].wrapped instanceof SeqSelectorOrDefault) {
+/*
+      var min_param_sz = this.fnodes.length;
+      for (var i = 0; i < this.fnodes.length; i++)
+        if (this.fnodes[i].wrapped instanceof SeqSelectorOrDefault) {
           min_param_sz = i;
           break;
         }
-
+*/
+      // The following is for existanceof input.
+      // This happens for anonymous inline functions.
       if (!ignoreInput) {
+        if (!(inputFn instanceof TupleFn))
+          inputFn = new TupleFn(inputFn).build(module, inputFn);
         var new_tuple = this.validateInput(inputFn, this.fnodes.length - default_count);
         return new_tuple ? new PipeFn(new_tuple, this) : this;
       }
 
       return this;
+    }
+
+    /**
+     * This is for input with both positioned and named parameters.
+     */
+    build_input_adaptor(module, inputFn) {
+      if (!(inputFn instanceof TupleFn))
+        inputFn = new TupleFn(inputFn).build(module, inputFn);
+
+      var names = new Set();
+      var pos_sz = 0;
+      for (var i = 0; i < inputFn.size; i++) {
+        if (inputFn.fnodes[i] instanceof NamedExprFn) {
+          names.add(inputFn.fnodes[i].name);
+        } else if (names.size > 0) {
+          throw new Error("Input position argument at index " + i + " after named argument!");
+        } else
+          pos_sz = i + 1;
+      }
+
+      // no named arguments
+      if (names.size == 0)
+        return this;
+
+      var need_new_args = false;
+      var new_args = new Array(params.length);
+      for (var i = 0; i < this.params.length; i++) {
+        var name = params.fnodes[i].name;
+        if (i < pos_sz) {
+          if (names.has(name)) {
+            throw new Error("Parameter " + name + " is provided with both position and named argument!");
+          }
+
+          new_args[i] = inputFn.fnodes[i];
+        }
+        else if (!names.has(name)) {
+          new_args[i] = params.fnodes[i];
+          need_new_args = true;
+        }
+        else if (i < args.size && args.fnodes[i].name == name) {
+          new_args[i] = args.fnodes[i];
+        }
+        else {
+          new_args[i] = args.getElement(name);
+          need_new_args = true;
+        }
+      }
+
+      if (!need_new_args) {
+        return;
+      } else {
+        return new TupleFn(... new_args);
+      }
+
+      var new_tuple = this.validateInput(inputFn, this.fnodes.length - default_count);
+      return new_tuple ? new PipeFn(new_tuple, this) : this;
     }
 
     clone() {
@@ -973,15 +985,11 @@ var ftl = (function() {
     get isConst() {
       return this.wrapped instanceof ConstFn;
     }
-
-    apply(input, context) {
-      var ret = super.apply(input, context);
-      return ret == this.wrapped &&  this || ret;
-    }
   }
 
   /**
-   * Composition function.
+   * This represents function chains in form of:
+   * f1 -> f2 ... -> fn
    */
   class PipeFn extends ComposedFn {
     constructor(... elements) {
@@ -1003,113 +1011,6 @@ var ftl = (function() {
         var ret = new PipeFn(Array.isArray(first) ? first : [first])
         ret.appendElements(rest);
         return ret;
-      }
-    }
-
-    resolveInternalReferences(module) {
-      this.resolveReferences(module, this.funs);
-    }
-
-    // resolves names in elms[]
-    resolveReferences(module, elms) {
-      if (elms.length < 2)
-        return elms;
-
-      var prev = elms[0];
-      for (var i = 1; i < elms.length; i++) {
-
-        var elm = elms[i];
-
-        // single pure ref
-        if (is_elm_pure_ref(module, elm)) {
-          // wrap elm into NamedExprFn and then into TupleFn
-          var newElm = new TupleFn([new NamedExprFn(elm.name, elm)]);
-          elm.name = "_0";
-          elms.splice(i, 1, newElm);
-          if (!(prev instanceof TupleFn) || prev instanceof TupleFn && !prev.hasName(elm.name)) {
-            elm.name = "_0";
-          }
-          elm = newElm;
-        }
-        
-        // tuple
-        else if (elm instanceof TupleFn && elm.size > 0) {
-
-          // check if all elements are refs
-          var allRef = true;
-          for (var j = 0; j < elm.list.length; j++) {
-            var em = elm.list[j];
-            if (!is_elm_pure_ref(module, em)) {
-              allRef = false;
-              break;
-            }
-          }
-
-          if (allRef) {
-            var newElms = [];
-            for (var j = 0; j < elm.list.length; j++) {
-              var em = elm.list[j];
-              newElms.push(new NamedExprFn(em.name, em));
-            }
-
-            elm.tp = newElms;
-
-            var hasAnyName = false;
-            var siz = 1;
-            // check all refs can be found from prev tuple
-            // otherwise renames to be sequences.
-            if (prev instanceof TupleFn) {
-              siz = prev.size;
-              for (var j = 0; j < prev.list.length; j++) {
-                var em = prev.list[j];
-                if (em instanceof NamedExprFn) {
-                  hasAnyName = true;
-                  break;
-                }
-              }
-            }
-
-            if (!hasAnyName) {
-              if (siz > elm.elements.length)
-                siz = elm.elements.length;
-              for (var j = 0; j < siz; j++) {
-                elm.elements[j].elm.name = '_' + j;
-              }
-            }
-          }
-
-          // not all elements are pure refs
-          else {
-            for (var j = 0; j < elm.list.length; j++) {
-              var em = elm.list[j];
-              if (em instanceof TupleFn) {
-                this.resolveReferences(module, [prev, em]);
-              }
-              
-              // other cases are composition fn
-              else if (em instanceof PipeFn) {
-                this.resolveReferences(module, [prev].concat(em.elements));
-              }
-
-              else if (em instanceof NamedExprFn) {
-                if (em.elm instanceof TupleFn) {
-                  var arr = [prev, em.elm];
-                  this.resolveReferences(module, arr);
-                  em.elm = arr[1];
-                }
-
-                else if (em.elm instanceof PipeFn) {
-                  var arr = [prev].concat(em.elm.elements);
-                  this.resolveReferences(module, arr);
-                  em.elm.elements.splice(0, arr.length - 1)
-                  em.elm.appendElements(arr.slice(1));
-                  console.log(em.elm.elements)
-                }
-              }
-            }
-          }
-        }
-        prev = elm;
       }
     }
 
@@ -1148,7 +1049,7 @@ var ftl = (function() {
 
         // pure single ref, replace with (NamedExprFn(name, ...))
         if (this.fnodes[i] instanceof RefFn && !this.fnodes[i].name.startsWith('_')) {
-          
+
           var ref = (inputFn == null || inputFn == undefined || !(inputFn instanceof TupleFn || (inputFn instanceof TupleFn && !inputFn.hasName(this.fnodes[i].name)))) ?
             new TupleSelectorFn(0) : this.fnodes[i];
             this.fnodes[i] = new TupleFn(new NamedExprFn(this.fnodes[i].name, ref));
@@ -1168,7 +1069,7 @@ var ftl = (function() {
       var res = this.fnodes[0].apply(tuple, context);
 
       // there is name unresolved
-      if (res == this.fnodes[0])
+      if (res === this.fnodes[0])
         return this;
 
       for (var i = 1; i < this.fnodes.length; i++) {
@@ -1191,7 +1092,7 @@ var ftl = (function() {
           console.log("result of item " + i + ":", res);
       }
 
-      return res;
+      return FnUtil.unwrapMonad(res);
     }
 
     toString() {
@@ -1318,17 +1219,17 @@ var ftl = (function() {
         throw new FnConstructionError('seq is smaller than 0!');
 
       super();
-      this.seq = '_' + seq;
+      this.seq = seq;
     }
 
     apply(input) {
-      if (!input)
+      if (FnUtil.isNone(input))
         return this;
 
       if (input instanceof Tuple)
-        return input.get(this.seq);
+        return input.getIndex(this.seq);
 
-      if (this.seq == '_0')
+      if (this.seq == 0)
         return input;
     }
   }
@@ -1347,7 +1248,10 @@ var ftl = (function() {
      }
 
      apply(input) {
-       return super.apply(input) || this.defaultValue;
+       var sv = super.apply(input);
+       if (sv !== undefined && sv != null)
+         return sv;
+       return this.defaultValue;
      }
    }
 
@@ -1419,17 +1323,19 @@ var ftl = (function() {
 
     build(module, inputFn) {
 
-      // lambda arguments
+      // lambda arguments declaration
       if (this.name == '$') {
         if (this.params.length > 1)
-          throw new Error("lambda's arguments followed by tuple!");
+          throw new Error("FTL1: lambda's arguments followed by calling arguments!");
+/*
         var list = [];
         for (var i = 0; i < this.params[0].fnodes.length; i++) {
           if (!(this.params[0].fnodes[i] instanceof RefFn))
             throw new Error("lambda's argument is not a qualifier!");
           list.push(new NamedExprFn(this.params[0].fnodes[i].name, new TupleSelectorFn(i)));
         }
-        return new TupleFn(... list);
+*/
+        return new ParamTupleFn(... this.params[0].fnodes).build(module, inputFn);
       }
 
       if (inputFn instanceof TupleFn && inputFn.hasName(this.name)) {
@@ -1650,26 +1556,15 @@ var ftl = (function() {
     }
   }
 
-  /**
-   * A function wrapping a operand. This is a place holder to make sure results of a tuple not 
-   * to spread into parent tuple.
-   */
-  class OperandFn extends WrapperFn {
-    constructor(fn) {
-      super(fn);
+  class FnUtil {
+    // unwraps the single value of tuple that contains a single value (monad) 
+    static unwrapMonad(tuple) {
+      return tuple instanceof Tuple && tuple.size == 1 ? FnUtil.unwrapMonad(tuple.getIndex(0)) : tuple;
     }
 
-    build(module, inputFn) {
-      super.build(module, inputFn);
-      if (this.wrapped instanceof TupleFn && this.wrapped.fnodes.length == 1)
-        return this.wrapped.fnodes[0];
-      else
-        return this;
-    }
-
-    apply(input) {
-      var res = super.apply(input);
-      return (res instanceof Tuple && res.length == 1) ? res[0] : res;
+    // test if an element is undefined or null
+    static isNone(elm) {
+      return elm === undefined || elm == null;
     }
   }
 
@@ -1707,7 +1602,6 @@ var ftl = (function() {
     ExprRefFn: ExprRefFn,
     ExprFn: ExprFn,
     TailFn: TailFn,
-    OperandFn: OperandFn,
     ArrayElementSelectorFn: ArrayElementSelectorFn,
     SimpleTypeFn: SimpleTypeFn,
     FtlBuildError: FtlBuildError,

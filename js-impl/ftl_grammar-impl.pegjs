@@ -1968,7 +1968,7 @@ IdentifierName "identifier"
 IdentifierStart
   = AsciiLetter
   / "$"
-  / "_"
+  / "_" AsciiLetter
 
 /// non-start of identifier
 IdentifierPart

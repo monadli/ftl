@@ -231,6 +231,10 @@ ftl.parser = /*
               console.log('function id: ', id.name || id)
               console.log('expr: ', body)
 
+              if (id instanceof ftl.RefFn && body instanceof ftl.RefFn && params == null) {
+                throw new Error("Error on a function declaration with '" + id.name + "' and '" + body.name + "'. Are you overriding -> ?");
+              }
+
               var is_operator = id.type == 'OperatorDeclaration' || id.type == 'PostfixOperatorDeclaration';
               if (is_operator)
                 console.log('parameter list from operator: ', id.operands)
@@ -364,6 +368,11 @@ ftl.parser = /*
 
               //# UnaryOperatorExpression
               console.log('op', op)
+
+              // negative number
+              if (op == '-' && expr instanceof ftl.ConstFn)
+                return new ftl.ConstFn(-expr.value);
+
               console.log('expr', expr)
               return new ftl.PipeFn(expr, module.getAvailableFn(op.name || op));
             },
@@ -383,7 +392,7 @@ ftl.parser = /*
               // N_aryOperatorExpression
 
               var ops = extractList(rest, 1);
-              var params = [new ftl.OperandFn(operand)].concat(extractList(rest, 3).map(operand => new ftl.OperandFn(operand)));
+              var params = [operand].concat(extractList(rest, 3));
               return new N_aryOperatorExpressionFn(ops, params)      
             },
           "_",

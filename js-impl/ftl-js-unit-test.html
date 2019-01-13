@@ -33,12 +33,14 @@ fn x == y {
   }
   return x == y || x instanceof Array && y instanceof Array && arrayIdentical(x, y)
   || x instanceof Tuple && x.equals(y) }
+
 fn x != y { return x != y }
 fn x < y { return x < y }
 fn x <= y { return x <= y }
 fn x > y { return x > y }
 fn x >= y { return x >= y }
-fn x || y$() { return x || y() }
+//fn x || y$() { return x || y() }
+fn x || y { return x || y }
 fn x && y$() { return x && y() }
 
 // basic math functions
@@ -59,7 +61,7 @@ fn x! -> x < 2 ?? 1 :: (((x - 1)!) * x)
 //
 
 // operator '.' for sub-element resolution
-fn a . b(raw) ->  b(a)
+//fn a . b(raw) ->  b(a)
 
 //
 // list functions
@@ -104,13 +106,22 @@ fn square_area(x, y) {
   return x * y;
 }
 
+// basic types
 "Hello, ftl!" == 'Hello, ftl!'
 3.14159 == 3.14159
 true == true
 false == false
 [] == []
 [1, 2, 3.14159, 'hello'] == [1, 2, 3.14159, 'hello']
-1 + 2 + (3 * 4) == 15
+
+// tuple equality
+1 == (1)
+(1) == 1
+(-1) == -1
+-1 == (-1)
+(1, 2, 3) == (1, 2, 3)
+((1, 2), 3) == ((1, 2), 3)
+(a:(b:1, c:2), d:3) == ((1, 2), 3)
 
 // logic operation
 (1 > 2) || (2 > 1) == true
@@ -118,26 +129,46 @@ false == false
 (3 > 2) && (2 > 1) == true
 (1 > 2) && (2 > 1) == false
 
+// specia operators
+!5
+
+fn test1(x) -> false
+fn test2(x) -> true
+
+(1 -> (test1 || test2)) == true
+
 // arithmetic
+1 + 2 + (3 * 4) == 15
 "a" + "b" + "c" == 'abc'
 'a' + 'b' + 'c' == "abc"
 square_area(2, 3) == 6
-(2, 3) -> square_area == 6
+((2, 3) -> square_area) == 6
 
 // expr fn
 ((_0, _1) -> _0 + _1)(1, 2) == 3
-((x:_0, y:_1) -> x + y)(1, 2)
+((x:_0, y:_1) -> x + y)(1, 2) == 3
 
+// lambda
 (1, 2) -> $(x, y) -> x + y == 3
+2 -> $(x, y:3) -> x + y == 5
+(2, 4) -> $(x, y:3) -> x + y == 6
+(2, y:4) -> $(x, y:3) -> x + y == 6
+(2, y:0) -> $(x, y:3) -> x + y == 2
 
+
+(1, 2) -> (test, 1) -> (test2 -> $(a, b), 3)
 </script>
 
 <script>
 function init() {
   var ftl_lang = document.getElementById('module:ftl.lang').text;
-  var module = ftl.parser.parse(ftl_lang);
-  ftl.addModule(module.name, module);
-  console.log('ftl.lang loaded');
+  try {
+    var module = ftl.parser.parse(ftl_lang);
+    ftl.addModule(module.name, module);
+    console.log('ftl.lang loaded');
+  } catch (e) {
+    out_area.value = e.message;
+  }
 }
 
 function load() {
@@ -156,7 +187,9 @@ function run_test() {
     var code_area = document.getElementById('code-area');
     var module = ftl.parser.parse(code_area.value);
 
+    var i = 1;
     module.executables.forEach(function(exec) {
+      out_area.value += i++ + '. ';
       out_area.value += (exec instanceof ftl.TupleFn || exec.constructor.name == 'Fn' ? 'tuple' : exec.toString()) + ' => '
       var res = exec.apply(null, context=module);
       if (typeof(res) != 'undefined' && res instanceof ftl.TailFn) {
