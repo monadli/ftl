@@ -237,12 +237,13 @@ ftl.parser = /*
 
               var is_operator = id.type == 'OperatorDeclaration' || id.type == 'PostfixOperatorDeclaration';
               if (is_operator)
-                console.log('parameter list from operator: ', id.operands)
-              console.log('parameter list from function: ', optionalList(params))
+                console.log('parameter list for operator: ', id.operands);
+              else
+                console.log('parameter list for function: ', optionalList(params));
 
               var param_list = is_operator ? id.operands : optionalList(params);
               console.log('parameter list: ', param_list)
-              var name = id.name || id
+              var name = id.name || id;
 
               var ret = body.script ? new ftl.NativeFunctionFn(name, param_list, body.script) :
                   new ftl.FunctionFn(name, param_list, body);
@@ -333,10 +334,7 @@ ftl.parser = /*
           function(id, params) {
 
               // #OperandReferenceDeclaration
-
-              id.setAsRefType();
-              id.params = params;
-              return id
+              return new ftl.FunctionInterfaceFn(id.name, params);
             },
           function(first, rest) {
 
@@ -380,12 +378,9 @@ ftl.parser = /*
 
               //# PostfixOperatorExpression
 
-              console.log('PostfixOperatorExpression: op', op)
-              console.log('PostfixOperatorExpression: expr', expr)
-              var op_fn = module.getAvailableFn(op);
-              if (!op_fn)
-                op_fn = new ftl.RefFn(op);
-              return new ftl.PipeFn(expr, op_fn);
+              console.debug('PostfixOperatorExpression: op', op)
+              console.debug('PostfixOperatorExpression: expr', expr)
+              return new ftl.PipeFn(expr, module.getAvailableFn(op) || new ftl.RefFn(op));
             },
           function(operand, rest) {
 
@@ -1148,9 +1143,9 @@ ftl.parser = /*
             return parse_operators(ops, operands, ops.length, true)
           }
 
-          for (var i = 0; i < f.paramsInfo.fnodes.length; i++) {
-            var fnode = f.paramsInfo.fnodes[i];
-            if (fnode instanceof ftl.RefFn && fnode.isRefType()) {
+          for (var i = 0; i < f.params.fnodes.length; i++) {
+            var fnode = f.params.fnodes[i];
+            if (fnode instanceof ftl.FunctionInterfaceFn) {
               operands[i] = new ftl.ExprRefFn(operands[i], fnode.params, fnode.is_tail);
             }
           }

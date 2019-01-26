@@ -51,6 +51,13 @@ var ftl = (function() {
     }
   }
 
+  class FtlRuntimeError extends Error {
+    constructor(... params) {
+      super(... params);
+    }
+  }
+
+
   /**
    * A module holds a list of defined identifiers that can be seen from the outside
    * (except the ones starts with '_' which are private to the module)
@@ -239,18 +246,33 @@ var ftl = (function() {
     }
 
     addKeyValue(key, value) {
+      if (this._names.has(key))
+        throw new FtlRuntimeError("Tuple.addKeyValue(...): key " + key + " already exists!");
+
       this._names.set(key, this.size);
       this._values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value);
     }
 
-    copyAllFrom(anotherTuple) {
-      if (anotherTuple == null)
+    /**
+     * Invokes callback(key, value) for each pair of (key, value) in this tuple.
+     */
+    forEach(callback) {
+      this._names.forEach((value, key, map) => {
+        callback(key, this._values[value]);
+      });
+    }
+
+    /**
+     * Appends all element from another tuple. It will keep names of the elements if any. 
+     */
+    appendAll(tuple) {
+      if (tuple == null)
         return;
 
-      if (anotherTuple instanceof Tuple)
-        anotherTuple.toList().forEach(elm => this.addValue(elm));
+      if (tuple instanceof Tuple)
+        tuple.forEach((key, value) => key.startsWith('_') ? this.addValue(value) : this.addKeyValue(key, value));
       else
-        this.addValue(anotherTuple);
+        this.addValue(tuple);
     }
 
     // returns list of all names
@@ -477,14 +499,12 @@ var ftl = (function() {
   class NativeFunctionFn extends Fn {
 
     // name:string function name
-    // params:TupleFn parameter names
+    // params:TupleFn parameter list
     // script:string script body
     constructor(name, params, script) {
       super();
       this.name = name;
 
-      // TODO why need it in n-ary operator?
-      this.paramsInfo = params; 
       this.params = new ParamTupleFn(... params.fnodes);
       this.script = script;
     }
@@ -542,7 +562,7 @@ var ftl = (function() {
             // TODO what is the case for param as string
             if (typeof param == 'string')
               param_list.push(param)
-            else if (param instanceof NamedExprFn)
+            else
               param_list.push(param.name);
           }
         }
@@ -604,11 +624,16 @@ var ftl = (function() {
 
       var min_param_sz = this.params.size;
       for (var i = 0; i < this.params.size; i++)
-        if (this.params.fnodes[i].wrapped instanceof SeqSelectorOrDefault) {
+
+        // functional
+        if (this.params.fnodes[i] instanceof RefFn) {
+          inputFn.fnodes[i] = new FunctionalFn(inputFn.fnodes[i]);
+        }
+        else if (this.params.fnodes[i].wrapped instanceof SeqSelectorOrDefault) {
           min_param_sz = i;
           break;
         }
-      
+
       var new_tuple = NativeFunctionFn.validateInput(inputFn, this.params, min_param_sz);
       return new_tuple ? new PipeFn(new_tuple, this) : this;
     }
@@ -638,8 +663,9 @@ var ftl = (function() {
 
     // This is called by module when adding a function into module 
     buildFunction(module) {
-      this.wrapped.fnodes[0] = (this.wrapped.fnodes[0] instanceof TupleFn) && new ParamTupleFn(... this.wrapped.fnodes[0].fnodes)
-      || new ParamTupleFn(this.wrapped.fnodes[0]); 
+      this.wrapped.fnodes[0] = (
+          this.wrapped.fnodes[0] instanceof TupleFn) ?
+              new ParamTupleFn(... this.wrapped.fnodes[0].fnodes) : new ParamTupleFn(this.wrapped.fnodes[0]);
 
       this.wrapped = this.wrapped.build(module, new TupleFn());
       this.params = this.wrapped.fnodes[0];
@@ -673,6 +699,36 @@ var ftl = (function() {
     }
   }
 
+  // This is used to represent functional argument in a function parameter declaration.
+  //
+  // For example, the y$() in :
+  //   fn x || y$()
+  class FunctionInterfaceFn extends Fn {
+    constructor(name, params) {
+      super();
+      this.name = name;
+      this.params = params;
+      
+      if (name.endsWith('$') && name.length > 1) {
+        this.name = name.substr(0, name.length - 1);
+        this.is_tail = true;
+      } else {
+        this.name = name;
+      }
+
+      this.params = params;
+      this.seq = 0;
+    }
+
+    native_f(input) {
+      return this.partial_input instanceof Tuple ? this.partial_input.getIndex(this.seq) : this.partial_input;
+    }
+
+    apply(input) {
+      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params});
+    }
+  }
+
   class PartialFunctionFn extends WrapperFn {
     constructor(f, partialParams) {
       super(f)
@@ -681,9 +737,24 @@ var ftl = (function() {
 
     apply(input) {
       var tuple = new Tuple();
-      tuple.copyAllFrom(input)
-      tuple.copyAllFrom(this._partialParams)
+
+      // TODO can not simply append
+      tuple.appendAll(this._partialParams)
+      tuple.appendAll(input)
       return super.apply(tuple);
+    }
+  }
+
+  /**
+   * This is functional, or higher order function that returns a partial function when being invoked.
+   */
+  class FunctionalFn extends WrapperFn {
+    constructor(expr) {
+      super(expr);
+    }
+
+    apply(input) {
+      return new PartialFunctionFn(this.wrapped, input);
     }
   }
 
@@ -876,13 +947,18 @@ var ftl = (function() {
           default_count++;
           this.fnodes[i] = new NamedExprFn(fnode.name, new SeqSelectorOrDefault(i, fnode.wrapped));
         }
-        else if (fnode instanceof RefFn) {
+        else {
           if (default_count > 0)
             throw new Error("Position element at index " + i + " is after named elements!");
-          this.fnodes[i] = new NamedExprFn(fnode.name, new TupleSelectorFn(i));
+          if (fnode instanceof RefFn)
+            this.fnodes[i] = new NamedExprFn(fnode.name, new TupleSelectorFn(i));
+          else if (fnode instanceof FunctionInterfaceFn) {
+            fnode.seq = i;
+            this.fnodes[i] = new NamedExprFn(fnode.name, fnode);            
+          }
+          else
+            throw new Error("Element at index " + i + " is not an id nor id with default value!");
         }
-        else
-          throw new Error("Element at index " + i + " is not an id nor id with default value!");
       }
 
 /*
@@ -1594,6 +1670,7 @@ var ftl = (function() {
     NativeFunctionFn: NativeFunctionFn,
     FunctionFn: FunctionFn,
     PartialFunctionFn: PartialFunctionFn,
+    FunctionInterfaceFn: FunctionInterfaceFn,
     TupleFn: TupleFn,
     NamedExprFn: NamedExprFn,
     PipeFn: PipeFn,
