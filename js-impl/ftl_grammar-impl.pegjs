@@ -1786,10 +1786,10 @@ OperandValueDeclaration
     return id;
   }
 
-OperandReferenceDeclaration
+OperandFunctionDeclaration
   = id:Identifier params:Tuple {
 
-    // #OperandReferenceDeclaration
+    // #OperandFunctionDeclaration
 
     id.setAsRefType();
     id.params = params;
@@ -1797,7 +1797,7 @@ OperandReferenceDeclaration
   }
 
 OperandDeclaration
- = OperandReferenceDeclaration
+ = OperandFunctionDeclaration
  / OperandValueDeclaration
 
 /**

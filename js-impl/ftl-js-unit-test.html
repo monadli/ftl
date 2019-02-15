@@ -158,6 +158,18 @@ square_area(2, 3) == 6
 (2, y:4) -> $(x, y:3) -> x + y == 6
 (2, y:0) -> $(x, y:3) -> x + y == 2
 
+// test tail in oeprator
+fn x ||| y$() { return x || y() }
+(false, true) -> _0 ||| _1
+
+// test tail in function
+fn test_tail(x, y()) {
+  return x || y()
+}
+
+(false, true) -> test_tail(_0, _1)
+
+
 </script>
 
 <script>

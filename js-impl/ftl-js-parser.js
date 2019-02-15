@@ -242,6 +242,7 @@ ftl.parser = /*
                 console.log('parameter list for function: ', optionalList(params));
 
               var param_list = is_operator ? id.operands : optionalList(params);
+              param_list = Array.isArray(param_list) ? new ftl.ParamTupleFn(... param_list) : param_list instanceof ftl.TupleFn ? new ftl.ParamTupleFn(... param_list.fnodes) : new ftl.ParamTupleFn(param_list);
               console.log('parameter list: ', param_list)
               var name = id.name || id;
 
@@ -328,13 +329,12 @@ ftl.parser = /*
 
               //# OperandValueDeclaration
 
-              id.setAsValueType();
               return id;
             },
           function(id, params) {
 
-              // #OperandReferenceDeclaration
-              return new ftl.FunctionInterfaceFn(id.name, params);
+              // #OperandFunctionDeclaration
+              return new ftl.FunctionInterfaceFn(id.name, new ftl.ParamTupleFn(... params.fnodes));
             },
           function(first, rest) {
 
@@ -429,7 +429,16 @@ ftl.parser = /*
 
               //# CallExpression
 
-              return new ftl.CallExprFn(id.name, extractList(params, 1));
+              var extracted_params = extractList(params, 1);
+
+              // lambda declaration
+              if (id.name == '$') {
+                if (extracted_params.length > 1)
+                  throw new Error("FTL1: lambda's arguments followed by calling arguments!");
+                return new ftl.ParamTupleFn(... extracted_params[0].fnodes)
+              }
+
+              return new ftl.CallExprFn(id.name, extracted_params);
             },
           "{",
           peg$literalExpectation("{", false),
@@ -1083,6 +1092,8 @@ ftl.parser = /*
     }
 
     function optionalList(value) {
+      if (value == null)
+        throw new Error('catching null');
       return value !== null ? value : [];
     }
 
@@ -1145,8 +1156,13 @@ ftl.parser = /*
 
           for (var i = 0; i < f.params.fnodes.length; i++) {
             var fnode = f.params.fnodes[i];
-            if (fnode instanceof ftl.FunctionInterfaceFn) {
-              operands[i] = new ftl.ExprRefFn(operands[i], fnode.params, fnode.is_tail);
+            if (fnode.wrapped instanceof ftl.FunctionInterfaceFn) {
+              fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
+              console.debug(inputFn);
+
+              // build the ExprRefFn wrapped element outside ExprRefFn itself
+              // this is because inputFn is available here
+              operands[i] = new ftl.ExprRefFn(fnode.wrapped, operands[i].build(module, inputFn));
             }
           }
 
