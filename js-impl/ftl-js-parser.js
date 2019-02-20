@@ -242,8 +242,13 @@ ftl.parser = /*
                 console.log('parameter list for function: ', optionalList(params));
 
               var param_list = is_operator ? id.operands : optionalList(params);
-              param_list = Array.isArray(param_list) ? new ftl.ParamTupleFn(... param_list) : param_list instanceof ftl.TupleFn ? new ftl.ParamTupleFn(... param_list.fnodes) : new ftl.ParamTupleFn(param_list);
+              param_list = Array.isArray(param_list) ? param_list : param_list instanceof ftl.TupleFn ? param_list.fnodes : [param_list];
+              for (var i = 0; i < param_list.length; i++)
+                if (param_list[i] instanceof ftl.CallExprFn) {
+                  param_list[i] = new ftl.FunctionInterfaceFn(param_list[i].name, param_list[i].params[0]);
+                }
               console.log('parameter list: ', param_list)
+              param_list = new ftl.ParamTupleFn(... param_list);
               var name = id.name || id;
 
               var ret = body.script ? new ftl.NativeFunctionFn(name, param_list, body.script) :
@@ -1157,7 +1162,7 @@ ftl.parser = /*
           for (var i = 0; i < f.params.fnodes.length; i++) {
             var fnode = f.params.fnodes[i];
             if (fnode.wrapped instanceof ftl.FunctionInterfaceFn) {
-              fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
+              //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
               console.debug(inputFn);
 
               // build the ExprRefFn wrapped element outside ExprRefFn itself

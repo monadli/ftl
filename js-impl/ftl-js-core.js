@@ -1430,13 +1430,18 @@ var ftl = (function() {
       else if (module.hasFn(this.name)) {
         var f = module.getAvailableFn(this.name);
         if (f) {
-          var f_params = f.params;
+          var f_params = f.params.fnodes;
 
-          var params_len = f_params.fnodes.length;
+          var params_len = f_params.length;
           
           var input = (inputFn instanceof TupleFn) ? inputFn : new TupleFn(inputFn);
           var combined = this.combine(... this.params, input);
           
+          for (var i = 0; i < params_len; i++)
+            if (f_params[i].wrapped && f_params[i].wrapped instanceof FunctionInterfaceFn)
+              combined.fnodes[i] = new ExprRefFn(f_params[i].wrapped, combined.fnodes[i]);
+
+          // TODO combine following two parts
           var built = f.build(module, combined);
           if (built == f)
             return new PipeFn(combined, f);
