@@ -334,9 +334,11 @@ ftl.parser = /*
 
     build(module, inputFn) {
       ftl.FnValidator.assertElmType(this.f, FtlBuilder);
-      this.paramtuples.forEach(params => ftl.FnValidator.assertElmsTypes(params, FtlBuilder));
+      ftl.FnValidator.assertElmsTypes(this.paramtuples, FtlBuilder);
 
-      return new ftl.ExprFn(f.build(module, inputFn), this.paramtuples.map(paramtuple => paramtuple.build(module, inputFn)));
+      return new ftl.ExprFn(this.f.build(module, inputFn), ... this.paramtuples.map(
+        paramtuple => paramtuple.build(module, inputFn)
+      ));
     }
   }
 
@@ -862,7 +864,7 @@ ftl.parser = /*
 
               //# ExpressionCurry
 
-              return new ExprCurryBuilder(expr, extractList(params, 1))
+              return new ExprCurryBuilder(expr, ... extractList(params, 1))
             },
           function(first, rest) {
 
