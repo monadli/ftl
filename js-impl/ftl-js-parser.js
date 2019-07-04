@@ -6,6 +6,629 @@ ftl.parser = /*
 (function() {
   "use strict";
 
+  const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283';
+
+  // this is for building function / operator parameters
+  var dummy_param_tuple = new ftl.TupleFn();
+
+  // The following functions are used for parsing
+
+  function join(value) {
+    if (Array.isArray(value))
+      return value.join("")
+    return value
+  }
+
+  function extractOptional(optional, index) {
+    return optional ? optional[index] : null;
+  }
+
+  function extractList(list, index) {
+    var result = new Array(list.length);
+
+    for (var i = 0; i < list.length; i++) {
+      result[i] = list[i][index];
+    }
+
+    return result;
+  }
+
+  function buildList(first, rest, index) {
+    return [first].concat(extractList(rest, index));
+  }
+
+  function optionalList(value) {
+    if (value == null)
+      throw new Error('catching null');
+    return value !== null ? value : [];
+  }
+
+  function buildFirstRest(first, rest) {
+    return (Array.isArray(rest) && rest.length == 0) ? first : buildList(first, rest, 1)
+  }
+
+  class FtlBuildError extends Error {
+    constructor(... params) {
+      super(... params);
+      var start = this.stack.indexOf(' at new ') + 8;
+      this.message = this.stack.substring(start, this.stack.indexOf(' ', start)) + ': ' + this.message;
+    }
+  }
+
+  /**
+   * Type for build only.
+   */
+  class FtlBuilder {
+
+    constructor() {      
+    }
+
+    build() {
+      return null;
+    }
+  }
+
+  class FnWrapperBuilder extends FtlBuilder {
+    constructor(fn) {
+      super();
+      this.fn = fn;
+    }
+
+    build(module, inputFn) {
+      return this.fn;
+    }
+  }
+
+  class ConstBuilder extends FtlBuilder {
+    constructor(val) {
+      super();
+      this.val = val;
+    }
+
+    build(module, inputFn) {
+      return new ftl.ConstFn(this.val);
+    }
+  }
+
+  class RefBuilder extends FtlBuilder {
+    constructor(name) {
+      super();
+      this.name = name;
+    }
+
+    build(module, inputFn) {
+      if (this.name.startsWith('_') || inputFn instanceof ftl.TupleFn && inputFn.hasName(this.name))
+        return new ftl.RefFn(this.name);
+
+      var f = module.getAvailableFn(this.name);
+      if (f)
+        return buildFunctionCall(f, module, inputFn);
+
+      return new ftl.RefFn(this.name);
+    }
+  }
+
+  class TupleElementBuilder extends FtlBuilder {
+    constructor(id, expr) {
+      super();
+      this.id = id;
+      this.expr = expr;
+    }
+
+    set isFunctionArg(val) {
+      this.expr.isFunctionArg = val;
+    }
+
+    set seq(val) {
+      this.expr.seq = val;
+    }
+
+    build(module, inputFn) {
+      var iid = extractOptional(this.id, 0);
+      if (iid != null)
+        iid = iid.name;
+      var expr = this.expr instanceof FtlBuilder ? this.expr.build(module, inputFn) : this.expr;
+      return iid == null ? expr : new ftl.NamedExprFn(iid, expr);
+    }
+  }
+
+  class FunctionInterfaceBuilder extends FtlBuilder {
+    constructor(name, params, seq = 0) {
+      super();
+      this.name = name;
+      this.params = params;
+      this.seq = seq;
+    }
+
+    build(module, inputFn) {
+      if (this.name.endsWith('$') && this.name.length > 1) {
+        this.name = this.name.substr(0, this.name.length - 1);
+      }
+
+      return new ftl.FunctionInterfaceFn(this.name, this.params.build(module, inputFn), this.seq);
+    }
+  }
+
+  /**
+   * This class captures n-ary operator expression. It is transient during parsing and building.
+   */
+  class N_aryOperatorExpressionBuilder extends FtlBuilder {
+    constructor(ops, operands) {
+
+      super();
+      this.ops = ops;
+      this.operands = operands;
+    }
+
+    build(module, inputFn) {
+      ftl.FnValidator.assertNonEmptyArray(this.ops);
+
+      var current_index = 0;
+      var stop_index = this.ops.length;
+
+      // This is used to parse operators and operands recursively.
+      // It is called from index = length of operators down to 1.
+      function parse_operators(ops, operands, index, full) {
+
+        // operand at index 1 is for operator at 
+        var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
+        var f = module.getAvailableFn(op);
+
+        // no corresponding function found for single op
+        if (!f) {
+          if (index == 1)
+            throw new FtlBuildError("No function with name '" + op + "' found!");
+
+          index--;
+          var reduced = parse_operators(ops, operands, index, false);
+          
+          if (current_index == stop_index)
+            return reduced;
+
+          ops = ops.slice(index, ops.length)
+          operands = [reduced].concat(operands.slice(index + 1, operands.length))
+          return parse_operators(ops, operands, ops.length, true)
+        }
+
+        for (var i = 0; i < f.params.fns.length; i++) {
+          var fn = f.params.fns[i];
+          if (fn.wrapped instanceof ftl.FunctionInterfaceFn) {
+            //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
+            console.debug(inputFn);
+
+            // build the ExprRefFn wrapped element outside ExprRefFn itself
+            // this is because inputFn is available here
+            operands[i] = new FnWrapperBuilder(new ftl.ExprRefFn(fn.wrapped, operands[i].build(module, inputFn)));
+          }
+        }
+
+        current_index += index;
+        var operands_tuple = new TupleBuilder(... operands.slice(0, f.params.fns.length));
+
+        return new PipeBuilder(operands_tuple, f);
+      }
+
+      return parse_operators(this.ops, this.operands, this.ops.length, true).build(module, dummy_param_tuple);
+    }
+  }
+
+  /**
+   * Builds a TupleFn.
+   * 
+   * If elms is empty, it builds an empty TupleFn.
+   */
+  class TupleBuilder extends FtlBuilder {
+    
+    constructor(... fns) {
+      super();
+      this.fns = fns;
+    }
+
+    // Checks duplicates of names.
+    build(module, inputFn) {
+      ftl.FnValidator.assertElmsTypes(this.fns, FtlBuilder, ftl.Fn);
+
+      return new ftl.TupleFn(... this.fns.map(fn => fn instanceof FtlBuilder && fn.build(module, inputFn) || fn));
+    }
+  }
+
+  class PipeBuilder extends FtlBuilder {
+    constructor(... elements) {
+      super();
+      this.elements = elements;
+    }
+
+    build(module, inputFn) {
+      var prev = inputFn;
+      var fns = [];
+      for (var i = 0; i < this.elements.length; i++) {
+        fns.push(this.elements[i] instanceof ftl.Fn && this.elements[i] || this.elements[i].build(module, prev));
+
+        // pure single ref, replace with (NamedExprFn(name, ...))
+        if (fns[i] instanceof ftl.RefFn && !fns[i].name.startsWith('_')) {
+
+          var ref = (inputFn == null || inputFn == undefined || !(inputFn instanceof ftl.TupleFn || (inputFn instanceof ftl.TupleFn && !inputFn.hasName(fns[i].name)))) ?
+            new TupleSelectorFn(0) : fns[i];
+            fns[i] = new ftl.TupleFn(new ftl.NamedExprFn(fns[i].name, ref));
+        }
+        prev = fns[i];
+      }
+
+      // expands contained PipeFn elements which may be before or after build
+      for (var i = fns.length; i >= 0; i--)
+        if (fns[i] instanceof ftl.PipeFn)
+          fns.splice(i, 1, ... fns[i].fns);
+
+      return new ftl.PipeFn(... fns);
+    }
+  }
+
+  /**
+   * Builds tuple for parameters.
+   * 
+   * Function parameters are different from tuple where any non-named element is treated as a name.
+   */
+  class ParamTupleBuilder extends TupleBuilder {
+    constructor(... params) {
+      super(... params);
+    }
+
+    build(module, inputFn) {
+      for (var i = 0; i < this.fns.length; i++) {
+        let fn = this.fns[i];
+        fn.isFunctionArg = true;
+        fn.seq = i;
+      }
+
+      let fns = this.fns.map(fn => fn instanceof FtlBuilder && fn.build(module, inputFn) || fn);
+
+      ftl.FnValidator.assertElmsTypes(fns, ftl.RefFn, ftl.NamedExprFn, ftl.FunctionInterfaceFn, ftl.CallExprFn);
+
+      var default_count = 0;
+      for (var i = 0; i < fns.length; i++) {
+        var fn = fns[i];
+
+        // param with default value
+        if (fn instanceof ftl.NamedExprFn) {
+          default_count++;
+          fns[i] = new ftl.NamedExprFn(fn.name, new ftl.SeqSelectorOrDefault(i, fn.wrapped));
+        }
+
+        // position param
+        else {
+          if (default_count > 0)
+            throw new FtlBuildError("FTL0002: Position parameter at index " + i + " is after parameter with default value!");
+
+          // simple param
+          if (fn instanceof ftl.RefFn)
+            fns[i] = new ftl.NamedExprFn(fn.name, new ftl.TupleSelectorFn(i));
+
+          else if (fn instanceof ftl.CallExprFn) {
+            fn = new ftl.FunctionInterfaceFn(fn.name, fn.params[0])
+            fn.seq = i;
+            fns[i] = new ftl.NamedExprFn(fn.name, fn);            
+          }
+
+          // function param
+          else if (fn instanceof ftl.FunctionInterfaceFn) {
+            fns[i] = new ftl.NamedExprFn(fn.name, fn);            
+          }
+
+          else
+            throw new FtlBuildError("FTL0003: Element at index " + i + " is not a qualified parameter!");
+        }
+      }
+
+      // The following is for existanceof input.
+      // This happens for anonymous inline functions.
+      return new ftl.TupleFn(... fns);
+    }
+  }
+
+  class ExprCurryBuilder extends FtlBuilder {
+    constructor(f, ... paramtuples) {
+      super();
+      this.f = f;
+      this.paramtuples = paramtuples;
+    }
+
+    build(module, inputFn) {
+      ftl.FnValidator.assertElmType(this.f, FtlBuilder);
+      this.paramtuples.forEach(params => ftl.FnValidator.assertElmsTypes(params, FtlBuilder));
+
+      return new ftl.ExprFn(f.build(module, inputFn), this.paramtuples.map(paramtuple => paramtuple.build(module, inputFn)));
+    }
+  }
+
+  class CallExprBuilder extends FtlBuilder {
+    constructor(name, params) {
+      super();
+      this.name = name;
+      this.params = params;
+
+      // tells if the call expression is part of function arguments
+      this.isFunctionArg = false;
+      this.seq = 0;
+    }
+
+    combine(... tuples) {
+      function split(tuple) {
+        for (var i = 0; i < tuple.size; i++) {
+          if (tuple.fns[i] instanceof ftl.NamedExprFn)
+            return [tuple.fns.slice(0, i), tuple.fns.slice(i)];
+        }
+        return [tuple.fns, []];
+      }
+
+      if (tuples.length == 1)
+        return tuples[0];
+
+      var pos_elms = [];
+      var name_elms = new Map();
+      tuples.forEach(tuple => {
+        var sections = split(tuple);
+        pos_elms.push(... sections[0]);
+        sections[1].forEach(function(name_elm) {
+          name_elms.set(name_elm.name, name_elm);
+        })
+      });
+
+      return new ftl.TupleFn(... pos_elms, ... name_elms.values());
+    }
+
+    combineMultiTuples(paramsArray) {
+      if (paramsArray.length == 1)
+        return paramsArray[0];
+
+      let posParams = [];
+      let namedParams = [];
+      paramsArray.forEach(params => {
+        if (params.fns.length == 0) {
+          throw new Error('Redundent curry with no arguments!');
+        }
+
+        params.fns.forEach(param => {
+          if (param instanceof ftl.NamedExprFn)
+            namedParams.push(param);
+          else
+            posParams.push(param);
+        })
+      })
+
+      return new TupleBuilder(... posParams.concat(namedParams)).build();
+    }
+
+    build(module, inputFn) {
+      if (inputFn instanceof ftl.TupleFn && inputFn.hasName(this.name)) {
+        for (var i = 0; i < this.fns.length; i++)
+          this.fns[i] = this.fns[i].build(module, inputFn);
+        return this;
+      }
+
+      // calling expression is a function invocation
+      else if (module.hasFn(this.name)) {
+        var f = module.getAvailableFn(this.name);
+        if (f) {
+          let params = this.combineMultiTuples(this.params.map(p => p.build(module, inputFn)));
+          let f_params = f.params.fns;
+
+          let params_len = f_params.length;
+
+          if (params_len > 0 && params.fns.length == 0)
+            throw new Error(`Calling ${f.name} with no argument provided! For currying, provide at least one argument.`);
+
+          //var input = (inputFn instanceof ftl.TupleFn) ? inputFn : new ftl.TupleFn(inputFn);
+          //var combined = this.combine(... params.fns, input);
+          var combined = params;
+          //for (var i = 0; i < params_len; i++)
+          //  if (f_params[i].wrapped && f_params[i].wrapped instanceof ftl.FunctionInterfaceFn)
+          //    combined.fns[i] = new ftl.ExprRefFn(f_params[i].wrapped, combined.fns[i]);
+
+          // TODO combine following two parts
+          let built = buildFunctionCall(f, module, combined);
+          if (built == f)
+            return new ftl.PipeFn(combined, f);
+          else
+            return built;
+
+          var curry_params_len = this.fns[0].size;
+          var ret = null;
+          if (curry_params_len >= params_len)
+            ret = new ftl.PipeFn(this.fns[0], f);
+          else if (inputFn instanceof TupleFn && inputFn.size + curry_params_len.size >= params_len) {
+            new ftl.TupleFn(... inputFn.slice(0, params_len - this.fns[0].size))
+            var extra = ftl.NativeFunctionFn.validateInput(inputFn, this.fns[0]);
+
+            ret = new ftl.PipeFn(new ftl.TupleFn(... inputFn.slice(0, params_len - this.fns[0].size), ... this.fns[0].fns), f);
+          }
+          else if (!(inputFn instanceof TupleFn) && this.fns[0].size + 1 >= params_len)
+            ret = new ftl.PipeFn(new ftl.TupleFn(inputFn, ... this.fns[0].fns), f);
+          else
+            throw new Error("calling arguments to " + f + " does not match argument number!"); 
+
+          return ret.build(module, inputFn);
+        }
+      }
+
+      else if (this.isFunctionArg)
+        return new FunctionInterfaceBuilder(this.name, this.params[0], this.seq).build(module, inputFn);
+
+      throw new Error(this.name + " can not be resolved.");
+    }
+  }
+
+  class FunctionBuilder extends FtlBuilder {
+    constructor(id, params, body) {
+      super();
+      this.id = id;
+      this.params = params;
+      this.body = body;
+    }
+
+    build(module, inputFn) {
+      if (this.id instanceof ftl.RefFn && this.body instanceof ftl.RefFn && params == null) {
+        throw new Error("Error on a function declaration with '" + id.name + "' and '" + body.name + "'. Are you overriding -> ?");
+      }
+
+      var is_operator = this.id.type == 'OperatorDeclaration' || this.id.type == 'PostfixOperatorDeclaration';
+      if (is_operator)
+        console.log('parameter list for operator: ', this.id.operands);
+      else
+        console.log('parameter list for function: ', optionalList(this.params));
+
+      var param_list = is_operator ? this.id.operands : optionalList(this.params);
+      param_list = Array.isArray(param_list) ? param_list : param_list instanceof TupleBuilder ? param_list.fns : [param_list];
+
+      // @TODO will never be called
+      for (var i = 0; i < param_list.length; i++)
+        if (param_list[i] instanceof ftl.CallExprFn) {
+          param_list[i] = new ftl.FunctionInterfaceFn(param_list[i].name, param_list[i].params[0]);
+        }
+
+      console.log('parameter list: ', param_list)
+      param_list = new ParamTupleBuilder(... param_list).build(module, new ftl.TupleFn());
+      var name = this.id.name || this.id;
+
+      // prefix operator
+      if (!is_operator && this.isOperator(name)) {
+        name = ' ' + name;
+      }
+
+      if (this.body.script) {
+        return this.buildNativeFunction(module, name, param_list, this.body.script);
+      }
+      else {
+        var f_body = new PipeBuilder(param_list, this.body).build(module, new ftl.TupleFn());
+        var f_params = f_body.fns[0];
+        return new ftl.FunctionFn(name, f_params, f_body);
+      }
+    }
+
+    isOperator(name, params) {
+      return OPERATOR_SYMBOLS.includes(name[0]);
+    }
+
+    buildNativeFunction(module, name, params, script) {
+      if (params instanceof FtlBuilder)
+        params = params.build(module, new ftl.TupleFn(), true);
+
+      if (typeof this.script != 'function') {
+        var param_list = [];
+        if (params != null) {
+          for (var i = 0; i < params.fns.length; i++) {
+            var param = params.fns[i];
+
+            // TODO what is the case for param as string
+            if (typeof param == 'string')
+              param_list.push(param)
+            else
+              param_list.push(param.name);
+          }
+        }
+
+        script = eval("(function(" + param_list.join(',') + ")" + script + ")");
+      }      
+
+      return new ftl.NativeFunctionFn(name, params, script);
+    }
+  }
+
+  /**
+   * This is a post build with both f and inputFn built already.
+   * @param {*} f 
+   * @param {*} module 
+   * @param {*} inputFn 
+   */
+  function buildFunctionCall(f, module, inputFn) {
+
+    // tuple to a function has to satisfy argument spec:
+    // named arguments has to be after position params.
+    function validateInput(args, params, minSize) {
+      var names = new Set();
+      var pos_sz = 0;
+
+      // validate sequence of position and named args
+      for (var i = 0; i < args.size; i++) {
+        if (args.fns[i] instanceof ftl.NamedExprFn) {
+          names.add(args.fns[i].name);
+        } else if (names.size > 0) {
+          throw new Error("Position argument at index " + i + " after named argument!");
+        } else
+          pos_sz = i + 1;
+      }
+
+      // no named args and has enough positioned args
+      if (names.size == 0 && args.size >= minSize)
+        return null;
+
+      var need_new_args = false;
+      var new_args = new Array(params.size);
+      for (var i = 0; i < params.size; i++) {
+        var name = params.fns[i].name;
+
+        // position arg
+        if (i < pos_sz) {
+          if (names.has(name)) {
+            throw new Error("Parameter " + name + " is provided with both position and named argument!");
+          }
+
+          new_args[i] = args.fns[i];
+        }
+
+        // named param and no corresponding arg
+        else if (!names.has(name)) {
+          new_args[i] = params.fns[i];
+          need_new_args = true;
+        }
+
+       // named param matched with same named arg
+        else if (i < args.size && args.fns[i].name == name) {
+          new_args[i] = args.fns[i];
+        }
+
+        else {
+          new_args[i] = args.getNamedFn(name);
+          need_new_args = true;
+        }
+      }
+
+      return need_new_args ? new ftl.TupleFn(... new_args) : null;
+    }
+
+    console.log(f);
+    if (!(inputFn instanceof ftl.TupleFn))
+      inputFn = new ftl.TupleFn(inputFn);
+
+    var min_param_sz = f.params.size;
+    for (var i = 0; i < f.params.size; i++)
+
+      // functional
+      if (f.params.fns[i].wrapped instanceof ftl.FunctionInterfaceFn) {
+        inputFn.fns[i] = new ftl.FunctionalFn(inputFn.fns[i]);
+      }
+      else if (f.params.fns[i].wrapped instanceof ftl.SeqSelectorOrDefault) {
+        min_param_sz = i;
+        break;
+      }
+
+    var new_tuple = validateInput(inputFn, f.params, min_param_sz);
+    return new_tuple ? new ftl.PipeFn(new_tuple, f) : f;
+  }
+
+  class ArrayElementSelectorBuilder extends FtlBuilder {
+    constructor(name, index) {
+      super();
+      this.name = name.name;
+      this.index = index;
+    }
+
+    build(module, inputFn) {
+      var index = (this.index instanceof ftl.RefFn) ? this.index.name : parseInt(this.index);
+      return new ftl.ArrayElementSelectorFn(this.name, index);
+    }
+  }
+
+
   function peg$subclass(child, parent) {
     function ctor() { this.constructor = child; }
     ctor.prototype = parent.prototype;
@@ -221,52 +844,25 @@ ftl.parser = /*
 
               //# VariableDeclaration
               var ret = modifier =='const' ? new ftl.ImmutableValFn(id.name, expr) : new ftl.VarFn(id.name, expr)
-              module.addFn(id.name, ret); 
+              module.addFn(ret); 
               return ret
             },
           function(id, params, body) {
 
               //# FunctionDeclaration
 
-              console.log('function id: ', id.name || id)
-              console.log('expr: ', body)
-
-              if (id instanceof ftl.RefFn && body instanceof ftl.RefFn && params == null) {
-                throw new Error("Error on a function declaration with '" + id.name + "' and '" + body.name + "'. Are you overriding -> ?");
-              }
-
-              var is_operator = id.type == 'OperatorDeclaration' || id.type == 'PostfixOperatorDeclaration';
-              if (is_operator)
-                console.log('parameter list for operator: ', id.operands);
-              else
-                console.log('parameter list for function: ', optionalList(params));
-
-              var param_list = is_operator ? id.operands : optionalList(params);
-              param_list = Array.isArray(param_list) ? param_list : param_list instanceof ftl.TupleFn ? param_list.fnodes : [param_list];
-              for (var i = 0; i < param_list.length; i++)
-                if (param_list[i] instanceof ftl.CallExprFn) {
-                  param_list[i] = new ftl.FunctionInterfaceFn(param_list[i].name, param_list[i].params[0]);
-                }
-              console.log('parameter list: ', param_list)
-              param_list = new ftl.ParamTupleFn(... param_list);
-              var name = id.name || id;
-
-              var ret = body.script ? new ftl.NativeFunctionFn(name, param_list, body.script) :
-                  new ftl.FunctionFn(name, param_list, body);
-              module.addFn(name, ret);
-
-              return ret;
+              module.addFn(new FunctionBuilder(id, params, body).build(module, new ftl.TupleFn()));
             },
           "(",
           peg$literalExpectation("(", false),
           ")",
           peg$literalExpectation(")", false),
-          function(elms) { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(... elms) },
+          function(elms) { return elms == null ? new TupleBuilder() : new TupleBuilder(... elms) },
           function(expr, params) {
 
               //# ExpressionCurry
 
-              return new ftl.ExprFn(expr, extractList(params, 1))
+              return new ExprCurryBuilder(expr, extractList(params, 1))
             },
           function(first, rest) {
 
@@ -286,14 +882,8 @@ ftl.parser = /*
           function(id, expr) {
 
               //# Parameter
-
-                var iid = extractOptional(id, 0);
-                if (iid != null)
-                  iid = iid.name;
-                if (iid == null)
-                  return expr;
-                return new ftl.NamedExprFn(iid, expr)
-              },
+              return new TupleElementBuilder(id, expr);
+          },
           "->",
           peg$literalExpectation("->", false),
           function(ex) {
@@ -313,14 +903,15 @@ ftl.parser = /*
               if (t == null)
                 return first;
               
-              return new ftl.PipeFn(first, t);
+              return new PipeBuilder(first, t);
             },
           function(expr) {
 
                 //# Executable
 
-                module.addExecutable(expr);
-                return expr;
+                let exec = expr.build(module);
+                module.addExecutable(exec);
+                return exec;
               },
           "//",
           peg$literalExpectation("//", false),
@@ -339,7 +930,7 @@ ftl.parser = /*
           function(id, params) {
 
               // #OperandFunctionDeclaration
-              return new ftl.FunctionInterfaceFn(id.name, new ftl.ParamTupleFn(... params.fnodes));
+              return new FunctionInterfaceBuilder(id.name, new ParamTupleBuilder(... params.fns));
             },
           function(first, rest) {
 
@@ -353,7 +944,7 @@ ftl.parser = /*
               return {
                 type: 'OperatorDeclaration',
                 name: name,
-                operands: new ftl.TupleFn(... operands)
+                operands: new TupleBuilder(... operands)
               }
             },
           function(operand, op) {
@@ -370,14 +961,12 @@ ftl.parser = /*
           function(op, expr) {
 
               //# UnaryOperatorExpression
-              console.log('op', op)
 
               // negative number
-              if (op == '-' && expr instanceof ftl.ConstFn)
-                return new ftl.ConstFn(-expr.value);
+              if (op == '-' && expr instanceof ConstBuilder)
+                return new ConstBuilder(-expr.val);
 
-              console.log('expr', expr)
-              return new ftl.PipeFn(expr, module.getAvailableFn(op.name || op));
+              return new PipeBuilder(expr, module.getAvailableFn(' ' + (op.name || op)));
             },
           function(expr, op) {
 
@@ -385,7 +974,7 @@ ftl.parser = /*
 
               console.debug('PostfixOperatorExpression: op', op)
               console.debug('PostfixOperatorExpression: expr', expr)
-              return new ftl.PipeFn(expr, module.getAvailableFn(op) || new ftl.RefFn(op));
+              return new PipeBuilder(expr, module.getAvailableFn(op) || new RefBuilder(op));
             },
           function(operand, rest) {
 
@@ -393,7 +982,7 @@ ftl.parser = /*
 
               var ops = extractList(rest, 1);
               var params = [operand].concat(extractList(rest, 3));
-              return new N_aryOperatorExpressionFn(ops, params)      
+              return new N_aryOperatorExpressionBuilder(ops, params)      
             },
           "_",
           peg$literalExpectation("_", false),
@@ -409,16 +998,14 @@ ftl.parser = /*
           function(id, index) {
 
               //# ArrayElementSelector
-
-              console.log('got ArrayElementSelector', index);
-              return new ftl.ArrayElementSelectorFn(module, id, index);
+              return new ArrayElementSelectorBuilder(id, index);
             },
           function(elms) {
 
               //# ArrayLiteral
 
               var lst = extractOptional(elms, 1);
-              return lst == null ? new ftl.ConstFn([]) : lst
+              return lst == null ? new ConstBuilder([]) : lst
             },
           function(first, rest) {
 
@@ -427,8 +1014,8 @@ ftl.parser = /*
               var elms = buildList(first, rest, 3);
               var ret = [];
               for (var i = 0; i < elms.length; i++)
-                ret.push(elms[i].value);
-              return new ftl.ConstFn(ret)
+                ret.push(elms[i].build(module).apply());
+              return new ConstBuilder(ret)
             },
           function(id, params) {
 
@@ -439,11 +1026,11 @@ ftl.parser = /*
               // lambda declaration
               if (id.name == '$') {
                 if (extracted_params.length > 1)
-                  throw new Error("FTL1: lambda's arguments followed by calling arguments!");
-                return new ftl.ParamTupleFn(... extracted_params[0].fnodes)
+                  throw new Error("FTL0001: lambda's arguments followed by calling arguments!");
+                return new ParamTupleBuilder(... extracted_params[0].fns)
               }
 
-              return new ftl.CallExprFn(id.name, extracted_params);
+              return new CallExprBuilder(id.name, extracted_params);
             },
           "{",
           peg$literalExpectation("{", false),
@@ -456,7 +1043,7 @@ ftl.parser = /*
 
               //# Identifier
 
-              var ret = new ftl.RefFn(name);
+              var ret = new RefBuilder(name);
               return ret;
             },
           peg$otherExpectation("identifier"),
@@ -497,11 +1084,11 @@ ftl.parser = /*
           peg$classExpectation([["0", "9"]], false, false),
           /^[!%&*+\-.\/:<=>?\^|\xD7\xF7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]/,
           peg$classExpectation(["!", "%", "&", "*", "+", "-", ".", "/", ":", "<", "=", ">", "?", "^", "|", "\xD7", "\xF7", "\u220F", "\u2211", "\u2215", "\u2217", "\u2219", "\u221A", "\u221B", "\u221C", "\u2227", "\u2228", "\u2229", "\u222A", "\u223C", "\u2264", "\u2265", "\u2282", "\u2283"], false, false),
-          function() { return new ftl.ConstFn(true) },
-          function() { return new ftl.ConstFn(false) },
+          function() { return new ConstBuilder(true) },
+          function() { return new ConstBuilder(false) },
           function(literal) { return literal },
           function() {
-                return new ftl.ConstFn(parseFloat(text()));
+                return new ConstBuilder(parseFloat(text()));
               },
           /^[\-]/,
           peg$classExpectation(["-"], false, false),
@@ -517,7 +1104,7 @@ ftl.parser = /*
           peg$classExpectation([["0", "9"], ["a", "f"]], false, true),
           "\"",
           peg$literalExpectation("\"", false),
-          function(chars) { var str = text(); return new ftl.ConstFn(str.substr(1, str.length - 2)) },
+          function(chars) { var str = text(); return new ConstBuilder(str.substr(1, str.length - 2)) },
           "'",
           peg$literalExpectation("'", false),
           "\\",
@@ -1064,124 +1651,10 @@ ftl.parser = /*
       return stack[0];
     }
 
+    // end of script for parser generation
+
     // this is the module created during parsing
     var module = new ftl.Module('')
-
-    // this is for building function / operator parameters
-    var dummy_param_tuple = new ftl.TupleFn();
-
-    // The following functions are used for parsing
-
-    function join(value) {
-      if (Array.isArray(value))
-        return value.join("")
-      return value
-    }
-
-    function extractOptional(optional, index) {
-      return optional ? optional[index] : null;
-    }
-
-    function extractList(list, index) {
-      var result = new Array(list.length);
-
-      for (var i = 0; i < list.length; i++) {
-        result[i] = list[i][index];
-      }
-
-      return result;
-    }
-
-    function buildList(first, rest, index) {
-      return [first].concat(extractList(rest, index));
-    }
-
-    function optionalList(value) {
-      if (value == null)
-        throw new Error('catching null');
-      return value !== null ? value : [];
-    }
-
-    function buildFirstRest(first, rest) {
-      return (Array.isArray(rest) && rest.length == 0) ? first : buildList(first, rest, 1)
-    }
-
-    /**
-     * Type for build only.
-     */
-    class BuildElement extends ftl.Fn {
-      constructor() {
-        super();
-      }
-
-      build() {
-      }
-    }
-
-    /**
-     * This class captures n-ary operator expression. It is transient during parsing and building.
-     */
-    class N_aryOperatorExpressionFn extends BuildElement {
-      constructor(ops, operands) {
-        if (ops.length == 0)
-          throw new ftl.FnConstructionError('No ops found!')
-
-        super();
-        this.ops = ops;
-        this.operands = operands;
-      }
-
-      build(module, inputFn) {
-        var current_index = 0;
-        var stop_index = this.ops.length;
-
-        // This is used to parse operators and operands recursively.
-        // It is called from index = length of operators down to 1.
-        function parse_operators(ops, operands, index, full) {
-
-          // operand at index 1 is for operator at 
-          var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-          var f = module.getAvailableFn(op);
-
-          // no corresponding function found for single op
-          if (!f) {
-            if (index == 1)
-              throw new ftl.FtlBuildError("No function with name '" + op + "' found!");
-
-            index--;
-            var reduced = parse_operators(ops, operands, index, false);
-            
-            if (current_index == stop_index)
-              return reduced;
-
-            ops = ops.slice(index, ops.length)
-            operands = [reduced].concat(operands.slice(index + 1, operands.length))
-            return parse_operators(ops, operands, ops.length, true)
-          }
-
-          for (var i = 0; i < f.params.fnodes.length; i++) {
-            var fnode = f.params.fnodes[i];
-            if (fnode.wrapped instanceof ftl.FunctionInterfaceFn) {
-              //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
-              console.debug(inputFn);
-
-              // build the ExprRefFn wrapped element outside ExprRefFn itself
-              // this is because inputFn is available here
-              operands[i] = new ftl.ExprRefFn(fnode.wrapped, operands[i].build(module, inputFn));
-            }
-          }
-
-          current_index += index;
-          var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fnodes.length)).build(module, dummy_param_tuple);
-          
-          return new ftl.PipeFn(operands_tuple, f);
-        }
-
-        return parse_operators(this.ops, this.operands, this.ops.length, true);
-      }
-    }
-
-    // end of script for parser generation
 
     peg$result = peg$parseRule(peg$startRuleIndex);
 
@@ -1204,6 +1677,6 @@ ftl.parser = /*
 
   return {
     SyntaxError: peg$SyntaxError,
-    parse:       peg$parse
+    parse: peg$parse
   };
 })();
