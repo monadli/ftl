@@ -104,7 +104,9 @@ ftl.parser = /*
       if (f)
         return buildFunctionCall(f, module, inputFn);
 
-      return new ftl.RefFn(this.name);
+      let ret = new ftl.RefFn(this.name);
+      ret.unresolved = true;
+      return ret;
     }
   }
 
@@ -239,6 +241,7 @@ ftl.parser = /*
     }
 
     build(module, inputFn) {
+      ftl.FnValidator.assertElmsTypes(this.elements, ftl.Fn, FtlBuilder);
       var prev = inputFn;
       var fns = [];
       for (var i = 0; i < this.elements.length; i++) {
@@ -502,7 +505,47 @@ ftl.parser = /*
       else {
         var f_body = new PipeBuilder(param_list, this.body).build(module, new ftl.TupleFn());
         var f_params = f_body.fns[0];
-        return new ftl.FunctionFn(name, f_params, f_body);
+        let ret = new ftl.FunctionFn(name, f_params, f_body);
+
+        this.resolveRecursiveRef(ret, f_body);
+        return ret;
+      }
+    }
+
+    resolveRecursiveRef(f, expr) {
+
+      if (expr instanceof ftl.PipeFn || expr instanceof ftl.TupleFn) {
+        for (let i = 0; i < expr.fns.length; i++) {
+          let e = expr.fns[i];
+          if (e instanceof ftl.RefFn && e.unresolved) {
+            if (e.name == f.name)
+              expr.fns[i] = f;
+            else {
+              this.resolveRecursiveRef(f, e);
+            }
+          } else
+            this.resolveRecursiveRef(f, e);
+        }
+      }
+      else if (expr instanceof ftl.WrapperFn) {
+        let e = expr.wrapped;
+        if (e instanceof ftl.RefFn && e.unresolved) {
+          if (e.name == f.name)
+            expr.wrapped = f;
+        }
+        else {
+          this.resolveRecursiveRefForWrapperFn(f, e);
+        }
+      }
+    }
+
+    resolveRecursiveRefForWrapperFn(f, expr) {
+      if (expr instanceof ftl.RefFn && expr.unresolved) {
+        if (e.name == f.name)
+          expr.wrapped = f;
+      }
+      else {
+        this.resolveRecursiveRef(f, expr);
       }
     }
 

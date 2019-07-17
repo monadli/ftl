@@ -301,20 +301,6 @@ var ftl = (function() {
     }
 
     get executables() { return this._executables }
-
-    resolveRecursiveRef(f, expr) {
-      if (expr instanceof RefFn || expr instanceof ArrayElementSelectorFn) {
-        if (expr.name == f.name)
-          expr.possibleRef = f;
-      }
-
-      else if (expr instanceof PipeFn || expr instanceof TupleFn)
-        expr.elements.forEach(elm => this.resolveRecursiveRef(f, elm));
-
-      else if (expr instanceof WrapperFn) {
-        this.resolveRecursiveRef(f, expr.wrapped);
-      }
-    }
   }
 
   /**
