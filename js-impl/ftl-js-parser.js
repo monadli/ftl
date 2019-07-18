@@ -517,35 +517,20 @@ ftl.parser = /*
       if (expr instanceof ftl.PipeFn || expr instanceof ftl.TupleFn) {
         for (let i = 0; i < expr.fns.length; i++) {
           let e = expr.fns[i];
-          if (e instanceof ftl.RefFn && e.unresolved) {
-            if (e.name == f.name)
+          if (e.name == f.name && e instanceof ftl.RefFn && e.unresolved) {
               expr.fns[i] = f;
-            else {
-              this.resolveRecursiveRef(f, e);
-            }
           } else
             this.resolveRecursiveRef(f, e);
         }
       }
       else if (expr instanceof ftl.WrapperFn) {
         let e = expr.wrapped;
-        if (e instanceof ftl.RefFn && e.unresolved) {
-          if (e.name == f.name)
-            expr.wrapped = f;
+        if (e.name == f.name && e instanceof ftl.RefFn && e.unresolved) {
+          expr.wrapped = f;
         }
         else {
-          this.resolveRecursiveRefForWrapperFn(f, e);
+          this.resolveRecursiveRef(f, e);
         }
-      }
-    }
-
-    resolveRecursiveRefForWrapperFn(f, expr) {
-      if (expr instanceof ftl.RefFn && expr.unresolved) {
-        if (e.name == f.name)
-          expr.wrapped = f;
-      }
-      else {
-        this.resolveRecursiveRef(f, expr);
       }
     }
 
