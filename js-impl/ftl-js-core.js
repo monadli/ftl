@@ -740,7 +740,7 @@ var ftl = (function() {
 
       var len = arguments.length;
       if (len == 0)
-        return this.fn.apply(this.params);
+        return this.fn.apply(this.params.apply());
 
       var tpl = new Tuple();
 
@@ -1299,17 +1299,27 @@ var ftl = (function() {
    * or a lambda expression invocation with named refrences.   
    */
   class CallExprFn extends Fn {
-    constructor(name, params) {
+    constructor(name, f, params) {
       super();
+      this.f = f;
       this.name = name;
       this.params = params;
     }
 
     apply(input) {
-      var f = input.get(this.name);
+      var f = !this.f ? input.get(this.name) : this.f;
       if (!(f instanceof Fn))
         throw new Error(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
-      var ret = f.apply(this.params[0].apply(input));
+      if (f instanceof RefFn) {
+        f = f.apply(input);
+      }
+      let intermediate = this.params[0].apply(input);
+      let ret;
+      if (typeof f == 'function') {
+        ret = f(intermediate);
+      } else {
+        ret = f.apply(intermediate);
+      }
       for (var i = 1; i < this.params.length; i++)
         return ret.apply(this.params[i].apply(input));
       return ret;
@@ -1478,9 +1488,9 @@ var ftl = (function() {
       if (list instanceof VarFn)
         list = list.value;
 
+      let index = this.index.apply(input); 
       if (list)
-        return list[this.index] || null;
-
+        return list[index] || null;
       else
         return this;
     }

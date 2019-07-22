@@ -407,6 +407,8 @@ ftl.parser = /*
       if (inputFn instanceof ftl.TupleFn && inputFn.hasName(this.name)) {
         for (var i = 0; i < this.fns.length; i++)
           this.fns[i] = this.fns[i].build(module, inputFn);
+
+        // TODO this seems not right
         return this;
       }
 
@@ -458,7 +460,10 @@ ftl.parser = /*
       else if (this.isFunctionArg)
         return new FunctionInterfaceBuilder(this.name, this.params[0], this.seq).build(module, inputFn);
 
-      throw new Error(this.name + " can not be resolved.");
+      // Not resolved. It may be a recursive function call
+      let unresolved = new ftl.RefFn(this.name)
+      unresolved.unresolved = true;
+      return new ftl.CallExprFn(this.name, unresolved, [this.combineMultiTuples(this.params.map(p => p.build(module, inputFn)))]);
     }
   }
 
@@ -514,10 +519,16 @@ ftl.parser = /*
 
     resolveRecursiveRef(f, expr) {
 
+      // Even if an expr is already a FunctionFn, it may still need to be relplaced
+      // when recursive may have been resolved to an imported function to be overriden
+      function maybeRecursive(expr) {
+        return expr instanceof ftl.RefFn && expr.unresolved || expr instanceof ftl.FunctionFn;
+      }
+
       if (expr instanceof ftl.PipeFn || expr instanceof ftl.TupleFn) {
         for (let i = 0; i < expr.fns.length; i++) {
           let e = expr.fns[i];
-          if (e.name == f.name && e instanceof ftl.RefFn && e.unresolved) {
+          if (e.name == f.name && maybeRecursive(e)) {
               expr.fns[i] = f;
           } else
             this.resolveRecursiveRef(f, e);
@@ -525,11 +536,16 @@ ftl.parser = /*
       }
       else if (expr instanceof ftl.WrapperFn) {
         let e = expr.wrapped;
-        if (e.name == f.name && e instanceof ftl.RefFn && e.unresolved) {
+        if (e.name == f.name && maybeRecursive(e)) {
           expr.wrapped = f;
         }
         else {
           this.resolveRecursiveRef(f, e);
+        }
+      } else if (expr instanceof ftl.CallExprFn && expr.f) {
+        let e = expr.f;
+        if (e.name == f.name && maybeRecursive(e)) {
+          expr.f = f;
         }
       }
     }
@@ -653,8 +669,9 @@ ftl.parser = /*
     }
 
     build(module, inputFn) {
-      var index = (this.index instanceof ftl.RefFn) ? this.index.name : parseInt(this.index);
-      return new ftl.ArrayElementSelectorFn(this.name, index);
+      return this.index instanceof RefBuilder
+        ? new ftl.ArrayElementSelectorFn(this.name, this.index.build(module, inputFn))
+        : new ftl.ArrayElementSelectorFn(this.name, new ftl.ConstFn(parseInt(this.index)));
     }
   }
 
