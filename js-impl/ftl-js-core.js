@@ -525,7 +525,7 @@ var ftl = (function() {
     }
 
     apply(input) {
-      return this.value;
+      return Array.isArray(this.value) ? Array.from(this.value) : this.value;
     }
 
     toString() {
