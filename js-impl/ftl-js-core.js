@@ -1316,7 +1316,7 @@ var ftl = (function() {
       let intermediate = this.params[0].apply(input);
       let ret;
       if (typeof f == 'function') {
-        ret = f(intermediate);
+        ret = f(... intermediate.toList());
       } else {
         ret = f.apply(intermediate);
       }

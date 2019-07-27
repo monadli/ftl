@@ -11,9 +11,11 @@
 //
 
 // unary -
-fn ---(val) { return -val }
+//fn -(val) { return -val }
 
 fn x + y { return x + y }
+
+
 fn x - y { return x - y }
 fn x * y { return x * y }
 fn x / y { return x / y }
@@ -32,7 +34,7 @@ fn x == y {
     return true;
   }
   return x == y || x instanceof Array && y instanceof Array && arrayIdentical(x, y)
-  || x instanceof Tuple && x.equals(y) }
+  || x instanceof ftl.Tuple && x.equals(y) }
 
 fn x != y { return x != y }
 fn x < y { return x < y }
@@ -73,29 +75,29 @@ fn len(list) {
 
 // append item to list and return
 fn list += item {
-  list.push(item)
-  return list
+  list.push(item);
+  return list;
 }
 
 // internal map
-//fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : _map(src, mapped += mapper(src[index]), index + 1, mapper)
+fn _map(src, mapped, index, mapper) -> index == len(src) ?? mapped :: _map(src, mapped += mapper(src[index]), index + 1, mapper)
 
 // map operator that returns a new list with list element mapped with mapper function
-//fn list => mapper(item) -> _map(list, [], 0, mapper)
+fn list => mapper(item) -> _map(list, [], 0, mapper)
 
 // internal reduce
-//fn _reduce(accu, list, index, reducer) -> index == len(list) ? accu : _reduce(reducer(accu, list[index]), list, index + 1, reducer)
+fn _reduce(accu, list, index, reducer) -> index == len(list) ?? accu :: _reduce(reducer(accu, list[index]), list, index + 1, reducer)
 
 // reduce operator that returns reduced from list with reducer function
-//fn list =|> reducer(i1, i2) -> (list[0], list, 1, reducer) -> reduce
+fn list =>. reducer(i1, i2) -> _reduce(list[0], list, 1, reducer)
 
 // internal filter
-//fn _filter(list, filtered, index, predicate) ->
-// index == len(list) ? filtered : _filter(list, (list[index], predicate, filtered) -> _1(_0) ? (_2 += _0) : _2, index + 1, predicate)
+fn _filter(list, filtered, index, predicate) ->
+ index == len(list) ? filtered : _filter(list, (list[index], predicate, filtered) -> _1(_0) ?? (_2 += _0) :: _2, index + 1, predicate)
 
 // filter operator
-//fn list |=> predicate(item) -> _filter(list, [], 0, predicate)
-    </script>
+fn list =>| predicate(item) -> _filter(list, [], 0, predicate)
+</script>
 
 <script id='module:unit.test' type='application/ftl'>import ftl.lang.*
 
@@ -106,12 +108,17 @@ fn square_area(x, y) {
 }
 
 // basic types
+1 == 1
 "Hello, ftl!" == 'Hello, ftl!'
 3.14159 == 3.14159
 true == true
 false == false
 [] == []
 [1, 2, 3.14159, 'hello'] == [1, 2, 3.14159, 'hello']
+
+// array selector
+[1, 2, 3.14159, 'hello'] -> _0[2] == 3.14159
+[1, 2, 3.14159, 'hello'] -> (_[1], _[0]) == (2 ,1)
 
 // tuple equality
 1 == (1)
@@ -127,8 +134,8 @@ false == false
 (3 > 2) && (2 > 1) == true
 (1 > 2) && (2 > 1) == false
 
-// specia operators
-(!5) == 120
+// special operators
+(5!) == 120
 
 fn test1(x) -> false
 fn test2(x) -> true
@@ -169,7 +176,60 @@ fn test_tail(x, y$()) {
 
 (false, true) -> test_tail(_0, _1)
 
+// test functional
+// functional
 
+//map
+(4, 5) -> [1, 2, 3] => (_1 + item + 2) == [8, 9, 10]
+
+// reduce
+[1, 2, 3] =>. (i1 + i2) == 6
+
+// filter
+[-1, 2, 5, 8, -2] =>| (item < 0) == [-1, -2]
+
+fn _is_prime(n, divisor:2) -> (divisor == (n - 1)) ? true : ((n % divisor == 0) ? false : _is_prime(n, divisor + 1))
+
+// test if a number is a prime number
+fn is_prime(n) -> (n < 2) ?? false :: ((n == 2) ?? true :: _is_prime(n))
+
+// apply is_prime to 31 to test if 31 is a prime number
+is_prime(31) == true
+
+is_prime(32) == false
+
+// ======== n-ary  w/o operator precedence
+
+// ternary operator
+fn a - b - c {
+  return a - b - c
+}
+
+// quadruple operator
+fn a - b + c - d {
+  return a - b + c - d
+}
+
+// the following is equivalent to (1 - 2 + 4 - 9) + (4 - 5 - 7) 
+1 - 2 + 4 - 9 + 4 - 5 - 7 == -14
+
+// ======== partial function
+fn contains(str, sub) {
+  return str.includes(sub);
+}
+
+'this is a test' -> contains(sub:'test')
+
+// ======== exceptions
+
+// same name more than once
+// (a:1, a:2)
+
+// more than one empty argument list
+// square_area()() == 6
+
+// empty argument list when at least one argument is needed for curry
+// square_area() == 6
 </script>
 
 <script>
@@ -186,6 +246,7 @@ function init() {
 }
 
 function load() {
+  ftl.validateBuild(true);
   var ftl_code = document.getElementById('module:unit.test').text;
   var code_area = document.getElementById('code-area');
   code_area.value = ftl_code;

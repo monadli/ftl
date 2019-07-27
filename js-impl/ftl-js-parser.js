@@ -404,16 +404,16 @@ ftl.parser = /*
     }
 
     build(module, inputFn) {
-      if (inputFn instanceof ftl.TupleFn && inputFn.hasName(this.name)) {
+/*      if (inputFn instanceof ftl.TupleFn && inputFn.hasName(this.name)) {
         for (var i = 0; i < this.fns.length; i++)
           this.fns[i] = this.fns[i].build(module, inputFn);
 
         // TODO this seems not right
         return this;
       }
-
+*/
       // calling expression is a function invocation
-      else if (module.hasFn(this.name)) {
+      if (module.hasFn(this.name)) {
         var f = module.getAvailableFn(this.name);
         if (f) {
           let params = this.combineMultiTuples(this.params.map(p => p.build(module, inputFn)));
@@ -609,6 +609,8 @@ ftl.parser = /*
 
       var need_new_args = false;
       var new_args = new Array(params.size);
+
+      let selector_pos = 0;
       for (var i = 0; i < params.size; i++) {
         var name = params.fns[i].name;
 
@@ -623,7 +625,7 @@ ftl.parser = /*
 
         // named param and no corresponding arg
         else if (!names.has(name)) {
-          new_args[i] = params.fns[i];
+          new_args[i] = new ftl.NamedExprFn(params.fns[i].name, new ftl.TupleSelectorFn(selector_pos++));
           need_new_args = true;
         }
 
