@@ -1670,7 +1670,7 @@ FunctionDeclaration
   }
 
 Tuple
-  = "(" _ elms:ParameterList? ")" { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(... elms) }
+  = "(" _ elms:ParameterList? _ ")" { return elms == null ? new ftl.TupleFn() : new ftl.TupleFn(... elms) }
 
 ExpressionCurry
   = expr:Tuple params:(_ Tuple)+ {
@@ -1786,10 +1786,10 @@ OperandValueDeclaration
     return id;
   }
 
-OperandReferenceDeclaration
+OperandFunctionDeclaration
   = id:Identifier params:Tuple {
 
-    // #OperandReferenceDeclaration
+    // #OperandFunctionDeclaration
 
     id.setAsRefType();
     id.params = params;
@@ -1797,7 +1797,7 @@ OperandReferenceDeclaration
   }
 
 OperandDeclaration
- = OperandReferenceDeclaration
+ = OperandFunctionDeclaration
  / OperandValueDeclaration
 
 /**
@@ -1968,7 +1968,7 @@ IdentifierName "identifier"
 IdentifierStart
   = AsciiLetter
   / "$"
-  / "_" AsciiLetter
+  / "_"
 
 /// non-start of identifier
 IdentifierPart
