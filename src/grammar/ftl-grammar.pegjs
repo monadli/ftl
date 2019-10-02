@@ -287,8 +287,8 @@ FunctionDeclaration
     module.addFn(new ftl_builder.FunctionBuilder(id, params, body).build(module, new ftl.TupleFn()));
   }
 
-Tuple
-  = "(" _ elms:ParameterList? _ ")" {
+Tuple =
+  "(" _ elms:ParameterList? _ ")" {
 
     //# Tuple
 
@@ -311,7 +311,7 @@ ParameterList
   }
 
 Parameter
-  = id:(Identifier _ ":")? _ expr:Expression {
+  = id:(Identifier _ ":")? _ expr:MapExpression {
 
     //# Parameter
 
@@ -320,26 +320,30 @@ Parameter
 
 FunctionBody
   = NativeBlock
-  / PipeExpression
+  / ArrowExpression+
 
-PipeExpression
-  = "->" _ ex:Expression _ {
+MapOperand =
+  OperatorExpression / PrimaryExpression
+
+ArrowExpression
+  = "->" _ ex:MapOperand  {
 
     //# PipeExpression
-
+    console.log('ex', ex)
     return ex
   }
 
-Expression
-  = first:(OperatorExpression / PrimaryExpression) rest:(_ PipeExpression)? {
+
+MapExpression =
+  first:(MapOperand) rest:(_ ArrowExpression)* {
 
     //# Expression
-
-    return new ftl_builder.Expression(first, extractOptional(rest, 1))
+    console.log('MapExpression')
+    return new ftl_builder.Expression(first, extractList(rest, 1))
   }
 
 Executable
-  = expr:Expression {
+  = expr:MapExpression {
 
       return expr;
     }
@@ -451,8 +455,7 @@ N_aryOperandExpression =
     return new ftl_builder.OperandExpression(operand)
   }
 
-// n-ary operator expression
-// It is expected that result of n-ary operators generates single element, not a tuple.
+// N-ary operator expression supports any number of n operands and n - 1 operators, binary, ternary, etc.
 //
 // Any operand as expression with postfix operator has to be wrapped with parantheses,
 // except when it apprear as last element. Otherwise there is no way to distinguish
