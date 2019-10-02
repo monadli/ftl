@@ -11,77 +11,61 @@
 {
 
 class FtlBuilder {
-  constructor() {
-    console.log(`trying ${this.constructor.name} with ${JSON.stringify(arguments)}`)
+  constructor(props) {
+    Object.defineProperty(this, '_', { enumerable: true, value: this.constructor.name})
+    for (let key in props) {
+      Object.defineProperty(this, key, { enumerable: true, value: props[key]})
+    }
+    console.log(`trying ${this._} with ${JSON.stringify(this)}`)
   }
 }
 
 var ftl_builder = {
   ConstBuilder: class extends FtlBuilder {
     constructor(val) {
-      super(val);
-      this.builder = 'ConstBuilder'
-      this.val = val;
+      super({val: val});
     }
   },
 
   RefBuilder: class extends FtlBuilder {
     constructor(name) {
-      super(name);
-      this.builder = 'RefBuilder'
-      this.name = name;
+      super({name: name});
     }
   },
 
   TupleBuilder: class extends FtlBuilder {
     constructor(elms) {
-      super(elms)
-      this.builder = 'TupleBuilder'
-      this.elms = elms
+      super({elms: elms})
     }
   },
 
   PipeBuilder: class extends FtlBuilder {
     constructor(... elements) {
-      super(... elements);
-      this.builder = 'PipeBuilder'
-      this.elements = elements;
+      super({elements: elements});
     }
   },
 
   ExprCurryBuilder: class extends FtlBuilder {
     constructor(f, ... paramtuples) {
-      super(f, ... paramtuples);
-      this.builder = 'ExprCurryBuilder'
-      this.f = f;
-      this.paramtuples = paramtuples;
+      super({f: f, paramtuples: paramtuples});
     }
   },
 
   ParameterList: class extends  FtlBuilder {
     constructor(... params) {
-      super(... params);
-      this.builder = 'ParameterList'
-      this.params = params;
+      super({params: params});
     }
   },
 
   TupleElementBuilder: class extends FtlBuilder {
     constructor(id, expr) {
-      super(id, expr)
-      this.builder = 'TupleElementBuilder'
-      this.id = id;
-      this.expr = expr;
+      super({id: id, expr: expr})
     }
   },
 
   FunctionBuilder: class extends FtlBuilder {
     constructor(id, params, body) {
-      super(id, params, body)
-      this.builder = 'FunctionBuilder'
-      this.id = id
-      this.params = params
-      this.body = body
+      super({id: id, params: params, body: body})
     }
 
     build() {
@@ -91,55 +75,43 @@ var ftl_builder = {
 
   Expression: class extends FtlBuilder {
     constructor(first, rest1) {
-      super(first, rest1)
-      this.builder = 'Expression'
-      this.first = first
-      this.rest1 = rest1
+      super({first: first, rest1: rest1})
+    }
+  },
+
+  OperandExpression: class extends FtlBuilder {
+    constructor(operand) {
+      super({operand: operand})
     }
   },
 
   UnaryOperatorExpression : class extends FtlBuilder {
     constructor(op, expr) {
-      super(expr, op)
-      this.builder = 'UnaryOperatorExpression'
-      this.op = op
-      this.expr = expr
-
+      super({expr: expr, op: op})
     }
   },
 
   PostfixOperatorExpression : class extends FtlBuilder {
     constructor(expr, op) {
-      super(expr, op);
-      this.builder = 'PostfixOperatorExpression'
-      this.expr = expr;
-      this.op = op;
+      super({ expr: expr, op: op});
     }
   },
 
   N_aryOperatorExpression: class extends FtlBuilder {
     constructor(ops, operands) {
-      super(ops, operands)
-      this.builder = 'N_aryOperatorExpression'
-      this.ops = ops;
-      this.operands = operands;
+      super({ops: ops, operands: operands})
     }
   },
 
   OperatorExpression: class extends FtlBuilder {
     constructor(unit) {
-      super(unit);
-      this.builder = 'OperatorExpression'
-      this.unit = unit;
+      super({unit: unit});
     }
   },
 
   CallExprBuilder: class extends FtlBuilder {
     constructor(name, params) {
-      super();
-      this.builder = 'CallExprBuilder'
-      this.name = name;
-      this.params = params;
+      super({name: name, params: params});
     }
   }
 }
@@ -382,6 +354,7 @@ PrimaryExpression
   / ExpressionCurry
   / Tuple
   / TupleSelector
+  / UnaryOperatorExpression
 
 Operator
   = !"//" !"->" first:OperatorSymbol rest:OperatorSymbol* {
@@ -447,9 +420,7 @@ PostfixOperatorDeclaration
   }
 
 OperatorExpression
-  = unit: (N_aryOperatorExpression
-  / UnaryOperatorExpression
-  / PostfixOperatorExpression) {
+  = unit: (N_aryOperatorExpression / PostfixOperatorExpression) {
     return new ftl_builder.OperatorExpression(unit)
   }
 
@@ -473,15 +444,29 @@ PostfixOperatorExpression
     return new ftl_builder.PostfixOperatorExpression(expr, op)
   }
 
+N_aryOperandExpression =
+  operand:(PrimaryExpression / "(" _ PostfixOperatorExpression _ ")")
+  {
+    // OperandExpression
+    return new ftl_builder.OperandExpression(operand)
+  }
+
 // n-ary operator expression
 // It is expected that result of n-ary operators generates single element, not a tuple.
-N_aryOperatorExpression
-  = operand:(PrimaryExpression / UnaryOperatorExpression / PostfixOperatorExpression) rest: (_ Operator _ PrimaryExpression)+ {
-
+//
+// Any operand as expression with postfix operator has to be wrapped with parantheses,
+// except when it apprear as last element. Otherwise there is no way to distinguish
+// whether an intermediate operator is a postfix one or n-ary one.
+N_aryOperatorExpression =
+  first:N_aryOperandExpression rest:(_ Operator _ N_aryOperandExpression)+ last: (_ Operator)?
+  {
     // N_aryOperatorExpression
-
     var ops = extractList(rest, 1);
-    var params = [operand].concat(extractList(rest, 3));
+    var params = [first].concat(extractList(rest, 3));
+    if (last) {
+      let post_op = extractOptional(last, 1)
+      params[params.length - 1] = new ftl_builder.PostfixOperatorExpression(params[params.length - 1], post_op)
+    }
     return new ftl_builder.N_aryOperatorExpression(ops, params)      
   }
 
