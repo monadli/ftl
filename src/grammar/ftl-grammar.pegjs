@@ -57,6 +57,12 @@ var ftl_builder = {
     }
   },
 
+  ParamTupleBuilder: class extends FtlBuilder {
+    constructor(... params) {
+      super({params: params});
+    }
+  },
+
   TupleElementBuilder: class extends FtlBuilder {
     constructor(id, expr) {
       super({id: id, expr: expr})
@@ -112,6 +118,18 @@ var ftl_builder = {
   CallExprBuilder: class extends FtlBuilder {
     constructor(name, params) {
       super({name: name, params: params});
+    }
+  },
+
+  FunctionInterfaceBuilder: class extends FtlBuilder {
+    constructor(name, params) {
+      super({name: name, params: params});
+    }
+  },
+
+  ArrayElementSelectorBuilder: class extends FtlBuilder {
+    constructor(id, index) {
+      super({id: id, index: index});
     }
   }
 }
@@ -279,12 +297,12 @@ VariableDeclaration
 
 // Function declaration
 // A function can be n-ary operator as well
-FunctionDeclaration
-  = FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody {
+FunctionDeclaration =
+  FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody {
 
     //# FunctionDeclaration
 
-    module.addFn(new ftl_builder.FunctionBuilder(id, params, body).build(module, new ftl.TupleFn()));
+    return new ftl_builder.FunctionBuilder(id, params, body)
   }
 
 Tuple =
@@ -323,7 +341,7 @@ FunctionBody
   / ArrowExpression+
 
 MapOperand =
-  OperatorExpression / PrimaryExpression
+  annotation:(Annotation _ )* ex:(OperatorExpression / PrimaryExpression)
 
 ArrowExpression
   = "->" _ ex:MapOperand  {
@@ -332,7 +350,6 @@ ArrowExpression
     console.log('ex', ex)
     return ex
   }
-
 
 MapExpression =
   first:(MapOperand) rest:(_ ArrowExpression)* {
@@ -347,6 +364,18 @@ Executable
 
       return expr;
     }
+
+// Annotation is such expression that it takes input to underneath expression
+// and does any side effect to it, such as writing it into log, etc., and does
+// not return anything, or the return is simply ignored.
+//
+// In other words, there is no way for an annotation to affect the fucntionality
+// of underneath expression.
+Annotation =
+  '@' annotation:(CallExpression / Identifier) {
+    console.log('in annotation')
+    return annotation
+  }
 
 PrimaryExpression
   = Literal
@@ -380,7 +409,7 @@ OperandFunctionDeclaration
   = id:Identifier params:Tuple {
 
     // #OperandFunctionDeclaration
-    return new ftl_builder.FunctionInterfaceBuilder(id.name, new ftl_builder.ParamTupleBuilder(... params.fns))
+    return new ftl_builder.FunctionInterfaceBuilder(id.name, new ftl_builder.ParamTupleBuilder(params))
   }
 
 OperandDeclaration
@@ -508,11 +537,7 @@ LiteralList
 
     //# LiteralList
 
-    var elms = buildList(first, rest, 3);
-    var ret = [];
-    for (var i = 0; i < elms.length; i++)
-      ret.push(elms[i].build(module).apply());
-    return new ftl_builder.ConstBuilder(ret)
+    return new ftl_builder.ConstBuilder(buildList(first, rest, 3))
   }
 
 // expression for getting member of variable
@@ -530,7 +555,7 @@ CallExpression
     if (id.name == '$') {
       if (extracted_params.length > 1)
         throw new Error("FTL0001: lambda's arguments followed by calling arguments!");
-      return new ftl_builder.ParamTupleBuilder(... extracted_params[0].fns)
+      return new ftl_builder.ParamTupleBuilder(... extracted_params[0])
     }
 
     return new ftl_builder.CallExprBuilder(id.name, extracted_params)
