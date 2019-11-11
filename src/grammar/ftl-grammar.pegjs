@@ -1,152 +1,57 @@
 /**
  * ftl grammar
  *
- * This grammar is in form of peg, specifically parsable by pegjs (https://pegjs.org)
+ * This grammar is in form of peg, parsable by pegjs (https://pegjs.org)
  *
- * Content in this file is for validating grammar using pegjs online (https://pegjs.org/online)
+ * Javascript in this file is for validating grammar using pegjs online (https://pegjs.org/online)
  *
  * Jian Li
  */
 
 {
 
-class FtlBuilder {
-  constructor(props) {
-    Object.defineProperty(this, '_', { enumerable: true, value: this.constructor.name})
-    for (let key in props) {
-      Object.defineProperty(this, key, { enumerable: true, value: props[key]})
+class BuildInfo {
+    constructor(name, details) {
+        this.name = name
+        this.details = details
     }
-    console.log(`trying ${this._} with ${JSON.stringify(this)}`)
-  }
 }
 
-var ftl_builder = {
-  ConstBuilder: class extends FtlBuilder {
-    constructor(val) {
-      super({val: val});
-    }
-  },
-
-  RefBuilder: class extends FtlBuilder {
-    constructor(name) {
-      super({name: name});
-    }
-  },
-
-  TupleBuilder: class extends FtlBuilder {
-    constructor(elms) {
-      super({elms: elms})
-    }
-  },
-
-  PipeBuilder: class extends FtlBuilder {
-    constructor(... elements) {
-      super({elements: elements});
-    }
-  },
-
-  ExprCurryBuilder: class extends FtlBuilder {
-    constructor(f, ... paramtuples) {
-      super({f: f, paramtuples: paramtuples});
-    }
-  },
-
-  ParameterList: class extends  FtlBuilder {
-    constructor(... params) {
-      super({params: params});
-    }
-  },
-
-  ParamTupleBuilder: class extends FtlBuilder {
-    constructor(... params) {
-      super({params: params});
-    }
-  },
-
-  TupleElementBuilder: class extends FtlBuilder {
-    constructor(id, expr) {
-      super({id: id, expr: expr})
-    }
-  },
-
-  FunctionBuilder: class extends FtlBuilder {
-    constructor(id, params, body) {
-      super({id: id, params: params, body: body})
-    }
-
-    build() {
-
-    }
-  },
-
-  Expression: class extends FtlBuilder {
-    constructor(first, rest1) {
-      super({first: first, rest1: rest1})
-    }
-  },
-
-  OperandExpression: class extends FtlBuilder {
-    constructor(operand) {
-      super({operand: operand})
-    }
-  },
-
-  UnaryOperatorExpression : class extends FtlBuilder {
-    constructor(op, expr) {
-      super({expr: expr, op: op})
-    }
-  },
-
-  PostfixOperatorExpression : class extends FtlBuilder {
-    constructor(expr, op) {
-      super({ expr: expr, op: op});
-    }
-  },
-
-  N_aryOperatorExpression: class extends FtlBuilder {
-    constructor(ops, operands) {
-      super({ops: ops, operands: operands})
-    }
-  },
-
-  OperatorExpression: class extends FtlBuilder {
-    constructor(unit) {
-      super({unit: unit});
-    }
-  },
-
-  CallExprBuilder: class extends FtlBuilder {
-    constructor(name, params) {
-      super({name: name, params: params});
-    }
-  },
-
-  FunctionInterfaceBuilder: class extends FtlBuilder {
-    constructor(name, params) {
-      super({name: name, params: params});
-    }
-  },
-
-  ArrayElementSelectorBuilder: class extends FtlBuilder {
-    constructor(id, index) {
-      super({id: id, index: index});
-    }
-  }
+function buildElement(name, buildInfo) {
+  return new BuildInfo(name, buildInfo)
 }
 
-let ftl = {
-  Module: class {
-    addExecutable(exec) {
-      console.log(`Module.addExecutable(${exec})`)
-    }
+function buildApplication(app) {
+  console.log('in buildApplication')
+  if (!(app instanceof BuildInfo)) {
+    return app
+  }
 
-    getAvailableFn(name) {
-      return undefined;
+  let ret = {}
+  for (let [key, value] of Object.entries(app.details)) {
+    if (Array.isArray(value)) {
+      let arr = []
+      for (let i = 0; i < value.length; i++) {
+        let elm = {}
+        let v = value[i]
+        if (v instanceof BuildInfo) {
+          elm[`_${i}:${v.name}`] = buildApplication(v)
+        } else {
+          elm[`_${i}`] = v
+        }
+        arr.push(elm)
+      }
+      ret[key] = arr
+    }
+    else if (value instanceof BuildInfo) {
+      ret[`${key}:${value.name}`] = buildApplication(value)
+    } else {
+      ret[key] = value
     }
   }
-}
 
-var module = new ftl.Module('')
+  return ret
+}
 
 function join(value) {
   if (Array.isArray(value))
@@ -184,167 +89,150 @@ function buildFirstRest(first, rest) {
 }
 
 // start
-Start
-  = ___ ModuleDeclaration? ___ program:Declarations? ___ {
-
-    //# Start
-
-    return program;
-  } 
-
-ModuleDeclaration
-  = ModuleToken _ module_name: (ModulePath NamespaceIdentifier { return text() }) {
-
-    //# ModuleDeclaration
-
-    module.name = module_name;
-  } 
-
-ModulePath
-  =  (NamespaceIdentifier ("." / "/"))* {
-
-    //# ModulePath
-
-    return text();
+Start =
+  ___ ModuleDeclaration? ___ application:Declarations? ___
+  {
+      return {application: buildApplication(application)}
   }
 
-ImportModulePath
-  = ((".")+ "/")* ModulePath {
+// Module declaration may be used in ftl content loaded not via importing from files,
+// such as loaded via http where module structure is not present.
+ModuleDeclaration =
+  ModuleToken _ module_name:(ModulePath NamespaceIdentifier)
+  {
+    return buildElement('ModuleDeclaration', { name: module_name.text() })
+  }
 
-    //# ImportModulePath
+ModulePath =
+  (NamespaceIdentifier ("." / "/"))*
+  {
+    return buildElement('ModulePath', text())
+  }
 
-    return text();
+ImportModulePath =
+  ((".")+ "/")* ModulePath
+  {
+    return buildElement('ImportModulePath', { path: text() })
   }
 
 // all allowed declarations
-Declarations
-  = first:Declaration rest:(__ Declaration)* {
-
-    //# Declarations
-
-    return buildList(first, rest, 1);
+Declarations =
+  first:Declaration rest:(__ Declaration)*
+  {
+    return buildElement('Declarations', {declarations: buildList(first, rest, 1)})
   }
 
-Declaration
-  = ImportDeclaration / VariableDeclaration / FunctionDeclaration / Executable
+Declaration =
+  ImportDeclaration
+  / VariableDeclaration
+  / FunctionDeclaration
+  / Executable
 
-ImportDeclaration
-  = ImportToken _ importItems:ImportMultiItems {
-
-    //# ImportDeclaration
-
-    try {
-      module.importStatement(scriptPath, importItems)
-    } catch (e) {
-      if (e instanceof ftl.ModuleNotLoadedError) {
-        let m = peg$parse(e.moduleName, rootPath, module, options)
-        m.name = e.moduleName
-        ftl.addModule(m)
-        module.importStatement(scriptPath, importItems)
-      }
-      else
-        throw e
-    }
+ImportDeclaration =
+  ImportToken _ items:ImportMultiItems
+  {
+    return buildElement('ImportDeclaration', { items: items })
   }
 
-ImportSingleItem
-  = name: (ImportModulePath (Identifier / Operator (" " Operator)*) { return text() }) as:(_ "as" _ (Identifier / Operator))? {
-
-    //# ImportSingleItem
-
-    return {
-      type: "single",
-      name: name,
-      asName: extractOptional(as, 3)
-    };
+ImportSingleItem =
+  name:(ImportModulePath (Identifier / Operator (" " Operator)*)) as:(_ "as" _ (Identifier / Operator))?
+  {
+    return buildElement('ImportSingleItem', { name: name.text(), item: extractOptional(as, 3) })
   }
 
-ImportMultiItems
-  = first:ImportItem rest:(_ "," _ ImportItem)* {
-
-    //# ImportMultiItems
-
-    var ret = extractList(rest, 3);
-    ret.unshift(first);
-    return ret;
+ImportMultiItems =
+  first:ImportItem rest:(_ "," _ ImportItem)*
+  {
+    return buildElement('ImportMultiItems', { items: buildList(first, extractList(rest, 3)) })
   }
 
-ImportList
-  = path:(ImportModulePath NamespaceIdentifier { return text() }) _ "[" _ list:ImportMultiItems? _ "]" {
-
-    //# ImportList
-
-    return {
-      type: "list",
-      path: path,
-      importList: list
-    }
+ImportList =
+  path:(ImportModulePath NamespaceIdentifier { return text() }) _ "[" _ list:ImportMultiItems? _ "]"
+  {
+    return buildElement('ImportList', { path: path, list: list })
   }
 
-ImportItem
-  = ImportList
+ImportItem =
+  ImportList
   / ImportSingleItem
 
 // Variable or constant declaration at module level, which can be referenced in any functions within the same module or outside the module.
-VariableDeclaration
-  = modifier:(ConstToken / VarToken) _ id:Identifier _ "=" _ expr:PrimaryExpression {
-
-    //# VariableDeclaration
-    var ret = modifier =='const' ? new ftl.ImmutableValFn(id.name, expr) : new ftl.VarFn(id.name, expr)
-    module.addFn(ret); 
-    return ret
+VariableDeclaration =
+  modifier:(ConstToken / VarToken) _ id:Identifier _ "=" _ expr:PrimaryExpression
+  {
+    return buildElement('VariableDeclaration', { modifier: modifier, name: id, expr: expr })
   }
 
 // Function declaration
 // A function can be n-ary operator as well
 FunctionDeclaration =
-  FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody {
-
-    //# FunctionDeclaration
-
-    return new ftl_builder.FunctionBuilder(id, params, body)
+  FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody
+  {
+    return buildElement('FunctionDeclaration', {
+      id: id,
+      params: params,
+      body: body}
+    )
   }
 
 Tuple =
-  "(" _ elms:ParameterList? _ ")" {
-
-    //# Tuple
-
-    return elms == null ? new ftl_builder.TupleBuilder() : new ftl_builder.TupleBuilder(elms)
+  "(" _ elms:TupleElementList? _ ")"
+  {
+    return buildElement('Tuple', {elements: elms || []})
   }
 
-ExpressionCurry
-  = expr:Tuple params:(_ Tuple)+ {
-
-    //# ExpressionCurry
-
-    return new ftl_builder.ExprCurryBuilder(expr, ... extractList(params, 1))
+ExpressionCurry =
+  expr:Tuple params:(_ Tuple)+
+  {
+    return buildElement(
+      'ExpressionCurry',
+      {
+        expr:expr,
+        list: extractList(params, 1)
+      }
+    )
   }
 
-ParameterList
-  = first:Parameter rest:(_ "," _ Parameter)* {
-
-    //# ParameterList
-    return new ftl_builder.ParameterList(buildList(first, rest, 3))
+TupleElementList =
+  first:TupleElement rest:(_ "," _ TupleElement)*
+  {
+    return buildElement(
+      'TupleElementList',
+      { elements: buildList(first, rest, 3) }
+    )
   }
 
-Parameter
-  = id:(Identifier _ ":")? _ expr:MapExpression {
-
-    //# Parameter
-
-    return new ftl_builder.TupleElementBuilder(extractOptional(id, 0), expr)
+TupleElement =
+  id:(Identifier _ ":")? _ expr:MapExpression
+  {
+    return buildElement(
+      'TupleElement',
+      {
+        name: extractOptional(id, 0),
+        expr: expr
+      }
+    )
   }
 
-FunctionBody
-  = NativeBlock
+FunctionBody =
+  NativeBlock
   / ArrowExpression+
 
 MapOperand =
-  annotation:(Annotation _ )* ex:(OperatorExpression / PrimaryExpression)
+  annotations:(Annotation _ )* expr:(OperatorExpression / PrimaryExpression)
+  {
+    return buildElement(
+      'MapOperand',
+      {
+          annotations: extractList(annotations, 0),
+          expr: expr
+      }
+    )
+  }
 
-ArrowExpression
-  = "->" _ ex:MapOperand  {
+ArrowExpression =
+  "->" _ ex:MapOperand
+  {
 
     //# PipeExpression
     console.log('ex', ex)
@@ -352,15 +240,18 @@ ArrowExpression
   }
 
 MapExpression =
-  first:(MapOperand) rest:(_ ArrowExpression)* {
-
-    //# Expression
-    console.log('MapExpression')
-    return new ftl_builder.Expression(first, extractList(rest, 1))
+  first:(MapOperand) rest:(_ ArrowExpression)*
+  {
+    return buildElement(
+      'MapExpression',
+      {
+        elements: buildList(first, extractList(rest, 1))
+      }
+    )
   }
 
-Executable
-  = expr:MapExpression {
+Executable =
+  expr:MapExpression {
 
       return expr;
     }
@@ -377,8 +268,8 @@ Annotation =
     return annotation
   }
 
-PrimaryExpression
-  = Literal
+PrimaryExpression =
+  Literal
   / ArrayElementSelector
   / CallExpression
   / MemberExpression
@@ -389,31 +280,36 @@ PrimaryExpression
   / TupleSelector
   / UnaryOperatorExpression
 
-Operator
-  = !"//" !"->" first:OperatorSymbol rest:OperatorSymbol* {
+Operator =
+  !"//" !"->" first:OperatorSymbol rest:OperatorSymbol* {
 
     //# Operator
 
     return text();
   }
 
-OperandValueDeclaration
-  = id:Identifier {
+OperandValueDeclaration =
+  id:Identifier {
 
     //# OperandValueDeclaration
 
     return id;
   }
 
-OperandFunctionDeclaration
-  = id:Identifier params:Tuple {
-
-    // #OperandFunctionDeclaration
-    return new ftl_builder.FunctionInterfaceBuilder(id.name, new ftl_builder.ParamTupleBuilder(params))
+OperandFunctionDeclaration =
+  id:Identifier params:Tuple
+  {
+    return buildElement(
+      'OperandFunctionDeclaration',
+      {
+        name: id.name,
+        params: params
+      }
+    )
   }
 
-OperandDeclaration
- = OperandFunctionDeclaration
+OperandDeclaration =
+  OperandFunctionDeclaration
  / OperandValueDeclaration
 
 /**
@@ -421,68 +317,58 @@ OperandDeclaration
  *   operand (op operand)+
  * @return type:'OperatorDeclaration', id, operands
  */
-OperatorDeclaration
-  = PreInfixOperatorDeclaration
+OperatorDeclaration =
+  PreInfixOperatorDeclaration
   / PostfixOperatorDeclaration
 
-PreInfixOperatorDeclaration
-  = first:OperandDeclaration rest:(_ Operator _ OperandDeclaration)+ {
-
-    //# PreInfixOperatorDeclaration
-
-    var ops = extractList(rest, 1);
-    var name = ops.length == 1 ? ops[0] : ops.join(' ');
-    var operands = [first].concat(extractList(rest, 3))
-    return {
-      type: 'OperatorDeclaration',
-      name: name,
-      operands: new ftl_builder.TupleBuilder(... operands)
-    }
+PreInfixOperatorDeclaration =
+  first:OperandDeclaration rest:(_ Operator _ OperandDeclaration)+
+  {
+    return buildElement(
+      'PreInfixOperatorDeclaration',
+      {
+        operator: extractList(rest, 1),
+        operands: buildList(first, extractList(rest, 3))
+      }
+    )
   }
 
-PostfixOperatorDeclaration
-  = operand:OperandDeclaration _ op:Operator {
-
-    //# PostfixOperatorDeclaration
-
-    return {
-      type: 'PostfixOperatorDeclaration',
-      name: op,
-      operands: operand
-    }
+PostfixOperatorDeclaration =
+  operand:OperandDeclaration _ op:Operator
+  {
+    return buildElement(
+      'PostfixOperatorDeclaration',
+      {
+        operator: op,
+        operand: operand
+      }
+    )
   }
 
-OperatorExpression
-  = unit: (N_aryOperatorExpression / PostfixOperatorExpression) {
-    return new ftl_builder.OperatorExpression(unit)
+OperatorExpression =
+  unit: (N_aryOperatorExpression / PostfixOperatorExpression)
+  {
+    return buildElement('OperatorExpression', { unit: unit })
   }
 
 // unary prefix operator expression
 // It is expected that result of unary operator generates single element, not a tuple.
-UnaryOperatorExpression
-  = op:Operator _ expr:PrimaryExpression {
-
-    //# UnaryOperatorExpression
-
-    return new ftl_builder.UnaryOperatorExpression(op, expr)
+UnaryOperatorExpression =
+  op:Operator _ expr:PrimaryExpression
+  {
+    return buildElement('UnaryOperatorExpression', { operator: op, expr: expr})
   }
 
 // postfix operator
 // It is expected that result of postfix operator generates single element, not a tuple.
-PostfixOperatorExpression
-  = expr:PrimaryExpression _ op:Operator {
-
-    //# PostfixOperatorExpression
-
-    return new ftl_builder.PostfixOperatorExpression(expr, op)
+PostfixOperatorExpression =
+  expr:PrimaryExpression _ op:Operator
+  {
+    return buildElement('PostfixOperatorExpression', { operator: op, expr: expr })
   }
 
 N_aryOperandExpression =
   operand:(PrimaryExpression / "(" _ PostfixOperatorExpression _ ")")
-  {
-    // OperandExpression
-    return new ftl_builder.OperandExpression(operand)
-  }
 
 // N-ary operator expression supports any number of n operands and n - 1 operators, binary, ternary, etc.
 //
@@ -492,145 +378,147 @@ N_aryOperandExpression =
 N_aryOperatorExpression =
   first:N_aryOperandExpression rest:(_ Operator _ N_aryOperandExpression)+ last: (_ Operator)?
   {
-    // N_aryOperatorExpression
-    var ops = extractList(rest, 1);
-    var params = [first].concat(extractList(rest, 3));
+    var params = buildList(first, extractList(rest, 3));
     if (last) {
       let post_op = extractOptional(last, 1)
-      params[params.length - 1] = new ftl_builder.PostfixOperatorExpression(params[params.length - 1], post_op)
+      params[params.length - 1] = buildElement('PostfixOperatorExpression', { operator: post_op, expr: params[params.length - 1] })
     }
-    return new ftl_builder.N_aryOperatorExpression(ops, params)      
+    return buildElement('N_aryOperatorExpression', { ops: extractList(rest, 1), operands: params })      
   }
 
-TupleSelector
-  = "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart)) {
-
-    //# TupleSelector
-
-    return new ftl.TupleSelectorFn(text().substring(1));
+TupleSelector =
+  "_" ("0" / (NonZeroDigit DecimalDigit* !IdentifierStart))
+  {
+    return buildElement('TupleSelector', { selector: text().substring(1) })
   }
 
-ArrayElementSelector
-  = id: Identifier _ "[" index:("0" / (NonZeroDigit DecimalDigit* {return text()}) / Identifier) _ "]" {
-
-    //# ArrayElementSelector
-    return new ftl_builder.ArrayElementSelectorBuilder(id, index)
+ArrayElementSelector =
+  id: Identifier _ "[" index:("0" / (NonZeroDigit DecimalDigit* {return text()}) / Identifier) _ "]"
+  {
+    return buildElement('ArrayElementSelector', { id: id, index: index })
   }
 
-Literal
-  = NullLiteral
+Literal =
+  NullLiteral
   / BooleanLiteral
   / NumericLiteral
   / StringLiteral
 
-ArrayLiteral
-  = "[" elms:(_ LiteralList)? _ "]" {
-
-    //# ArrayLiteral
-
-    var lst = extractOptional(elms, 1);
-    return lst == null ? new ftl_builder.ConstBuilder([]) : lst
+ArrayLiteral =
+  "[" elms:(_ LiteralList)? _ "]"
+  {
+    return buildElement('ArrayLiteral', { list: extractOptional(elms, 1) })
   }
 
-LiteralList
-  = first:PrimaryExpression rest:(_ "," _ PrimaryExpression)* {
-
-    //# LiteralList
-
-    return new ftl_builder.ConstBuilder(buildList(first, rest, 3))
+LiteralList =
+  first:PrimaryExpression rest:(_ "," _ PrimaryExpression)*
+  {
+    return buildElement('LiteralList', { list: buildList(first, rest, 3) })
   }
 
 // expression for getting member of variable
-MemberExpression
-  = Identifier _ "[" _ ( ParameterList)+ _ "]"
+MemberExpression =
+  Identifier _ "[" _ ( TupleElementList)+ _ "]"
 
-CallExpression
-  = id: Identifier params:(_ Tuple)+ {
-
-    //# CallExpression
-
-    var extracted_params = extractList(params, 1);
+CallExpression =
+  id: Identifier params:(_ Tuple)+
+  {
+    var extracted_params = extractList(params, 1)
 
     // lambda declaration
     if (id.name == '$') {
       if (extracted_params.length > 1)
         throw new Error("FTL0001: lambda's arguments followed by calling arguments!");
-      return new ftl_builder.ParamTupleBuilder(... extracted_params[0])
+      return buildElement('ParamTupleBuilder', { params:extracted_params[0] })
     }
 
-    return new ftl_builder.CallExprBuilder(id.name, extracted_params)
+    return buildElement('CallExpression', { name: id, params: extracted_params })
   }
 
 // Native javascript block wrapped with "{" and "}"
-NativeBlock
-  = "{" _ ((!("{" / "}") SourceCharacter)* {return text()})
+NativeBlock =
+  "{" _ ((!("{" / "}") SourceCharacter)* {return text()})
     NativeBlock* _
-    ((!("{" / "}") SourceCharacter)* {return text()}) "}"
-    {return {type:'native', script: text()}}
+    ((!("{" / "}") SourceCharacter)* {return text()}) "}" {
 
-SourceCharacter
-  = .
-
-Identifier
-  = !ReservedWord name:IdentifierName {
-
-    //# Identifier
-    return new ftl_builder.RefBuilder(name)
+    //# NativeBlock
+    return {type:'native', script: text()}
   }
 
-IdentifierName "identifier"
-  = first:IdentifierStart rest:IdentifierPart* {
+SourceCharacter =
+  .
 
-    //# IdentifierName
-
-    return first + rest.join("");
+Identifier =
+  !ReservedWord name:IdentifierName
+  {
+    return buildElement('Identifier', { name: name })
   }
 
-IdentifierStart
-  = AsciiLetter
+IdentifierName "identifier" =
+  first:IdentifierStart rest:IdentifierPart*
+  {
+    return first + rest.join("")
+  }
+
+IdentifierStart =
+  AsciiLetter
   / "$"
   / "_"
 
 /// non-start of identifier
-IdentifierPart
-  = IdentifierStart
+IdentifierPart =
+  IdentifierStart
   / DecimalDigit
 
-NamespaceIdentifier
-  = LowerLetter (LowerLetter / "_")* {
-
-    //# NamespaceIdentifier
-    return text();
+NamespaceIdentifier =
+  LowerLetter (LowerLetter / "_")*
+  {
+    return buildElement('NamespaceIdentifier', { text: text() })
   }
 
 // Tokens
-FalseToken      = "false" !IdentifierPart
-FunctionToken   = "fn" !IdentifierPart
-NullToken       = "null" !IdentifierPart
-TrueToken       = "true" !IdentifierPart
-ModuleToken     = "module" !IdentifierPart
-ImportToken     = "import" !IdentifierPart
-VarToken        = "var" !IdentifierPart
-ConstToken      = "const" !IdentifierPart
+FalseToken =
+  "false" !IdentifierPart
 
-AsciiLetter
-  = UpperLetter
+FunctionToken =
+  "fn" !IdentifierPart
+
+NullToken =
+  "null" !IdentifierPart
+
+TrueToken =
+  "true" !IdentifierPart
+
+ModuleToken =
+  "module" !IdentifierPart
+
+ImportToken =
+  "import" !IdentifierPart
+
+VarToken =
+  "var" !IdentifierPart
+
+ConstToken =
+  "const" !IdentifierPart
+
+AsciiLetter =
+  UpperLetter
   / LowerLetter
 
-UpperLetter
-  = [\u0041-\u005A]
+UpperLetter =
+  [\u0041-\u005A]
 
-LowerLetter
-  = [\u0061-\u007A]
+LowerLetter =
+  [\u0061-\u007A]
 
-DecimalDigit
-  = [0-9]
+DecimalDigit =
+  [0-9]
 
-OperatorSymbol
-  = [!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
+OperatorSymbol =
+  [!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
 
-ReservedWord
-  = VarToken
+ReservedWord =
+  VarToken
   / ConstToken
   / FunctionToken
   / ModuleToken
@@ -638,93 +526,89 @@ ReservedWord
   / NullToken
   / BooleanLiteral
 
-NullLiteral
-  = NullToken
+NullLiteral =
+  NullToken
 
-BooleanLiteral
-  = TrueToken {
-
-    //# TrueToken
-    return new ftl_builder.ConstBuilder(true)
-  }
-  / FalseToken {
-
-    //# FalseToken
-    return new ftl_builder.ConstBuilder(false)
+BooleanLiteral =
+  TrueToken
+  {
+    return buildElement('TrueToken', { value: true })
   }
 
-NumericLiteral
-  = literal:HexIntegerLiteral !(IdentifierStart / DecimalDigit)
-  / literal:DecimalLiteral !(IdentifierStart / DecimalDigit) {
-
-    //# NumericLiteral
-    return literal
+  / FalseToken
+  {
+    return buildElement('FalseToken', { value: false })
   }
 
-DecimalLiteral
-  = DecimalIntegerLiteral "." DecimalDigit* ExponentPart?
+NumericLiteral =
+  literal:HexIntegerLiteral !(IdentifierStart / DecimalDigit)
+  / literal:DecimalLiteral !(IdentifierStart / DecimalDigit)
+  {
+    return buildElement('NumericLiteral', { value: literal })
+  }
+
+DecimalLiteral =
+  DecimalIntegerLiteral "." DecimalDigit* ExponentPart?
   / [-]? "." DecimalDigit+ ExponentPart?
-  / DecimalIntegerLiteral ExponentPart? {
-
-    // DecimalLiteral
-    return new ftl_builder.ConstBuilder(parseFloat(text()))
+  / DecimalIntegerLiteral ExponentPart?
+  {
+    return parseFloat(text())
   }
 
-DecimalIntegerLiteral
-  = "0"
+DecimalIntegerLiteral =
+  "0"
   / [-]? NonZeroDigit DecimalDigit*
 
-NonZeroDigit
-  = [1-9]
+NonZeroDigit =
+  [1-9]
 
-ExponentPart
-  = ExponentIndicator SignedInteger
+ExponentPart =
+  ExponentIndicator SignedInteger
 
-ExponentIndicator
-  = "e"i
+ExponentIndicator =
+  "e"i
 
-SignedInteger
-  = [+-]? DecimalDigit+
+SignedInteger =
+  [+-]? DecimalDigit+
 
-HexIntegerLiteral
-  = "0x"i digits:$HexDigit+
+HexIntegerLiteral =
+  "0x"i digits:$HexDigit+
 
-HexDigit
-  = [0-9a-f]i
+HexDigit =
+  [0-9a-f]i
 
-StringLiteral
-  = '"' chars:DoubleStringCharacter* '"'
-  / "'" chars:SingleStringCharacter* "'" {
-
-    //# StringLiteral
-    var str = text();
-    return new ftl_builder.ConstBuilder(str.substr(1, str.length - 2))
+StringLiteral =
+  '"' chars:DoubleStringCharacter* '"'
+  / "'" chars:SingleStringCharacter* "'"
+  {
+    let str = text();
+    return buildElement('StringLiteral', { value: str.substr(1, str.length - 2) })
   }
 
-DoubleStringCharacter
-  = !('"' / "\\" / LineTerminator) SourceCharacter
+DoubleStringCharacter =
+  !('"' / "\\" / LineTerminator) SourceCharacter
   / "\\" sequence:EscapeSequence
   / LineContinuation
 
-SingleStringCharacter
-  = !("'" / "\\" / LineTerminator) SourceCharacter
+SingleStringCharacter =
+  !("'" / "\\" / LineTerminator) SourceCharacter
   / "\\" sequence:EscapeSequence
   / LineContinuation
 
-LineContinuation
-  = "\\" EOL
+LineContinuation =
+  "\\" EOL
 
-EscapeSequence
-  = CharacterEscapeSequence
+EscapeSequence =
+  CharacterEscapeSequence
   / "0" !DecimalDigit
   / HexEscapeSequence
 
-CharacterEscapeSequence
-  = SingleEscapeCharacter
+CharacterEscapeSequence =
+  SingleEscapeCharacter
   / NonEscapeCharacter
 
-SingleEscapeCharacter
-  = "'"
+SingleEscapeCharacter =
+  "'"
   / '"'
   / "\\"
   / "b"
@@ -734,55 +618,55 @@ SingleEscapeCharacter
   / "t"
   / "v"
 
-NonEscapeCharacter
-  = !(EscapeCharacter / LineTerminator) SourceCharacter
+NonEscapeCharacter =
+  !(EscapeCharacter / LineTerminator) SourceCharacter
 
-EscapeCharacter
-  = SingleEscapeCharacter
+EscapeCharacter =
+  SingleEscapeCharacter
   / DecimalDigit
   / "x"
   / "u"
 
-HexEscapeSequence
-  = "x" digits:$(HexDigit HexDigit)
+HexEscapeSequence =
+  "x" digits:$(HexDigit HexDigit)
 
-LineTerminator
-  = [\n\r]
+LineTerminator =
+  [\n\r]
 
 // End of line
-EOL
-  = "\n"
+EOL =
+  "\n"
   / "\r\n"
   / "\r"
 
-WhiteSpace
-  = "\t"
+WhiteSpace =
+  "\t"
   / "\v"
   / "\f"
   / " "
   / "\u00A0"
 
-Comment "comment"
-  = MultiLineComment
+Comment "comment" =
+  MultiLineComment
   / SingleLineComment
 
-SingleLineComment
-  = "//" (!LineTerminator SourceCharacter)*
+SingleLineComment =
+  "//" (!LineTerminator SourceCharacter)*
 
-MultiLineComment
-  = "/*" (!"*/" SourceCharacter)* "*/"
+MultiLineComment =
+  "/*" (!"*/" SourceCharacter)* "*/"
 
-MultiLineCommentNoLineTerminator
-  = "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
+MultiLineCommentNoLineTerminator =
+  "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
 
 // any white space, comment, with end of line
-_
-  = (WhiteSpace / Comment)* (EOL+ (WhiteSpace / Comment)+)*
+_ =
+  (WhiteSpace / Comment)* (EOL+ (WhiteSpace / Comment)+)*
 
 // at least one end of line with optional white space or comment preceding it
-__
-  = ((WhiteSpace / Comment)* EOL)+
+__ =
+  ((WhiteSpace / Comment)* EOL)+
 
 // any white space, comment, or end of line
-___
-  = (WhiteSpace / EOL / Comment)*
+___ =
+  (WhiteSpace / EOL / Comment)*
