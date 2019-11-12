@@ -284,10 +284,10 @@ let ftl_parser = /*
           peg$literalExpectation(")", false),
           function(elms) {
 
-            //# Tuple
+              //# Tuple
 
-            return elms == null ? new ftl_builder.TupleBuilder() : new ftl_builder.TupleBuilder(... elms)
-          },
+              return elms == null ? new ftl_builder.TupleBuilder() : new ftl_builder.TupleBuilder(... elms)
+            },
           function(expr, params) {
 
               //# ExpressionCurry
@@ -310,9 +310,10 @@ let ftl_parser = /*
           function(id, expr) {
 
               //# Parameter
+
               return new ftl_builder.TupleElementBuilder(extractOptional(id, 0), expr)
-          },
-              "->",
+            },
+          "->",
           peg$literalExpectation("->", false),
           function(ex) {
 
@@ -323,11 +324,12 @@ let ftl_parser = /*
           function(first, rest) {
 
               //# Expression
+
               var t = extractOptional(rest, 1);
               if (t == null)
                 return first;
               
-              return new ftl_builder.PipeBuilder(first, t)
+              return ftl_builder.PipeBuilder(first, t)
             },
           function(expr) {
 
@@ -401,7 +403,7 @@ let ftl_parser = /*
 
               var ops = extractList(rest, 1);
               var params = [operand].concat(extractList(rest, 3));
-              return new ftl_builder.N_aryOperatorExpressionBuilder(ops, params)
+              return new ftl_builder.N_aryOperatorExpressionBuilder(ops, params)      
             },
           "_",
           peg$literalExpectation("_", false),
@@ -433,7 +435,7 @@ let ftl_parser = /*
               var elms = buildList(first, rest, 3);
               var ret = [];
               for (var i = 0; i < elms.length; i++)
-              ret.push(elms[i].build(module).apply());
+                ret.push(elms[i].build(module).apply());
               return new ftl_builder.ConstBuilder(ret)
             },
           function(id, params) {
@@ -449,7 +451,7 @@ let ftl_parser = /*
                 return new ftl_builder.ParamTupleBuilder(... extracted_params[0].fns)
               }
 
-              return new ftl_builder.CallExprBuilder(id.name, extracted_params);
+              return new ftl_builder.CallExprBuilder(id.name, extracted_params)
             },
           "{",
           peg$literalExpectation("{", false),
@@ -503,25 +505,26 @@ let ftl_parser = /*
           peg$classExpectation(["!", "%", "&", "*", "+", "-", ".", "/", ":", "<", "=", ">", "?", "^", "|", "\xD7", "\xF7", "\u220F", "\u2211", "\u2215", "\u2217", "\u2219", "\u221A", "\u221B", "\u221C", "\u2227", "\u2228", "\u2229", "\u222A", "\u223C", "\u2264", "\u2265", "\u2282", "\u2283"], false, false),
           function() {
 
-            //# TrueToken
-            return new ftl_builder.ConstBuilder(true)
-          },
+              //# TrueToken
+              return new ftl_builder.ConstBuilder(true)
+            },
           function() {
 
-            //# FalseToken
-            return new ftl_builder.ConstBuilder(false)
-          },
+              //# FalseToken
+              return new ftl_builder.ConstBuilder(false)
+            },
           function(literal) {
 
-            //# NumericLiteral
-            return literal
-          },
-          function() {
-            // DecimalLiteral
-            return new ftl_builder.ConstBuilder(parseFloat(text()))
-          },
+              //# NumericLiteral
+              return literal
+            },
           /^[\-]/,
           peg$classExpectation(["-"], false, false),
+          function() {
+
+              // DecimalLiteral
+              return new ftl_builder.ConstBuilder(parseFloat(text()))
+            },
           /^[1-9]/,
           peg$classExpectation([["1", "9"]], false, false),
           "e",
@@ -534,14 +537,14 @@ let ftl_parser = /*
           peg$classExpectation([["0", "9"], ["a", "f"]], false, true),
           "\"",
           peg$literalExpectation("\"", false),
-          function(chars) {
-
-            //# StringLiteral
-            var str = text();
-            return new ftl_builder.ConstBuilder(str.substr(1, str.length - 2))
-          },
           "'",
           peg$literalExpectation("'", false),
+          function(chars) {
+
+              //# StringLiteral
+              var str = text();
+              return new ftl_builder.ConstBuilder(str.substr(1, str.length - 2))
+            },
           "\\",
           peg$literalExpectation("\\", false),
           "b",
@@ -605,7 +608,7 @@ let ftl_parser = /*
           peg$decode("%2F\"\"6F7G/C#;x/:$;3/1$;x/($8$:H$!!)($'#(#'#(\"'#&'#"),
           peg$decode("%;=.# &;5/J#%;x/,#;2/#$+\")(\"'#&'#.\" &\"/)$8\":I\"\"! )(\"'#&'#"),
           peg$decode("%;3/' 8!:J!! )"),
-          peg$decode(";B.M &;G.G &;F.A &;J.; &;C.5 &;D./ &;..) &;-.# &;A"),
+          peg$decode(";C.M &;B.G &;G.A &;F.; &;J.5 &;D./ &;..) &;-.# &;A"),
           peg$decode("%%<2K\"\"6K7L=.##&&!&'#/]#%<2F\"\"6F7G=.##&&!&'#/B$;[/9$$;[0#*;[&/)$8$:M$\"! )($'#(#'#(\"'#&'#"),
           peg$decode("%;J/' 8!:N!! )"),
           peg$decode("%;J/2#;-/)$8\":O\"\"! )(\"'#&'#"),
@@ -616,7 +619,7 @@ let ftl_parser = /*
           peg$decode(";>.) &;@.# &;?"),
           peg$decode("%;6/;#;x/2$;5/)$8#:R#\"\" )(#'#(\"'#&'#"),
           peg$decode("%;5/;#;x/2$;6/)$8#:S#\"\" )(#'#(\"'#&'#"),
-          peg$decode("%;5/\x89#$%;x/>#;6/5$;x/,$;5/#$+$)($'#(#'#(\"'#&'#/K#0H*%;x/>#;6/5$;x/,$;5/#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":T\"\"! )(\"'#&'#"),
+          peg$decode("%;>.) &;?.# &;5/\x89#$%;x/>#;6/5$;x/,$;5/#$+$)($'#(#'#(\"'#&'#/K#0H*%;x/>#;6/5$;x/,$;5/#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":T\"\"! )(\"'#&'#"),
           peg$decode("%2U\"\"6U7V/k#2W\"\"6W7X.R &%;a/H#$;Z0#*;Z&/8$%<;L=.##&&!&'#/#$+#)(#'#(\"'#&'#/'$8\":Y\" )(\"'#&'#"),
           peg$decode("%;J/\x93#;x/\x8A$23\"\"6374/{$2W\"\"6W7X.H &%;a/8#$;Z0#*;Z&/($8\":Z\"!%)(\"'#&'#.# &;J/A$;x/8$25\"\"6576/)$8&:[&\"%\")(&'#(%'#($'#(#'#(\"'#&'#"),
           peg$decode(";Q./ &;].) &;^.# &;g"),
@@ -647,21 +650,21 @@ let ftl_parser = /*
           peg$decode(";U.A &;V.; &;P.5 &;S./ &;T.) &;Q.# &;]"),
           peg$decode("%;R/& 8!:\x84! ).. &%;O/& 8!:\x85! )"),
           peg$decode("%;e/>#%<;L.# &;Z=.##&&!&'#/#$+\")(\"'#&'#.M &%;_/C#%<;L.# &;Z=.##&&!&'#/($8\":\x86\"!!)(\"'#&'#"),
-          peg$decode("%;`/T#2#\"\"6#7$/E$$;Z0#*;Z&/5$;b.\" &\"/'$8$:\x87$ )($'#(#'#(\"'#&'#.\x91 &%4\x88\"\"5!7\x89.\" &\"/Z#2#\"\"6#7$/K$$;Z/&#0#*;Z&&&#/5$;b.\" &\"/'$8$:\x87$ )($'#(#'#(\"'#&'#.? &%;`/5#;b.\" &\"/'$8\":\x87\" )(\"'#&'#"),
-          peg$decode("2W\"\"6W7X.Q &%4\x88\"\"5!7\x89.\" &\"/<#;a/3$$;Z0#*;Z&/#$+#)(#'#(\"'#&'#"),
+          peg$decode("%;`/P#2#\"\"6#7$/A$$;Z0#*;Z&/1$;b.\" &\"/#$+$)($'#(#'#(\"'#&'#.\x8D &%4\x87\"\"5!7\x88.\" &\"/V#2#\"\"6#7$/G$$;Z/&#0#*;Z&&&#/1$;b.\" &\"/#$+$)($'#(#'#(\"'#&'#.? &%;`/5#;b.\" &\"/'$8\":\x89\" )(\"'#&'#"),
+          peg$decode("2W\"\"6W7X.Q &%4\x87\"\"5!7\x88.\" &\"/<#;a/3$$;Z0#*;Z&/#$+#)(#'#(\"'#&'#"),
           peg$decode("4\x8A\"\"5!7\x8B"),
           peg$decode("%;c/,#;d/#$+\")(\"'#&'#"),
           peg$decode("3\x8C\"\"5!7\x8D"),
           peg$decode("%4\x8E\"\"5!7\x8F.\" &\"/9#$;Z/&#0#*;Z&&&#/#$+\")(\"'#&'#"),
           peg$decode("%3\x90\"\"5\"7\x91/@#%$;f/&#0#*;f&&&#/\"!&,)/#$+\")(\"'#&'#"),
           peg$decode("4\x92\"\"5!7\x93"),
-          peg$decode("%2\x94\"\"6\x947\x95/G#$;h0#*;h&/7$2\x94\"\"6\x947\x95/($8#:\x96#!!)(#'#(\"'#&'#.W &%2\x97\"\"6\x977\x98/G#$;i0#*;i&/7$2\x97\"\"6\x977\x98/($8#:\x96#!!)(#'#(\"'#&'#"),
+          peg$decode("%2\x94\"\"6\x947\x95/B#$;h0#*;h&/2$2\x94\"\"6\x947\x95/#$+#)(#'#(\"'#&'#.W &%2\x96\"\"6\x967\x97/G#$;i0#*;i&/7$2\x96\"\"6\x967\x97/($8#:\x98#!!)(#'#(\"'#&'#"),
           peg$decode("%%<2\x94\"\"6\x947\x95./ &2\x99\"\"6\x997\x9A.# &;q=.##&&!&'#/,#;I/#$+\")(\"'#&'#.B &%2\x99\"\"6\x997\x9A/,#;k/#$+\")(\"'#&'#.# &;j"),
-          peg$decode("%%<2\x97\"\"6\x977\x98./ &2\x99\"\"6\x997\x9A.# &;q=.##&&!&'#/,#;I/#$+\")(\"'#&'#.B &%2\x99\"\"6\x997\x9A/,#;k/#$+\")(\"'#&'#.# &;j"),
+          peg$decode("%%<2\x96\"\"6\x967\x97./ &2\x99\"\"6\x997\x9A.# &;q=.##&&!&'#/,#;I/#$+\")(\"'#&'#.B &%2\x99\"\"6\x997\x9A/,#;k/#$+\")(\"'#&'#.# &;j"),
           peg$decode("%2\x99\"\"6\x997\x9A/,#;r/#$+\")(\"'#&'#"),
           peg$decode(";l.N &%2W\"\"6W7X/8#%<;Z=.##&&!&'#/#$+\")(\"'#&'#.# &;p"),
           peg$decode(";m.# &;n"),
-          peg$decode("2\x97\"\"6\x977\x98.} &2\x94\"\"6\x947\x95.q &2\x99\"\"6\x997\x9A.e &2\x9B\"\"6\x9B7\x9C.Y &2\x9D\"\"6\x9D7\x9E.M &2\x9F\"\"6\x9F7\xA0.A &2\xA1\"\"6\xA17\xA2.5 &2\xA3\"\"6\xA37\xA4.) &2\xA5\"\"6\xA57\xA6"),
+          peg$decode("2\x96\"\"6\x967\x97.} &2\x94\"\"6\x947\x95.q &2\x99\"\"6\x997\x9A.e &2\x9B\"\"6\x9B7\x9C.Y &2\x9D\"\"6\x9D7\x9E.M &2\x9F\"\"6\x9F7\xA0.A &2\xA1\"\"6\xA17\xA2.5 &2\xA3\"\"6\xA37\xA4.) &2\xA5\"\"6\xA57\xA6"),
           peg$decode("%%<;o.# &;q=.##&&!&'#/,#;I/#$+\")(\"'#&'#"),
           peg$decode(";m.; &;Z.5 &2\xA7\"\"6\xA77\xA8.) &2\xA9\"\"6\xA97\xAA"),
           peg$decode("%2\xA7\"\"6\xA77\xA8/F#%%;f/,#;f/#$+\")(\"'#&'#/\"!&,)/#$+\")(\"'#&'#"),
@@ -1089,17 +1092,16 @@ let ftl_parser = /*
 
     // end of script for parser generation
 
-        // this is the module created during 
-        if (!module) {
-          module = new ftl.Module('')
-        }
-   
+    // this is the module created during 
+    if (!module) {
+      module = new ftl.Module('')
+    }
+
     peg$result = peg$parseRule(peg$startRuleIndex);
 
     if (peg$result !== peg$FAILED && peg$currPos === input.length) {
-
       // modified from parser generation
-      return module;
+      return module
     } else {
       if (peg$result !== peg$FAILED && peg$currPos < input.length) {
         peg$fail(peg$endExpectation());
