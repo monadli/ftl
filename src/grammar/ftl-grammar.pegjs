@@ -53,12 +53,6 @@ function buildApplication(app) {
   return ret
 }
 
-function join(value) {
-  if (Array.isArray(value))
-    return value.join("")
-  return value
-}
-
 function extractOptional(optional, index) {
   return optional ? optional[index] : null;
 }
@@ -78,7 +72,7 @@ function buildList(first, rest, index) {
 }
 
 function optionalList(value) {
-  return value !== null ? value : [];
+  return value || [];
 }
 
 function buildFirstRest(first, rest) {
@@ -92,11 +86,9 @@ function buildFirstRest(first, rest) {
 Start =
   ___ ModuleDeclaration? ___ application:Declarations? ___
   {
-      return {application: buildApplication(application)}
+      return application
   }
 
-// Module declaration may be used in ftl content loaded not via importing from files,
-// such as loaded via http where module structure is not present.
 ModuleDeclaration =
   ModuleToken _ module_name:(ModulePath NamespaceIdentifier)
   {
@@ -143,7 +135,7 @@ ImportSingleItem =
 ImportMultiItems =
   first:ImportItem rest:(_ "," _ ImportItem)*
   {
-    return buildElement('ImportMultiItems', { items: buildList(first, extractList(rest, 3)) })
+    return buildElement('ImportMultiItems', { items: buildList(first, rest, 3) })
   }
 
 ImportList =
@@ -163,22 +155,89 @@ VariableDeclaration =
     return buildElement('VariableDeclaration', { modifier: modifier, name: id, expr: expr })
   }
 
-// Function declaration
-// A function can be n-ary operator as well
-FunctionDeclaration =
-  FunctionToken _ id:(OperatorDeclaration / Identifier / Operator) _ params:Tuple? _ body:FunctionBody
+/*
+FunctionSignature is composed of a name and parameter list such as
+
+sin(x)
+
+*/
+FunctionSignature =
+  id:Identifier _ params:Tuple
   {
-    return buildElement('FunctionDeclaration', {
-      id: id,
-      params: params,
-      body: body}
+    return buildElement(
+      'FunctionSignature',
+      {
+        name:id,
+        params:params
+      }
     )
   }
+  
+/*
+FunctionDeclaration specifies how a function or an operator can be declared. 
 
+A function starts with reserved keyword "fn", followed by function name and
+parameter list in form of a tuple. Function body can be either javascript
+or map expressions.
+
+Examples:
+
+1. Function with javascript implementation
+fn sum(a, b, c) { a + b + c }
+
+2. Function with ftl implementation
+fn sum(a, b, c) -> a + b + c
+
+Prefix operator, postfix operator, n-ary infix operators are also defined in form of functions.
+
+Examples:
+
+1. Prefix operator
+fn -(a) { return -a }
+
+2. Postfix operator
+fn n! { ... }
+
+3. N-ary infix operators
+fn condition ? if_true() : otherwise() { return condition ? if_true() : otherwise() }
+where both if_true and otherwise are declared as functions. Thus when being called,
+functions are expected.
+
+An operand can be declared as tail function as well with '$' as suffix:
+fn condition ? if_true$() : otherwise$() { return condition ? if_true() : otherwise() }
+*/
+FunctionDeclaration =
+  FunctionToken _ signature:(OperatorDeclaration / FunctionSignature) _ body:FunctionBody
+  {
+    return buildElement('FunctionDeclaration', {
+      signature: signature,
+      body: body
+    })
+  }
+
+/*
+Tuple is a data structure in form of elements delimited with comma, wrapped
+with parantheses:
+
+(a0, a2, a3, ...)
+
+where an element can be any function.
+
+Index of a tuple is 0-based.
+
+It can be empty without elements (nullary):
+()
+
+An element can have a name as well:
+(1, b:2, 3)
+
+A tuple is also a function taking any tuple as input and produce another tuple
+of N elements where N is the number of elements in the tuple.
+*/
 Tuple =
   "(" _ elms:TupleElementList? _ ")"
   {
-    return buildElement('Tuple', {elements: elms || []})
+    return buildElement('Tuple', {elements: optionalList(elms)})
   }
 
 ExpressionCurry =
@@ -196,10 +255,7 @@ ExpressionCurry =
 TupleElementList =
   first:TupleElement rest:(_ "," _ TupleElement)*
   {
-    return buildElement(
-      'TupleElementList',
-      { elements: buildList(first, rest, 3) }
-    )
+    return buildList(first, rest, 3)
   }
 
 TupleElement =
@@ -233,35 +289,50 @@ MapOperand =
 ArrowExpression =
   "->" _ ex:MapOperand
   {
-
-    //# PipeExpression
-    console.log('ex', ex)
+    //# ArrowExpression
     return ex
   }
 
+/*
+MapExpression is the most important expression composed of operands with arrow
+operator '->' in between.
+
+Example:
+3.14 -> sin -> (_0, 1)
+
+The arrow operator is the only operator reserved in flt, which follows
+specified rules to perform operations.
+*/
 MapExpression =
   first:(MapOperand) rest:(_ ArrowExpression)*
   {
     return buildElement(
       'MapExpression',
       {
-        elements: buildList(first, extractList(rest, 1))
+        elements: buildList(first, rest, 1)
       }
     )
   }
 
+/*
+Executable is the actual application expression which is composed map expressions.
+*/
 Executable =
-  expr:MapExpression {
+  executable:MapExpression
+  {
+    return buildElement('Executable', {
+      executable: executable
+    });
+  }
 
-      return expr;
-    }
+/*
+Annotation is such expression that it intercepts input to underneath expression
+and does any side effect with it, such as writing it into log, etc., and does
+not return anything, or the return is simply ignored.
 
-// Annotation is such expression that it takes input to underneath expression
-// and does any side effect to it, such as writing it into log, etc., and does
-// not return anything, or the return is simply ignored.
-//
-// In other words, there is no way for an annotation to affect the fucntionality
-// of underneath expression.
+In other words, there is no way for an annotation to affect the fucntionality
+of underneath expression.
+*/
 Annotation =
   '@' annotation:(CallExpression / Identifier) {
     console.log('in annotation')
@@ -278,8 +349,16 @@ PrimaryExpression =
   / ExpressionCurry
   / Tuple
   / TupleSelector
-  / UnaryOperatorExpression
+  / PrefixOperatorExpression
 
+/*
+An operator is one or more consecutive symbols from a special charactor set.
+
+Examples:
++
+--
+??
+*/
 Operator =
   !"//" !"->" first:OperatorSymbol rest:OperatorSymbol* {
 
@@ -312,23 +391,40 @@ OperandDeclaration =
   OperandFunctionDeclaration
  / OperandValueDeclaration
 
-/**
- * Operator declaration with form of:
- *   operand (op operand)+
- * @return type:'OperatorDeclaration', id, operands
- */
 OperatorDeclaration =
-  PreInfixOperatorDeclaration
+  PrefixOperatorDeclaration
+  / InfixOperatorDeclaration
   / PostfixOperatorDeclaration
 
-PreInfixOperatorDeclaration =
+/*
+PrefixOperatorDeclaration is used to define any prefix operator.
+*/
+PrefixOperatorDeclaration =
+  op:Operator _ operand:OperandDeclaration
+  {
+    return buildElement(
+      'PrefixOperatorDeclaration',
+      {
+        operator: op,
+        operand: operand
+      }
+    )
+  }
+
+/*
+InfixOperatorDeclaration is used to define any infix n-ary operator declarations
+starting and ending with operands with operators in between, such as ternary operator as
+
+condition ? if_true : otherwise
+*/
+InfixOperatorDeclaration =
   first:OperandDeclaration rest:(_ Operator _ OperandDeclaration)+
   {
     return buildElement(
-      'PreInfixOperatorDeclaration',
+      'InfixOperatorDeclaration',
       {
         operator: extractList(rest, 1),
-        operands: buildList(first, extractList(rest, 3))
+        operands: buildList(first, rest, 3)
       }
     )
   }
@@ -351,16 +447,19 @@ OperatorExpression =
     return buildElement('OperatorExpression', { unit: unit })
   }
 
-// unary prefix operator expression
-// It is expected that result of unary operator generates single element, not a tuple.
-UnaryOperatorExpression =
+/*
+PrefixOperatorExpression, such as -(1, 2).
+*/
+PrefixOperatorExpression =
   op:Operator _ expr:PrimaryExpression
   {
-    return buildElement('UnaryOperatorExpression', { operator: op, expr: expr})
+    return buildElement('PrefixOperatorExpression', { operator: op, expr: expr})
   }
 
-// postfix operator
-// It is expected that result of postfix operator generates single element, not a tuple.
+/*
+Mostly a postfix operator applies to a unary tuple, but it may apply to a n-ary
+tuple as well.
+*/
 PostfixOperatorExpression =
   expr:PrimaryExpression _ op:Operator
   {
@@ -375,10 +474,21 @@ N_aryOperandExpression =
 // Any operand as expression with postfix operator has to be wrapped with parantheses,
 // except when it apprear as last element. Otherwise there is no way to distinguish
 // whether an intermediate operator is a postfix one or n-ary one.
+/*
+The infix operators withou are left associative starting from longest declaration.
+
+For example, if we define
+
+fn x + y { return x + y }
+
+then 1 + 2 + 3 + 4 is interpreted as (((1 + 2) + 3) + 4)
+
+if defined infix operators overlaps from begining, the longest will be used first
+*/
 N_aryOperatorExpression =
   first:N_aryOperandExpression rest:(_ Operator _ N_aryOperandExpression)+ last: (_ Operator)?
   {
-    var params = buildList(first, extractList(rest, 3));
+    var params = buildList(first, rest, 3);
     if (last) {
       let post_op = extractOptional(last, 1)
       params[params.length - 1] = buildElement('PostfixOperatorExpression', { operator: post_op, expr: params[params.length - 1] })
@@ -542,18 +652,14 @@ BooleanLiteral =
 
 NumericLiteral =
   literal:HexIntegerLiteral !(IdentifierStart / DecimalDigit)
+  { return buildElement('NumericLiteral', { value: literal }) }
   / literal:DecimalLiteral !(IdentifierStart / DecimalDigit)
-  {
-    return buildElement('NumericLiteral', { value: literal })
-  }
+  { return buildElement('NumericLiteral', { value: literal }) }
 
 DecimalLiteral =
-  DecimalIntegerLiteral "." DecimalDigit* ExponentPart?
-  / [-]? "." DecimalDigit+ ExponentPart?
-  / DecimalIntegerLiteral ExponentPart?
-  {
-    return parseFloat(text())
-  }
+  DecimalIntegerLiteral "." DecimalDigit* ExponentPart? { return parseFloat(text()) }
+  / [-]? "." DecimalDigit+ ExponentPart? { return parseFloat(text()) }
+  / DecimalIntegerLiteral ExponentPart? { return parseFloat(text()) }
 
 DecimalIntegerLiteral =
   "0"
