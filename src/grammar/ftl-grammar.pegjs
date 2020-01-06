@@ -21,38 +21,6 @@ function buildElement(name, buildInfo) {
   return new BuildInfo(name, buildInfo)
 }
 
-function buildApplication(app) {
-  console.log('in buildApplication')
-  if (!(app instanceof BuildInfo)) {
-    return app
-  }
-
-  let ret = {}
-  for (let [key, value] of Object.entries(app.details)) {
-    if (Array.isArray(value)) {
-      let arr = []
-      for (let i = 0; i < value.length; i++) {
-        let elm = {}
-        let v = value[i]
-        if (v instanceof BuildInfo) {
-          elm[`_${i}:${v.name}`] = buildApplication(v)
-        } else {
-          elm[`_${i}`] = v
-        }
-        arr.push(elm)
-      }
-      ret[key] = arr
-    }
-    else if (value instanceof BuildInfo) {
-      ret[`${key}:${value.name}`] = buildApplication(value)
-    } else {
-      ret[key] = value
-    }
-  }
-
-  return ret
-}
-
 function extractOptional(optional, index) {
   return optional ? optional[index] : null;
 }
@@ -423,7 +391,7 @@ InfixOperatorDeclaration =
     return buildElement(
       'InfixOperatorDeclaration',
       {
-        operator: extractList(rest, 1),
+        operators: extractList(rest, 1),
         operands: buildList(first, rest, 3)
       }
     )
@@ -685,9 +653,13 @@ HexDigit =
 
 StringLiteral =
   '"' chars:DoubleStringCharacter* '"'
+  {
+    let str = text()
+    return buildElement('StringLiteral', { value: str.substr(1, str.length - 2) })
+  }
   / "'" chars:SingleStringCharacter* "'"
   {
-    let str = text();
+    let str = text()
     return buildElement('StringLiteral', { value: str.substr(1, str.length - 2) })
   }
 

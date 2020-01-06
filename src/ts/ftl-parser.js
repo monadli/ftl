@@ -304,7 +304,7 @@ let ftl_parser = /*
               return buildElement(
                 'InfixOperatorDeclaration',
                 {
-                  operator: extractList(rest, 1),
+                  operators: extractList(rest, 1),
                   operands: buildList(first, rest, 3)
                 }
               )
@@ -433,12 +433,12 @@ let ftl_parser = /*
           peg$classExpectation([["0", "9"], ["a", "f"]], false, true),
           "\"",
           peg$literalExpectation("\"", false),
-          "'",
-          peg$literalExpectation("'", false),
           function(chars) {
-              let str = text();
+              let str = text()
               return buildElement('StringLiteral', { value: str.substr(1, str.length - 2) })
             },
+          "'",
+          peg$literalExpectation("'", false),
           "\\",
           peg$literalExpectation("\\", false),
           "b",
@@ -557,13 +557,13 @@ let ftl_parser = /*
           peg$decode("%4\x95\"\"5!7\x96.\" &\"/9#$;_/&#0#*;_&&&#/#$+\")(\"'#&'#"),
           peg$decode("%3\x97\"\"5\"7\x98/@#%$;k/&#0#*;k&&&#/\"!&,)/#$+\")(\"'#&'#"),
           peg$decode("4\x99\"\"5!7\x9A"),
-          peg$decode("%2\x9B\"\"6\x9B7\x9C/B#$;m0#*;m&/2$2\x9B\"\"6\x9B7\x9C/#$+#)(#'#(\"'#&'#.W &%2\x9D\"\"6\x9D7\x9E/G#$;n0#*;n&/7$2\x9D\"\"6\x9D7\x9E/($8#:\x9F#!!)(#'#(\"'#&'#"),
+          peg$decode("%2\x9B\"\"6\x9B7\x9C/G#$;m0#*;m&/7$2\x9B\"\"6\x9B7\x9C/($8#:\x9D#!!)(#'#(\"'#&'#.W &%2\x9E\"\"6\x9E7\x9F/G#$;n0#*;n&/7$2\x9E\"\"6\x9E7\x9F/($8#:\x9D#!!)(#'#(\"'#&'#"),
           peg$decode("%%<2\x9B\"\"6\x9B7\x9C./ &2\xA0\"\"6\xA07\xA1.# &;v=.##&&!&'#/,#;N/#$+\")(\"'#&'#.B &%2\xA0\"\"6\xA07\xA1/,#;p/#$+\")(\"'#&'#.# &;o"),
-          peg$decode("%%<2\x9D\"\"6\x9D7\x9E./ &2\xA0\"\"6\xA07\xA1.# &;v=.##&&!&'#/,#;N/#$+\")(\"'#&'#.B &%2\xA0\"\"6\xA07\xA1/,#;p/#$+\")(\"'#&'#.# &;o"),
+          peg$decode("%%<2\x9E\"\"6\x9E7\x9F./ &2\xA0\"\"6\xA07\xA1.# &;v=.##&&!&'#/,#;N/#$+\")(\"'#&'#.B &%2\xA0\"\"6\xA07\xA1/,#;p/#$+\")(\"'#&'#.# &;o"),
           peg$decode("%2\xA0\"\"6\xA07\xA1/,#;w/#$+\")(\"'#&'#"),
           peg$decode(";q.N &%2^\"\"6^7_/8#%<;_=.##&&!&'#/#$+\")(\"'#&'#.# &;u"),
           peg$decode(";r.# &;s"),
-          peg$decode("2\x9D\"\"6\x9D7\x9E.} &2\x9B\"\"6\x9B7\x9C.q &2\xA0\"\"6\xA07\xA1.e &2\xA2\"\"6\xA27\xA3.Y &2\xA4\"\"6\xA47\xA5.M &2\xA6\"\"6\xA67\xA7.A &2\xA8\"\"6\xA87\xA9.5 &2\xAA\"\"6\xAA7\xAB.) &2\xAC\"\"6\xAC7\xAD"),
+          peg$decode("2\x9E\"\"6\x9E7\x9F.} &2\x9B\"\"6\x9B7\x9C.q &2\xA0\"\"6\xA07\xA1.e &2\xA2\"\"6\xA27\xA3.Y &2\xA4\"\"6\xA47\xA5.M &2\xA6\"\"6\xA67\xA7.A &2\xA8\"\"6\xA87\xA9.5 &2\xAA\"\"6\xAA7\xAB.) &2\xAC\"\"6\xAC7\xAD"),
           peg$decode("%%<;t.# &;v=.##&&!&'#/,#;N/#$+\")(\"'#&'#"),
           peg$decode(";r.; &;_.5 &2\xAE\"\"6\xAE7\xAF.) &2\xB0\"\"6\xB07\xB1"),
           peg$decode("%2\xAE\"\"6\xAE7\xAF/F#%%;k/,#;k/#$+\")(\"'#&'#/\"!&,)/#$+\")(\"'#&'#"),
