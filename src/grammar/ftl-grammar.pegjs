@@ -72,7 +72,8 @@ ModulePath =
 ImportModulePath =
   ((".")+ "/")* ModulePath
   {
-    return buildElement('ImportModulePath', { path: text() })
+    // ImportModulePath
+    return text()
   }
 
 // all allowed declarations
@@ -95,9 +96,9 @@ ImportDeclaration =
   }
 
 ImportSingleItem =
-  name:(ImportModulePath (Identifier / Operator (" " Operator)*)) as:(_ "as" _ (Identifier / Operator))?
+  path:ImportModulePath name:(Identifier / Operator / compOp:StringLiteral { return compOp.details.value } ) as:(_ "as" _ (Identifier / Operator))?
   {
-    return buildElement('ImportSingleItem', { name: name.text(), item: extractOptional(as, 3) })
+    return buildElement('ImportSingleItem', { path:path, name: name, item: extractOptional(as, 3) })
   }
 
 ImportMultiItems =
@@ -485,7 +486,7 @@ Literal =
 ArrayLiteral =
   "[" elms:(_ LiteralList)? _ "]"
   {
-    return buildElement('ArrayLiteral', { list: extractOptional(elms, 1) })
+    return buildElement('ArrayLiteral', { list: extractOptional(elms, 1) || [] })
   }
 
 LiteralList =
