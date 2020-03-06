@@ -350,7 +350,7 @@ OperandFunctionDeclaration =
     return buildElement(
       'OperandFunctionDeclaration',
       {
-        name: id.name,
+        name: id,
         params: params
       }
     )
