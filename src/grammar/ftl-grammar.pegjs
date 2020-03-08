@@ -241,7 +241,10 @@ TupleElement =
 
 FunctionBody =
   NativeBlock
-  / ArrowExpression+
+  / expressions:(ArrowExpression _)+
+  {
+    return extractList(expressions,0)
+  }
 
 MapOperand =
   annotations:(Annotation _ )* expr:(OperatorExpression / PrimaryExpression)
