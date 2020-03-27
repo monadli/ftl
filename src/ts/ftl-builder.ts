@@ -148,12 +148,56 @@ function buildOperatorExpression(details:any, module:any) {
   return buildElement(details.unit, module)
 }
 
+/**
+ * Builds n-ary operator expression.
+ * 
+ * During the build, when two operators are next to each other, it will make sure
+ * to parse them correctly.
+ * 
+ * For example:
+ *   1 + 2-- - 3
+ * 
+ * It will first treat it as
+ *   1 + 2 -- (-3)
+ * 
+ * However once it finds that prefix operator '-' does not exist, it will try
+ *   1 + (2--) - 3
+ * 
+ * This allows writing simpler operator expressions without precedence wrapping with prantheses.
+ * @param details 
+ * @param module 
+ * @param input 
+ */
 function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
-  let operands = details.operands.map(
-    (operand:any) => {
-      return buildElement(operand, module)
+  let operands = []
+  for (let i = 0; i < details.operands.length; i++) {
+    let operand = details.operands[i]
+    try {
+      operands.push(buildElement(operand, module))
+    } catch (e) {
+
+      if (!(e instanceof PrefixOperatorNotFoundError)) {
+        throw e
+      }
+
+      // try postfix operator
+      let post_op = details.ops[i - 1]
+      if (!module.getAvailableFn(` ${post_op}`)) {
+        throw e
+      }
+
+      operands.pop()
+      operands.push(buildElement(new ftl_parser.BuildInfo(
+        "PostfixOperatorExpression", {
+          operator: post_op,
+          expr: details.operands[i - 1]
+        }),
+        module)
+      )
+      operands.push(buildElement(operand.details.expr, module))
+      details.ops[i - 1] = (e as PrefixOperatorNotFoundError).op.trim()
     }
-  )
+  }
 
   return parse_operators(module, input, details.ops, operands, details.ops.length, true, {current_index:0, stop_index:details.ops.length})
 }
@@ -166,9 +210,18 @@ function buildPrefixOperatorDeclaration(details:any, module:any) {
 }
 
 function buildInfixOperatorDeclaration(details:any, module:any) {
+  let operators = details.operators.join(' ')
+  let operands = []
+  for (let i = 0; i < details.operands.length; i++) {
+    let operand = buildElement(details.operands[i], module)
+    if (operand instanceof ftl.FunctionInterfaceFn)
+      (operand as ftl.FunctionInterfaceFn).seq = i
+    operands.push(operand)
+  }
+
   return {
-    operators: details.operators.join(' '),
-    operands: details.operands.map((operand:any) => buildElement(operand, module))
+    operators: operators,
+    operands: operands
   }
 }
 
@@ -185,6 +238,8 @@ function buildOperandFunctionDeclaration(details:any, module:any, prevElm:any=nu
 
   let params = buildElement(details.params, module, prevElm)
 
+
+  // TODO needs sequnce of the parameter
   return new ftl.FunctionInterfaceFn(name, params)
 }
 
@@ -219,8 +274,12 @@ function buildFunctionDeclaration(details:any, module:any) {
     fn = new ftl.NativeFunctionFn(f_name, params, script)
   }
   else {
-    console.log('')
-  }
+    module.addFn(new ftl.FunctionHolder(f_name))
+    let arrow = body.map((arrow:any) => buildElement(arrow, module))
+
+    // TODO arrow extract from pipe fn
+    fn = new ftl.FunctionFn(f_name, params, new ftl.PipeFn(params, ... arrow))
+   }
 
   module.addFn(fn)
   return fn
@@ -229,6 +288,10 @@ function buildFunctionDeclaration(details:any, module:any) {
 function buildPrefixOperatorExpression(details:any, module:any) {
     let op = details.operator
     let f = module.getAvailableFn(`${op} `)
+    if (!f) {
+      throw new PrefixOperatorNotFoundError(`${op} `);
+    }
+
     let expr = buildElement(details.expr, module)
 
     if (expr instanceof ftl.TupleFn && expr.fns.length == 1) {
@@ -359,13 +422,13 @@ function parse_operators(module:any, inputFn:any, ops:string[], operands:any[], 
 
   for (var i = 0; i < f.params.fns.length; i++) {
     var fn = f.params.fns[i];
-    if (fn.wrapped instanceof ftl.FunctionInterfaceFn) {
+    if (fn instanceof ftl.FunctionInterfaceFn) {
       //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
       console.debug(inputFn);
 
       // build the ExprRefFn wrapped element outside ExprRefFn itself
       // this is because inputFn is available here
-      operands[i] = new FnWrapperBuilder(new ftl.ExprRefFn(fn.wrapped, operands[i].build(module, inputFn)));
+      operands[i] = new ftl.ExprRefFn(fn, operands[i])
     }
   }
 
@@ -405,6 +468,14 @@ function join(value:any) {
       let stack = this.stack as string
       var start = stack.indexOf(' at new ') + 8;
       this.message = stack.substring(start, stack.indexOf(' ', start)) + ': ' + this.message;
+    }
+  }
+
+  class PrefixOperatorNotFoundError extends FtlBuildError {
+    op:string
+    constructor(op:string) {
+      super();
+      this.op = op
     }
   }
 

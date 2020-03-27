@@ -300,8 +300,12 @@ export class Module {
   }
 
   addFn(f: NativeFunctionFn | FunctionFn) {
-    if (this._functions[f.name] != null)
-      throw { message: "'" + name + "' exists and can not be declared again!" }
+    if (this._functions[f.name] != null) {
+      if (this._functions[f.name] instanceof FunctionHolder)
+        this._functions[f.name].wrapped = f
+      else
+        throw { message: "'" + f.name + "' exists and can not be declared again!" }
+    }
 
     this._functions[f.name] = f;
   }
@@ -1181,6 +1185,21 @@ export class RefFn extends Fn {
     // can not find ref, return itself
     else
       return this;
+  }
+}
+
+export class FunctionHolder extends RefFn {
+  f:any
+  constructor(name:string) {
+    super(name)
+  }
+
+  set wrapped(f:any) {
+    this.f = f
+  }
+
+  apply(input: any, context?: any) {
+    return this.f.apply(input, context)
   }
 }
 
