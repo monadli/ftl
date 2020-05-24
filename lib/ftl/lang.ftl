@@ -7,8 +7,6 @@
 fn -val { return -val }
 
 fn x + y { return x + y }
-
-
 fn x - y { return x - y }
 fn x * y { return x * y }
 fn x / y { return x / y }
@@ -45,5 +43,5 @@ fn x || y$() { return x || y() }
 // ternary operator
 fn condition ? if_true() : otherwise() { return condition ? if_true() : otherwise() }
 
-// ternary operator with if_true and otherwise marked as tail functions
-//fn condition ?? if_true$() :: otherwise$() { return condition ? if_true() : otherwise() }
+// ternary operator with if_true and otherwise as tail functions
+fn condition ?? if_true$() :: otherwise$() { return condition ? if_true() : otherwise() }

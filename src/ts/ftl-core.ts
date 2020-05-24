@@ -92,7 +92,7 @@ class FnUtil {
 
   // unwraps the single value of tuple that contains a single value (monad) 
   static unwrapMonad(tuple: any): any {
-    return tuple instanceof Tuple && tuple.size == 1 ? FnUtil.unwrapMonad(tuple.getIndex(0)) : tuple;
+    return tuple instanceof Tuple && tuple.size == 1 ? tuple.getIndex(0) : tuple;
   }
 
   static getFn(fns: any, predicate: any) {
@@ -711,12 +711,11 @@ export class NativeFunctionFn extends Fn {
     return params;
   }
 
-  apply(input: any) {
+  apply(input: any, context?:any) {
     if (FnUtil.isNone(input) && this.params.size > 0)
       throw new Error("Input to native function " + this.name + " does not match!");
     var paramValues = this.params.apply(input);
-    var res = this.body.apply(paramValues);
-    return res;
+    return this.body.apply(paramValues);
   }
 
   toString() {
@@ -747,7 +746,7 @@ export class FunctionFn extends Fn {
         if (res.nextTail)
           res = res.executeRecursive(this);
         else {
-          res = res.apply(this);
+          res = res.apply(null, this);
           if (!(res instanceof TailFn))
             break;
         }
@@ -762,19 +761,30 @@ export class FunctionFn extends Fn {
   constructor(name: string, params: any, expr: any) {
     super();
     this.name = name;
-    this.params = params;
+    this.params = params
     this.body = new FunctionFn.FunctionBodyFn(expr);
+    // new - direct computation
+    // this.body = expr
   }
 
   apply(input: any, context: any) {
-    return this.body.apply(input, context);
+    let res = this.body.apply(input, context)
+    return res
   }
 }
 
-// This is used to represent functional argument in a function parameter declaration.
+// This is used to represent functional argument in a function parameter or operand declaration.
+// The purpose of function interface is to wrap an expression that is executed only when it is needed.
 //
-// For example, the y$() in :
-//   fn x || y$()
+// For example, the y() in :
+//   fn x || y()
+//
+// We know that in this operator || which represents logic "or", if x is true, y is not needed.
+// In oher words, y is invoked only when x is false;
+//
+// Optionally, y or any operand can be noted with "$" such as "y$". This tells the system that it is a
+// tail that can be returned to the calling stack of the operator, and it can be invoked there.
+// The purpose of tail notation is to reduce the depth of stacks.
 //
 // properties:
 //   name
@@ -856,7 +866,7 @@ export class FunctionInterfaceFn extends Fn {
 
   apply(input: any) {
     if (this.isTail) {
-      return bindingFunctions.pass_through.bind(new TailFn(this.wrapped, input));
+      return bindingFunctions.pass_through.bind(new TailFn(input.getIndex(this.seq)));
     } else {
       return this.fn_ref.bind({ fn: input.getIndex(this.seq), params: this.params });
     }
@@ -875,13 +885,13 @@ class PartialFunction {
     this.partialParams = partialParams;
   }
 
-  apply(input: any) {
+  apply(input: any, context?:any) {
     var tuple = new Tuple();
 
     // TODO can not simply append
     tuple.appendAll(this.partialParams)
     tuple.appendAll(input)
-    return this.f.apply(tuple);
+    return this.f.apply(tuple, context);
   }
 }
 
@@ -900,6 +910,10 @@ export class FunctionalFn extends WrapperFn {
 
 /**
  * Tuple function contains a list of named or non-named fns.
+ * 
+ * Any tail element or any tuple containng tail element will be wrapped into another tail
+ * and return to the top level such as FunctionFn or ExecutableFN to compute. The purpose
+ * of this is to greatly reduce stack depth. 
  */
 export class TupleFn extends ComposedFn {
 
@@ -931,7 +945,7 @@ export class TupleFn extends ComposedFn {
 
       var res = null;
       if (fn instanceof Fn)
-        res = fn.apply(input);
+        res = fn.apply(input, context);
       else {
         var tp = typeof (fn);
         if (tp == 'number' || tp == 'string' || tp == 'boolean' || Array.isArray(fn))
@@ -1280,10 +1294,10 @@ export class ExprFn extends WrapperFn {
     this.paramtuples = paramtuples;
   }
 
-  apply(input: any) {
+  apply(input: any, context?:any) {
     var ret = super.apply(input);
     for (var i = 0; i < this.paramtuples.length; i++)
-      ret = ret.toTupleFn().apply(this.paramtuples[i].apply(input));
+      ret = ret.toTupleFn().apply(this.paramtuples[i].apply(input, context));
     return ret instanceof Tuple && ret.size == 1 ? ret.get('_0') : ret;
   }
 
@@ -1309,7 +1323,7 @@ export class CallExprFn extends Fn {
     this.params = params;
   }
 
-  apply(input: any) {
+  apply(input: any, context?:any) {
     var f = !this.f ? input.get(this.name) : this.f;
     if (!(f instanceof Fn))
       throw new Error(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
@@ -1404,12 +1418,13 @@ export class ExprRefFn extends WrapperFn {
   */
 }
 
-class TailFn extends WrapperFn {
+export class TailFn extends WrapperFn {
   closure: any;
   _nextTail: TupleFn | undefined;
 
   // temp
   _wrapped: any;
+
   constructor(fn: any, closure?: any) {
     super(fn);
     this.closure = closure;
@@ -1425,11 +1440,11 @@ class TailFn extends WrapperFn {
 
   executeRecursive(context: any) {
     if (this._nextTail instanceof TupleFn) {
-      var tuple = this._nextTail.tuple;
+      var tuple = this._nextTail.fns;
       for (var i = 0; i < tuple.length; i++) {
         var elm = tuple[i];
         if (elm instanceof TailFn) {
-          var next = elm.apply(context);
+          var next = elm.apply(null, context);
           if (next instanceof TailFn) {
             this._nextTail = next._nextTail;
             tuple[i] = next.wrapped;
@@ -1446,9 +1461,9 @@ class TailFn extends WrapperFn {
     return this;
   }
 
-  apply(context: any) {
+  apply(input: any, context?: any) {
     var res = this.wrapped.apply(this.closure, context);
-    return res;
+    return FnUtil.unwrapMonad(res);
   }
 }
 
@@ -1485,6 +1500,22 @@ export class ArrayElementSelectorFn extends Fn {
     else
       return this;
   }
+}
+
+export class ExecutableFn extends WrapperFn {
+
+  constructor(wrapped: Fn) {
+    super(wrapped)
+  }
+
+  apply() {
+    let ret = this.wrapped.apply();
+    while (ret instanceof TailFn) {
+      ret = ret.apply(null)
+
+    }
+    return FnUtil.unwrapMonad(ret)
+  }  
 }
 
 // runtime modules

@@ -115,7 +115,7 @@ function buildImportSingleItem(details:any, module:any) {
 }
 
 function buildExecutable(details:any, module:any) {
-  let executable = buildElement(details.executable, module)
+  let executable = new ftl.ExecutableFn(buildElement(details.executable, module))
   module.addExecutable(executable)
   return executable
 }
@@ -225,22 +225,25 @@ function buildInfixOperatorDeclaration(details:any, module:any) {
   }
 }
 
-function buildOperandFunctionDeclaration(details:any, module:any, prevElm:any=null) {
+function buildOperandFunctionDeclaration(details:any, module:any, prevElm:any=null):ftl.Fn {
   let name = buildElement(details.name, module).name
 
   if (name == '$') {
     throw new Error('No name provided!')
   }
 
+  let is_tail = false
   if (name.endsWith('$')) {
+    is_tail = true
     name = name.substr(0, name.length - 1);
   }
 
   let params = buildElement(details.params, module, prevElm)
 
-
   // TODO needs sequnce of the parameter
-  return new ftl.FunctionInterfaceFn(name, params)
+  var fn = new ftl.FunctionInterfaceFn(name, params)
+  fn.isTail = is_tail
+  return fn
 }
 
 function buildFunctionSignature(details:any, module:any) {

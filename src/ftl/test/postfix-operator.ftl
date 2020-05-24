@@ -1,7 +1,7 @@
-import ftl/lang[==, <, -, *, '? :']
+import ftl/lang[==, <, -, *, '?? ::']
 
 // factorial postfix operator
-fn x! -> x < 2 ? 1 : (((x - 1)!) * x)
+sfn x! -> x < 2 ?? 1 :: (x * (x - 1)!)
 
 0! == 1
 1! == 1
