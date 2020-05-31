@@ -425,8 +425,18 @@ export class Tuple {
     if (tuple == null)
       return;
 
-    if (tuple instanceof Tuple)
-      tuple.forEach((key: string, value: any) => this.addKeyValue(key, value))
+    if (tuple instanceof Tuple) {
+      let value_map = new Map<number, string>()
+      tuple._names.forEach((value, key, map) => {
+        value_map.set(value, key)
+      })
+      value_map.forEach((value, key) => {
+        if (value.startsWith('_') && !isNaN(parseInt(value.substring(1))))
+          this.addValue(tuple._values[key])
+        else
+          this.addKeyValue(value, tuple._values[key])
+      })
+    }
     else
       this.addValue(tuple);
   }
@@ -1202,10 +1212,13 @@ export class RefFn extends Fn {
   }
 }
 
-export class FunctionHolder extends RefFn {
+export class FunctionHolder extends Fn {
   f:any
+  name:string
+
   constructor(name:string) {
-    super(name)
+    super()
+    this.name = name
   }
 
   set wrapped(f:any) {
@@ -1510,6 +1523,8 @@ export class ExecutableFn extends WrapperFn {
 
   apply() {
     let ret = this.wrapped.apply();
+
+    // TODO tail
     while (ret instanceof TailFn) {
       ret = ret.apply(null)
 

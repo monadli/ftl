@@ -31,8 +31,10 @@ export function buildToModule(ftl_content:string, module:any) {
 }
 
 function buildElement(buildInfo:any, module:any, input:any=null) {
-  if (buildInfo instanceof ftl_parser.BuildInfo)
-    return getBuilder(buildInfo.name)(buildInfo.details, module, input)
+  if (buildInfo instanceof ftl_parser.BuildInfo) {
+    let builder = getBuilder(buildInfo.name)
+    return builder(buildInfo.details, module, input)
+  }
   else
     return buildInfo
 }
@@ -120,17 +122,16 @@ function buildExecutable(details:any, module:any) {
   return executable
 }
 
-function buildMapExpression(details:any, module:any) {
-  let prev:any = null
+function buildMapExpression(details:any, module:any, input?:any) {
+  let prev:any = input
   let map_expr = details.elements.map((element:BuildInfo) => {
     return prev = buildElement(element, module, prev)
   })
   return map_expr.length == 1 ? map_expr[0] : new ftl.PipeFn(... map_expr)
 }
 
-
 function buildMapOperand(details:any, module:any, prev:any=null) {
-  let built = buildElement(details.expr, module)
+  let built = buildElement(details.expr, module, prev)
   if (built instanceof ftl.RefFn) {
     let name = built.name
     if (name.startsWith('_') || prev instanceof ftl.TupleFn && prev.hasName(name))
@@ -144,8 +145,8 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
   return built
 }
 
-function buildOperatorExpression(details:any, module:any) {
-  return buildElement(details.unit, module)
+function buildOperatorExpression(details:any, module:any, input?:any) {
+  return buildElement(details.unit, module, input)
 }
 
 /**
@@ -173,7 +174,7 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
   for (let i = 0; i < details.operands.length; i++) {
     let operand = details.operands[i]
     try {
-      operands.push(buildElement(operand, module))
+      operands.push(buildElement(operand, module, input))
     } catch (e) {
 
       if (!(e instanceof PrefixOperatorNotFoundError)) {
@@ -192,14 +193,58 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
           operator: post_op,
           expr: details.operands[i - 1]
         }),
-        module)
+        module, input)
       )
-      operands.push(buildElement(operand.details.expr, module))
+      operands.push(buildElement(operand.details.expr, module, input))
       details.ops[i - 1] = (e as PrefixOperatorNotFoundError).op.trim()
     }
   }
 
-  return parse_operators(module, input, details.ops, operands, details.ops.length, true, {current_index:0, stop_index:details.ops.length})
+  
+  return (
+
+    // This is used to parse operators and operands recursively.
+    // It is called from index = length of operators down to 1.
+    function parse_operators(module:any, inputFn:any, ops:string[], operands:any[], index:number, full:boolean, extra:any): any {
+
+      // operand at index 1 is for operator at 
+      var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
+      var f = module.getAvailableFn(op);
+
+      // no corresponding function found for single op
+      if (!f) {
+        if (index == 1)
+          throw new FtlBuildError("No function with name '" + op + "' found!");
+
+        index--;
+        var reduced = parse_operators(module, inputFn, ops, operands, index, false, extra);
+
+        if (extra.current_index == extra.stop_index)
+          return reduced;
+
+        ops = ops.slice(index, ops.length)
+        operands = [reduced].concat(operands.slice(index + 1, operands.length))
+        return parse_operators(module, inputFn, ops, operands, ops.length, true, extra)
+      }
+
+      for (var i = 0; i < f.params.fns.length; i++) {
+        var fn = f.params.fns[i];
+        if (fn instanceof ftl.NamedExprFn && fn.wrapped instanceof ftl.FunctionInterfaceFn) {
+          //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
+          console.debug(inputFn);
+
+          // wrap functional interface and input function with ExprRefFn.
+          // This can be done only here with inputFn available
+          operands[i] = new ftl.ExprRefFn(fn.wrapped, operands[i])
+        }
+      }
+
+      extra.current_index += index;
+      var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fns.length));
+
+      return new ftl.PipeFn(operands_tuple, f);
+    }
+  )(module, input, details.ops, operands, details.ops.length, true, {current_index:0, stop_index:details.ops.length})
 }
 
 function buildPrefixOperatorDeclaration(details:any, module:any) {
@@ -240,7 +285,8 @@ function buildOperandFunctionDeclaration(details:any, module:any, prevElm:any=nu
 
   let params = buildElement(details.params, module, prevElm)
 
-  // TODO needs sequnce of the parameter
+  // functional interface
+  // its sequence is detemined in buildInfixOperatorDeclaration(...)
   var fn = new ftl.FunctionInterfaceFn(name, params)
   fn.isTail = is_tail
   return fn
@@ -256,7 +302,7 @@ function buildFunctionDeclaration(details:any, module:any) {
   let signature = buildElement(details.signature, module)
 
   let f_name
-  let params
+  let params:any
 
   // prefix operator or infix operator
   if (signature.operator || signature.operators) {
@@ -278,7 +324,7 @@ function buildFunctionDeclaration(details:any, module:any) {
   }
   else {
     module.addFn(new ftl.FunctionHolder(f_name))
-    let arrow = body.map((arrow:any) => buildElement(arrow, module))
+    let arrow = body.map((arrow:any) => buildElement(arrow, module, params))
 
     // TODO arrow extract from pipe fn
     fn = new ftl.FunctionFn(f_name, params, new ftl.PipeFn(params, ... arrow))
@@ -326,10 +372,12 @@ function buildPostfixOperatorDeclaration(details:any, module:any, prev:any) {
 function buildCallExpression(details:any, module:any, prev:any) {
     let name = buildElement(details.name, module).name
     let f = module.getAvailableFn(name)
-    if (!f && !prev) {
-      throw new Error(`${name} not found!`)
+    if (!f) {
+      f = prev && prev.hasName(name) && new ftl.RefFn(name)
+      if (!f)
+        throw new Error(`${name} not found!`)
     }
-    let params = details.params.map((p:any) => buildElement(p, module))
+    let params = details.params.map((p:any) => buildElement(p, module, prev))
     return new ftl.CallExprFn(name, f, params)
   }
 
@@ -368,19 +416,19 @@ function buildCallExpression(details:any, module:any, prev:any) {
 
   function buildArrayElementSelector(details:any, module:any) {
     let name = buildElement(details.id, module).name
-    let index = typeof details.index == 'string' ? parseInt(details.index) : details.index
+    let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
     return new ftl.ArrayElementSelectorFn(name, index)
   }
   
-  function buildTuple(details:any, module:any) {
+  function buildTuple(details:any, module:any, prev?:any) {
     return new ftl.TupleFn(... details.elements.map((element:BuildInfo) => {
-      return buildElement(element, module)
+      return buildElement(element, module, prev)
     }))
   }
 
-  function buildTupleElement(details:any, module:any) {
+  function buildTupleElement(details:any, module:any, prev?:any) {
     let name = buildElement(details.name, module)
-    let expr = buildElement(details.expr, module)
+    let expr = buildElement(details.expr, module, prev)
     return name && new ftl.NamedExprFn(name.name, expr) || expr
   }
 
@@ -392,53 +440,13 @@ function buildCallExpression(details:any, module:any, prev:any) {
 function build_function_parameters(params:ftl.TupleFn) {
   let fns = params.fns.map((p:any, i:number) => {
     if (p instanceof ftl.RefFn)
-      return new ftl.NamedExprFn(p.name, new ftl.TupleSelectorFn(i));
+      return new ftl.NamedExprFn(p.name, new ftl.TupleSelectorFn(i))
+    else if (p instanceof ftl.FunctionInterfaceFn)
+      return new ftl.NamedExprFn(p.name, p)
     else
       return p
   })
   return new ftl.TupleFn(... fns)
-}
-
-// This is used to parse operators and operands recursively.
-// It is called from index = length of operators down to 1.
-function parse_operators(module:any, inputFn:any, ops:string[], operands:any[], index:number, full:boolean, extra:any): any {
-
-  // operand at index 1 is for operator at 
-  var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-  var f = module.getAvailableFn(op);
-
-  // no corresponding function found for single op
-  if (!f) {
-    if (index == 1)
-      throw new FtlBuildError("No function with name '" + op + "' found!");
-
-    index--;
-    var reduced = parse_operators(module, inputFn, ops, operands, index, false, extra);
-          
-    if (extra.current_index == extra.stop_index)
-      return reduced;
-
-    ops = ops.slice(index, ops.length)
-    operands = [reduced].concat(operands.slice(index + 1, operands.length))
-    return parse_operators(module, inputFn, ops, operands, ops.length, true, extra)
-  }
-
-  for (var i = 0; i < f.params.fns.length; i++) {
-    var fn = f.params.fns[i];
-    if (fn instanceof ftl.FunctionInterfaceFn) {
-      //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
-      console.debug(inputFn);
-
-      // build the ExprRefFn wrapped element outside ExprRefFn itself
-      // this is because inputFn is available here
-      operands[i] = new ftl.ExprRefFn(fn, operands[i])
-    }
-  }
-
-  extra.current_index += index;
-  var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fns.length));
-
-  return new ftl.PipeFn(operands_tuple, f);
 }
 
 function validate_tuple_elements(elms:any[]) {
@@ -600,72 +608,6 @@ function join(value:any) {
       }
 
       return new ftl.FunctionInterfaceFn(this.name, this.params.build(module, inputFn), this.seq);
-    }
-  }
-
-  /**
-   * This class captures n-ary operator expression. It is transient during parsing and building.
-   */
-  class N_aryOperatorExpressionBuilder extends FtlBuilder {
-    ops:any
-    operands:any
-
-    constructor(ops:any, operands:any) {
-
-      super();
-      this.ops = ops;
-      this.operands = operands;
-    }
-
-    build(module:any, inputFn:any) {
-      ftl.FnValidator.assertNonEmptyArray(this.ops);
-
-      var current_index = 0;
-      var stop_index = this.ops.length;
-
-      // This is used to parse operators and operands recursively.
-      // It is called from index = length of operators down to 1.
-      function parse_operators(ops:any, operands:any, index:number, full:boolean):any {
-
-        // operand at index 1 is for operator at 
-        var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-        var f = module.getAvailableFn(op);
-
-        // no corresponding function found for single op
-        if (!f) {
-          if (index == 1)
-            throw new FtlBuildError("No function with name '" + op + "' found!");
-
-          index--;
-          var reduced = parse_operators(ops, operands, index, false);
-          
-          if (current_index == stop_index)
-            return reduced;
-
-          ops = ops.slice(index, ops.length)
-          operands = [reduced].concat(operands.slice(index + 1, operands.length))
-          return parse_operators(ops, operands, ops.length, true)
-        }
-
-        for (var i = 0; i < f.params.fns.length; i++) {
-          var fn = f.params.fns[i];
-          if (fn.wrapped instanceof ftl.FunctionInterfaceFn) {
-            //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
-            console.debug(inputFn);
-
-            // build the ExprRefFn wrapped element outside ExprRefFn itself
-            // this is because inputFn is available here
-            operands[i] = new FnWrapperBuilder(new ftl.ExprRefFn(fn.wrapped, operands[i].build(module, inputFn)));
-          }
-        }
-
-        current_index += index;
-        var operands_tuple = new TupleBuilder(... operands.slice(0, f.params.fns.length));
-
-        return new PipeBuilder(operands_tuple, f);
-      }
-
-      return parse_operators(this.ops, this.operands, this.ops.length, true).build(module, dummy_param_tuple);
     }
   }
 
@@ -1146,18 +1088,3 @@ function join(value:any) {
         : new ftl.ArrayElementSelectorFn(this.name, new ftl.ConstFn(parseInt(this.index)));
     }
   }
-
-export default {
-  buildModule,
-  ArrayElementSelectorBuilder,
-  ConstBuilder,
-  FnWrapperBuilder,
-  FunctionBuilder,
-  FunctionInterfaceBuilder,
-  N_aryOperatorExpressionBuilder,
-  ParamTupleBuilder,
-  PipeBuilder,
-  RefBuilder,
-  TupleBuilder,
-  TupleElementBuilder
-}
