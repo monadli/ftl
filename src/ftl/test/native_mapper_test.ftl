@@ -1,4 +1,4 @@
-import ftl/lang[+, ==, '? :']
+import ftl/lang[+, ==]
 
 /**
  * mapping operator =>
