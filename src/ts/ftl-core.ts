@@ -377,7 +377,7 @@ export class Tuple {
     return t;
   }
 
-  static fromList(list: Array<any>) {
+  static fromList(... list: any[]) {
     var t = new Tuple()
     if (list == null)
       return t
@@ -457,8 +457,8 @@ export class Tuple {
     return this._values[index];
   }
 
-  hasTail() {
-    return this._values.find(elm => elm instanceof TailFn) !== undefined;
+  hasTail(): boolean {
+    return this._values.find(elm => elm instanceof TailFn || (elm instanceof Tuple && elm.hasTail())) !== undefined;
   }
 
   // checks if any element is a reference
@@ -502,8 +502,8 @@ export class Tuple {
 
   // converts into a tuple fn
   // TODO presesrve names
-  toTupleFn() {
-    return new TupleFn(... this._values.map(elm => elm instanceof Fn ? elm : new ConstFn(elm)));
+  toTupleFn():Fn {
+    return new TupleFn(... this._values.map(elm => elm instanceof Tuple ? elm.toTupleFn() : elm instanceof Fn ? elm : new ConstFn(elm)))
   }
 
   toString() {
@@ -753,7 +753,7 @@ export class FunctionFn extends Fn {
           // TODO res._recursive = true;
           return res;
         }
-        if (res.nextTail)
+        if (res.hasTail())
           res = res.executeRecursive(this);
         else {
           res = res.apply(null, this);
@@ -1126,7 +1126,7 @@ export class PipeFn extends ComposedFn {
       } else if (res instanceof Tuple && res.hasTail()) {
         var nextTail = res.toTupleFn();
         res = new TailFn(new PipeFn(nextTail, ... this.fns.slice(i)));
-        res.nextTail = nextTail;
+        res.addTail(nextTail)
         return res;
       }
 
@@ -1433,7 +1433,7 @@ export class ExprRefFn extends WrapperFn {
 
 export class TailFn extends WrapperFn {
   closure: any;
-  _nextTail: TupleFn | undefined;
+  _tails = new Array<TupleFn>()
 
   // temp
   _wrapped: any;
@@ -1443,29 +1443,57 @@ export class TailFn extends WrapperFn {
     this.closure = closure;
   }
 
-  set nextTail(nextTail) {
-    this._nextTail = nextTail;
+  addTail(tail:TupleFn) {
+    this._tails.unshift(tail)
   }
 
-  get nextTail() {
-    return this._nextTail;
+  addAllTails(tail:TailFn) {
+    var t
+    while (t = tail.nextTail) {
+      this.addTail(t)
+    }
+  }
+
+  hasTail() {
+    return this._tails.length > 0
+  }
+
+  get nextTail():TupleFn|undefined {
+    return this._tails.pop()
+  }
+
+  findTailTuple(tuple:TupleFn):TupleFn|undefined {
+    for (var i = 0; i < tuple.fns.length; i++) {
+      var elm = tuple.fns[i]
+      if (elm instanceof TailFn) {
+        return tuple
+      }
+      else if (elm instanceof TupleFn) {
+        let tp = this.findTailTuple(elm)
+        if (tp) {
+          return tp
+        }
+      }
+    }
+
+    return undefined
   }
 
   executeRecursive(context: any) {
-    if (this._nextTail instanceof TupleFn) {
-      var tuple = this._nextTail.fns;
+    var tail = this.nextTail
+    if (tail && tail instanceof TupleFn) {
+      var tuple = tail.fns;
       for (var i = 0; i < tuple.length; i++) {
         var elm = tuple[i];
         if (elm instanceof TailFn) {
           var next = elm.apply(null, context);
           if (next instanceof TailFn) {
-            this._nextTail = next._nextTail;
+            this.addAllTails(next);
             tuple[i] = next.wrapped;
           }
 
           // end of recursive
           else {
-            this._nextTail = undefined;
             tuple[i] = next;
           }
         }
