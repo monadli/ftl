@@ -1,4 +1,4 @@
-import ftl/lang[+, ==, '? :']
+import ftl/lang[+, ==, '?? ::']
 
 fn len(list) {
   return list.length;
@@ -9,7 +9,7 @@ fn list += item {
   return list
 }
 
-fn _map(src, mapped, index, mapper) -> index == len(src) ? mapped : _map(src, mapped += mapper(src[index]), index + 1, mapper)
+fn _map(src, mapped, index, mapper) -> index == len(src) ?? mapped :: _map(src, mapped += mapper(src[index]), index + 1, mapper)
 
 /**
  * mapping operator =>

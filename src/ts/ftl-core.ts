@@ -743,25 +743,19 @@ export class FunctionFn extends Fn {
     }
 
     apply(input: string, context?: any) {
-      let res: TailFn | Tuple = super.apply(input);
-      var i = 0;
+      let res:TailFn|Tuple = super.apply(input, context)
+      var i = 0
       while (res instanceof TailFn) {
         i++;
         if (i == 10000)
-          break;
+          break
         if (context == this) {
-          // TODO res._recursive = true;
-          return res;
+          return res
         }
-        if (res.hasTail())
-          res = res.executeRecursive(this);
-        else {
-          res = res.apply(null, this);
-          if (!(res instanceof TailFn))
-            break;
-        }
+
+        res = res.hasTail() ? res.ResolveNextTail(this) : res.apply(null, this)
       }
-      return res;
+      return res
     }
   }
 
@@ -956,9 +950,11 @@ export class TupleFn extends ComposedFn {
       var res = null;
       if (fn instanceof Fn)
         res = fn.apply(input, context);
-      else {
+      else if (fn instanceof Tuple || Array.isArray(fn)) {
+        res = fn
+      } else {
         var tp = typeof (fn);
-        if (tp == 'number' || tp == 'string' || tp == 'boolean' || Array.isArray(fn))
+        if (tp == 'number' || tp == 'string' || tp == 'boolean')
           res = fn;
       }
 
@@ -1122,12 +1118,9 @@ export class PipeFn extends ComposedFn {
 
     for (var i = 1; i < this.fns.length; i++) {
       if (res instanceof TailFn) {
-        return new TailFn(new PipeFn([res._wrapped].concat(this.fns.slice(i))));
+        return new TailFn(new PipeFn(res, ... this.fns.slice(i)))
       } else if (res instanceof Tuple && res.hasTail()) {
-        var nextTail = res.toTupleFn();
-        res = new TailFn(new PipeFn(nextTail, ... this.fns.slice(i)));
-        res.addTail(nextTail)
-        return res;
+        return new TailFn(new PipeFn(res.toTupleFn(), ... this.fns.slice(i)))
       }
 
       // still has unresolved ref
@@ -1431,25 +1424,46 @@ export class ExprRefFn extends WrapperFn {
   */
 }
 
+/**
+ * This class holds information about tail and provides executeRecursive() to resolve tail.
+ * 
+ * When being executed, a tail is picked and executed. If it results in another or more tails,
+ * these tails will not be recursively executed right away. Instead they are added into the tail list
+ * and the whole tail will be return back, from where executeRecursive() is executed again to
+ * pick the next tail to execute. This process is repeated until all tails are resolved.
+ */
 export class TailFn extends WrapperFn {
   closure: any;
   _tails = new Array<TupleFn>()
 
-  // temp
-  _wrapped: any;
-
   constructor(fn: any, closure?: any) {
-    super(fn);
-    this.closure = closure;
+    super(fn)
+    this.closure = closure
+
+    if (fn instanceof PipeFn) {
+      var first = fn.fns[0]
+      if (first instanceof TailFn) {
+        fn.fns[0] = first.wrapped
+      } else if (first instanceof TupleFn) {
+        this.addTail(first)
+      }
+    }
   }
 
   addTail(tail:TupleFn) {
-    this._tails.unshift(tail)
+    if (tail.fns.find(elm => elm instanceof TailFn) !== undefined) {
+      this._tails.unshift(tail)
+    }
+    else {
+      tail.fns.filter(elm => elm instanceof TupleFn).forEach(elm => {
+        this.addTail(elm)
+      })
+    }
   }
 
   addAllTails(tail:TailFn) {
     var t
-    while (t = tail.nextTail) {
+    while (t = tail.nextTail()) {
       this.addTail(t)
     }
   }
@@ -1458,48 +1472,33 @@ export class TailFn extends WrapperFn {
     return this._tails.length > 0
   }
 
-  get nextTail():TupleFn|undefined {
+  nextTail():TupleFn|undefined {
     return this._tails.pop()
   }
 
-  findTailTuple(tuple:TupleFn):TupleFn|undefined {
-    for (var i = 0; i < tuple.fns.length; i++) {
-      var elm = tuple.fns[i]
+  ResolveNextTail(context: any) {
+    var tail = this.nextTail()
+    if (!tail) {
+      return this
+    }
+
+    var tuple = tail.fns
+    for (var i = 0; i < tuple.length; i++) {
+      var elm = tuple[i]
       if (elm instanceof TailFn) {
-        return tuple
-      }
-      else if (elm instanceof TupleFn) {
-        let tp = this.findTailTuple(elm)
-        if (tp) {
-          return tp
+        var next = elm.apply(null, context)
+        if (next instanceof TailFn) {
+          this.addAllTails(next)
+          tuple[i] = next.wrapped
+        }
+
+        // end of recursive
+        else {
+          tuple[i] = next
         }
       }
     }
-
-    return undefined
-  }
-
-  executeRecursive(context: any) {
-    var tail = this.nextTail
-    if (tail && tail instanceof TupleFn) {
-      var tuple = tail.fns;
-      for (var i = 0; i < tuple.length; i++) {
-        var elm = tuple[i];
-        if (elm instanceof TailFn) {
-          var next = elm.apply(null, context);
-          if (next instanceof TailFn) {
-            this.addAllTails(next);
-            tuple[i] = next.wrapped;
-          }
-
-          // end of recursive
-          else {
-            tuple[i] = next;
-          }
-        }
-      }
-    }
-    return this;
+    return this
   }
 
   apply(input: any, context?: any) {
