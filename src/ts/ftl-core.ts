@@ -2,8 +2,8 @@ import fs from 'fs'
 
 // ftl core functions and classes.
 var version = '0.0.0.2';
-var TupleSelectorPattern = /_\d+$/;
-var VALIDATE_BUILD = false;
+var TupleSelectorPattern = /_\d+$/
+var VALIDATE_BUILD = false
 
 var runPath: string;
 
@@ -1521,7 +1521,14 @@ export class ArrayElementSelectorFn extends Fn {
   constructor(name: string, index: Fn | number) {
     super()
     this.name = name;
-    this.index = index;
+    this.index = index instanceof ConstFn ? index.apply(null) : index
+    if (Array.isArray(this.index)) {
+      if (this.index.length == 1) {
+        this.index = this.index[0]
+      } else {
+        throw new Error('multiple selectors not supported yet!')
+      }
+    }
   }
 
   apply(input: any) {

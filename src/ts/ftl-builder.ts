@@ -392,7 +392,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
     return new ftl.ConstFn(elms)
   }
   
-  function buildLiteralList(details:any, module:any) {
+  function buildListLiteral(details:any, module:any) {
     return !details ? [] : details.list.map((elm:any) => {
       return buildElement(elm, module)
     })

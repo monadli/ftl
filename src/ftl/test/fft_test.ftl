@@ -1,5 +1,6 @@
 import ftl/lang[==, '?? ::', '? :']
 
+// generates array of exp^-i*2*pi*k/N
 fn exponents(N) {
     let factor = -2 * Math.PI / N
     let real_exps = new Array(N)
@@ -45,13 +46,14 @@ fn ffts ** exponents {
   return ftl.Tuple.fromList(real, imag)
 }
 
+// take real and imag array and result in reduced real and imag
 fn interlace(real, imag, start) {
   return ftl.Tuple.fromList(real.filter((elm, index) => index % 2 == start), imag.filter((elm, index) => index % 2 == start))
 }
 
 
 fn fft(real, imag) -> len(real) == 1 ?? (real, imag) ::
-  (    (interlace(real, imag, 0) -> fft, interlace(real, imag, 1) -> fft) ** exponents(len(real))   )
+  ((interlace(real, imag, 0) -> fft, interlace(real, imag, 1) -> fft) ** exponents(len(real)))
 
 
 fft([0, 1], [1, 0]) == ([1, -1], [1, 1])
