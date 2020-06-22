@@ -523,13 +523,16 @@ CallExpression =
 
 // Native javascript block wrapped with "{" and "}"
 NativeBlock =
-  "{" _ ((!("{" / "}") SourceCharacter)* {return text()})
-    NativeBlock* _
-    ((!("{" / "}") SourceCharacter)* {return text()}) "}" {
+  "{" _ SourceCharacterNoCurlyBrackets*
+  (NativeBlock SourceCharacterNoCurlyBrackets)*
+  SourceCharacterNoCurlyBrackets* "}" {
 
     //# NativeBlock
     return { type: 'native', script: text() }
   }
+
+SourceCharacterNoCurlyBrackets =
+  !("{" / "}") SourceCharacter
 
 SourceCharacter =
   .
