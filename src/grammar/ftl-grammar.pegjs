@@ -524,7 +524,7 @@ CallExpression =
 // Native javascript block wrapped with "{" and "}"
 NativeBlock =
   "{" _ SourceCharacterNoCurlyBrackets*
-  (NativeBlock SourceCharacterNoCurlyBrackets)*
+  (NativeBlock SourceCharacterNoCurlyBrackets*)*
   SourceCharacterNoCurlyBrackets* "}" {
 
     //# NativeBlock
@@ -748,7 +748,7 @@ MultiLineComment =
 MultiLineCommentNoLineTerminator =
   "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
 
-// any white space, comment, with end of line
+// any white spaces/comments, followed by end of line and spaces/comments
 _ =
   (WhiteSpace / Comment)* (EOL+ (WhiteSpace / Comment)+)*
 

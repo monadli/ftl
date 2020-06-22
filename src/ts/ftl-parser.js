@@ -4,7 +4,7 @@
  * http://pegjs.org/
  */
 
- export class BuildInfo {
+export class BuildInfo {
   constructor(name, details) {
     this.name = name
     this.details = details
@@ -18,11 +18,11 @@ function peg$subclass(child, parent) {
 }
 
 function peg$SyntaxError(message, expected, found, location) {
-  this.message = message;
+  this.message  = message;
   this.expected = expected;
-  this.found = found;
+  this.found    = found;
   this.location = location;
-  this.name = "SyntaxError";
+  this.name     = "SyntaxError";
 
   if (typeof Error.captureStackTrace === "function") {
     Error.captureStackTrace(this, peg$SyntaxError);
@@ -33,35 +33,35 @@ peg$subclass(peg$SyntaxError, Error);
 
 peg$SyntaxError.buildMessage = function(expected, found) {
   var DESCRIBE_EXPECTATION_FNS = {
-    literal: function(expectation) {
-      return "\"" + literalEscape(expectation.text) + "\"";
-    },
+        literal: function(expectation) {
+          return "\"" + literalEscape(expectation.text) + "\"";
+        },
 
-    "class": function(expectation) {
-      var escapedParts = "",
-        i;
+        "class": function(expectation) {
+          var escapedParts = "",
+              i;
 
-      for (i = 0; i < expectation.parts.length; i++) {
-        escapedParts += expectation.parts[i] instanceof Array
-          ? classEscape(expectation.parts[i][0]) + "-" + classEscape(expectation.parts[i][1])
-          : classEscape(expectation.parts[i]);
-      }
+          for (i = 0; i < expectation.parts.length; i++) {
+            escapedParts += expectation.parts[i] instanceof Array
+              ? classEscape(expectation.parts[i][0]) + "-" + classEscape(expectation.parts[i][1])
+              : classEscape(expectation.parts[i]);
+          }
 
-      return "[" + (expectation.inverted ? "^" : "") + escapedParts + "]";
-    },
+          return "[" + (expectation.inverted ? "^" : "") + escapedParts + "]";
+        },
 
-    any: function(expectation) {
-      return "any character";
-    },
+        any: function(expectation) {
+          return "any character";
+        },
 
-    end: function(expectation) {
-      return "end of input";
-    },
+        end: function(expectation) {
+          return "end of input";
+        },
 
-    other: function(expectation) {
-      return expectation.description;
-    }
-  };
+        other: function(expectation) {
+          return expectation.description;
+        }
+      };
 
   function hex(ch) {
     return ch.charCodeAt(0).toString(16).toUpperCase();
@@ -70,12 +70,12 @@ peg$SyntaxError.buildMessage = function(expected, found) {
   function literalEscape(s) {
     return s
       .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
+      .replace(/"/g,  '\\"')
       .replace(/\0/g, '\\0')
       .replace(/\t/g, '\\t')
       .replace(/\n/g, '\\n')
       .replace(/\r/g, '\\r')
-      .replace(/[\x00-\x0F]/g, function(ch) { return '\\x0' + hex(ch); })
+      .replace(/[\x00-\x0F]/g,          function(ch) { return '\\x0' + hex(ch); })
       .replace(/[\x10-\x1F\x7F-\x9F]/g, function(ch) { return '\\x'  + hex(ch); });
   }
 
@@ -84,12 +84,12 @@ peg$SyntaxError.buildMessage = function(expected, found) {
       .replace(/\\/g, '\\\\')
       .replace(/\]/g, '\\]')
       .replace(/\^/g, '\\^')
-      .replace(/-/g, '\\-')
+      .replace(/-/g,  '\\-')
       .replace(/\0/g, '\\0')
       .replace(/\t/g, '\\t')
       .replace(/\n/g, '\\n')
       .replace(/\r/g, '\\r')
-      .replace(/[\x00-\x0F]/g, function(ch) { return '\\x0' + hex(ch); })
+      .replace(/[\x00-\x0F]/g,          function(ch) { return '\\x0' + hex(ch); })
       .replace(/[\x10-\x1F\x7F-\x9F]/g, function(ch) { return '\\x'  + hex(ch); });
   }
 
@@ -99,7 +99,7 @@ peg$SyntaxError.buildMessage = function(expected, found) {
 
   function describeExpected(expected) {
     var descriptions = new Array(expected.length),
-      i, j;
+        i, j;
 
     for (i = 0; i < expected.length; i++) {
       descriptions[i] = describeExpectation(expected[i]);
@@ -143,462 +143,462 @@ export function peg$parse(input, options) {
 
   var peg$FAILED = {},
 
-    peg$startRuleIndices = { Start: 0 },
-    peg$startRuleIndex   = 0,
+      peg$startRuleIndices = { Start: 0 },
+      peg$startRuleIndex   = 0,
 
-    peg$consts = [
-      function(application) {
-        return application
-      },
-      function(module_name) {
-        return buildElement('ModuleDeclaration', { name: module_name.text() })
-      },
-      ".",
-      peg$literalExpectation(".", false),
-      "/",
-      peg$literalExpectation("/", false),
-      function() {
-        return buildElement('ModulePath', text())
-      },
-      function() {
-        // ImportModulePath
-        return text()
-      },
-      function(first, rest) {
-        return buildElement('Declarations', { declarations: buildList(first, rest, 1) })
-      },
-      function(items) {
-        return buildElement('ImportDeclaration', { items: items })
-      },
-      function(path, compOp) { return compOp.details.value },
-      "as",
-      peg$literalExpectation("as", false),
-      function(path, name, as) {
-        return buildElement('ImportSingleItem', { path: path, name: name, item: extractOptional(as, 3) })
-      },
-      ",",
-      peg$literalExpectation(",", false),
-      function(first, rest) {
-        return buildElement('ImportMultiItems', { items: buildList(first, rest, 3) })
-      },
-      function() { return text() },
-      "[",
-      peg$literalExpectation("[", false),
-      "]",
-      peg$literalExpectation("]", false),
-      function(path, list) {
-        return buildElement('ImportList', { path: path, list: list })
-      },
-      "=",
-      peg$literalExpectation("=", false),
-      function(modifier, id, expr) {
-        return buildElement('VariableDeclaration', { modifier: modifier, name: id, expr: expr })
-      },
-      function(id, params) {
-        return buildElement(
-          'FunctionSignature',
-          {
-            name: id,
-            params: params
-          }
-        )
-      },
-      function(signature, body) {
-        return buildElement('FunctionDeclaration', {
-          signature: signature,
-          body: body
-        })
-      },
-      "(",
-      peg$literalExpectation("(", false),
-      ")",
-      peg$literalExpectation(")", false),
-      function(elms) {
-        return buildElement('Tuple', {elements: optionalList(elms)})
-      },
-      function(expr, params) {
-        return buildElement(
-          'ExpressionCurry',
-          {
-            expr:expr,
-            list: extractList(params, 1)
-          }
-        )
-      },
-      function(first, rest) {
-        return buildList(first, rest, 3)
-      },
-      ":",
-      peg$literalExpectation(":", false),
-      function(id, expr) {
-        return buildElement(
-          'TupleElement',
-          {
-            name: extractOptional(id, 0),
-            expr: expr
-          }
-        )
-      },
-      function(expressions) {
-        return extractList(expressions, 0)
-      },
-      function(annotations, expr) {
-        return buildElement(
-          'MapOperand',
-          {
-            annotations: extractList(annotations, 0),
-            expr: expr
-          }
-        )
-      },
-      "->",
-      peg$literalExpectation("->", false),
-      function(ex) {
-        //# ArrowExpression
-        return ex
-      },
-      function(first, rest) {
-        return buildElement(
-          'MapExpression',
-          {
-            elements: buildList(first, rest, 1)
-          }
-        )
-      },
-      function(executable) {
-        return buildElement('Executable', {
-          executable: executable
-        })
-      },
-      "@",
-      peg$literalExpectation("@", false),
-      function(annotation) {
-        console.log('in annotation')
-        return annotation
-      },
-      "//",
-      peg$literalExpectation("//", false),
-      function(first, rest) {
+      peg$consts = [
+        function(application) {
+              return application
+          },
+        function(module_name) {
+            return buildElement('ModuleDeclaration', { name: module_name.text() })
+          },
+        ".",
+        peg$literalExpectation(".", false),
+        "/",
+        peg$literalExpectation("/", false),
+        function() {
+            return buildElement('ModulePath', text())
+          },
+        function() {
+            // ImportModulePath
+            return text()
+          },
+        function(first, rest) {
+            return buildElement('Declarations', { declarations: buildList(first, rest, 1) })
+          },
+        function(items) {
+            return buildElement('ImportDeclaration', { items: items })
+          },
+        function(path, compOp) { return compOp.details.value },
+        "as",
+        peg$literalExpectation("as", false),
+        function(path, name, as) {
+            return buildElement('ImportSingleItem', { path: path, name: name, item: extractOptional(as, 3) })
+          },
+        ",",
+        peg$literalExpectation(",", false),
+        function(first, rest) {
+            return buildElement('ImportMultiItems', { items: buildList(first, rest, 3) })
+          },
+        function() { return text() },
+        "[",
+        peg$literalExpectation("[", false),
+        "]",
+        peg$literalExpectation("]", false),
+        function(path, list) {
+            return buildElement('ImportList', { path: path, list: list })
+          },
+        "=",
+        peg$literalExpectation("=", false),
+        function(modifier, id, expr) {
+            return buildElement('VariableDeclaration', { modifier: modifier, name: id, expr: expr })
+          },
+        function(id, params) {
+            return buildElement(
+              'FunctionSignature',
+              {
+                name: id,
+                params: params
+              }
+            )
+          },
+        function(signature, body) {
+            return buildElement('FunctionDeclaration', {
+              signature: signature,
+              body: body
+            })
+          },
+        "(",
+        peg$literalExpectation("(", false),
+        ")",
+        peg$literalExpectation(")", false),
+        function(elms) {
+            return buildElement('Tuple', {elements: optionalList(elms)})
+          },
+        function(expr, params) {
+            return buildElement(
+              'ExpressionCurry',
+              {
+                expr:expr,
+                list: extractList(params, 1)
+              }
+            )
+          },
+        function(first, rest) {
+            return buildList(first, rest, 3)
+          },
+        ":",
+        peg$literalExpectation(":", false),
+        function(id, expr) {
+            return buildElement(
+              'TupleElement',
+              {
+                name: extractOptional(id, 0),
+                expr: expr
+              }
+            )
+          },
+        function(expressions) {
+            return extractList(expressions, 0)
+          },
+        function(annotations, expr) {
+            return buildElement(
+              'MapOperand',
+              {
+                  annotations: extractList(annotations, 0),
+                  expr: expr
+              }
+            )
+          },
+        "->",
+        peg$literalExpectation("->", false),
+        function(ex) {
+            //# ArrowExpression
+            return ex
+          },
+        function(first, rest) {
+            return buildElement(
+              'MapExpression',
+              {
+                elements: buildList(first, rest, 1)
+              }
+            )
+          },
+        function(executable) {
+            return buildElement('Executable', {
+              executable: executable
+            })
+          },
+        "@",
+        peg$literalExpectation("@", false),
+        function(annotation) {
+            console.log('in annotation')
+            return annotation
+          },
+        "//",
+        peg$literalExpectation("//", false),
+        function(first, rest) {
 
-        //# Operator
+            //# Operator
 
-        return text()
-      },
-      function(id) {
+            return text()
+          },
+        function(id) {
 
-        //# OperandValueDeclaration
+            //# OperandValueDeclaration
 
-        return id
-      },
-      function(id, params) {
-        return buildElement(
-          'OperandFunctionDeclaration',
-          {
-            name: id,
-            params: params
-          }
-        )
-      },
-      function(op, operand) {
-        return buildElement(
-          'PrefixOperatorDeclaration',
-          {
-            operator: op,
-            operand: operand
-          }
-        )
-      },
-      function(first, rest) {
-        return buildElement(
-          'InfixOperatorDeclaration',
-          {
-            operators: extractList(rest, 1),
-            operands: buildList(first, rest, 3)
-          }
-        )
-      },
-      function(operand, op) {
-        return buildElement(
-          'PostfixOperatorDeclaration',
-          {
-            operator: op,
-            operand: operand
-          }
-        )
-      },
-      function(unit) {
-        return buildElement('OperatorExpression', { unit: unit })
-      },
-      function(op, expr) {
-        return buildElement('PrefixOperatorExpression', { operator: op, expr: expr })
-      },
-      function(expr, op) {
-        return buildElement('PostfixOperatorExpression', { operator: op, expr: expr })
-      },
-      function(first, rest, last) {
-        var params = buildList(first, rest, 3)
-        if (last) {
-          let post_op = extractOptional(last, 1)
-          params[params.length - 1] = buildElement('PostfixOperatorExpression', { operator: post_op, expr: params[params.length - 1] })
-        }
-        return buildElement('N_aryOperatorExpression', { ops: extractList(rest, 1), operands: params })      
-      },
-      "_",
-      peg$literalExpectation("_", false),
-      "0",
-      peg$literalExpectation("0", false),
-      function() {
-        return buildElement('TupleSelector', { selector: text().substring(1) })
-      },
-      function(id, index) {
-        return buildElement('ArrayElementSelector', { id: id, index: index })
-      },
-      function(elms) {
-        return buildElement('ArrayLiteral', { list: extractOptional(elms, 1) || [] })
-      },
-      function(first, rest) {
-        return buildElement('ListLiteral', { list: buildList(first, rest, 3) })
-      },
-      function(id, params) {
-        var extracted_params = extractList(params, 1)
+            return id
+          },
+        function(id, params) {
+            return buildElement(
+              'OperandFunctionDeclaration',
+              {
+                name: id,
+                params: params
+              }
+            )
+          },
+        function(op, operand) {
+            return buildElement(
+              'PrefixOperatorDeclaration',
+              {
+                operator: op,
+                operand: operand
+              }
+            )
+          },
+        function(first, rest) {
+            return buildElement(
+              'InfixOperatorDeclaration',
+              {
+                operators: extractList(rest, 1),
+                operands: buildList(first, rest, 3)
+              }
+            )
+          },
+        function(operand, op) {
+            return buildElement(
+              'PostfixOperatorDeclaration',
+              {
+                operator: op,
+                operand: operand
+              }
+            )
+          },
+        function(unit) {
+            return buildElement('OperatorExpression', { unit: unit })
+          },
+        function(op, expr) {
+            return buildElement('PrefixOperatorExpression', { operator: op, expr: expr })
+          },
+        function(expr, op) {
+            return buildElement('PostfixOperatorExpression', { operator: op, expr: expr })
+          },
+        function(first, rest, last) {
+            var params = buildList(first, rest, 3)
+            if (last) {
+              let post_op = extractOptional(last, 1)
+              params[params.length - 1] = buildElement('PostfixOperatorExpression', { operator: post_op, expr: params[params.length - 1] })
+            }
+            return buildElement('N_aryOperatorExpression', { ops: extractList(rest, 1), operands: params })
+          },
+        "_",
+        peg$literalExpectation("_", false),
+        "0",
+        peg$literalExpectation("0", false),
+        function() {
+            return buildElement('TupleSelector', { selector: text().substring(1) })
+          },
+        function(id, index) {
+            return buildElement('ArrayElementSelector', { id: id, index: index })
+          },
+        function(elms) {
+            return buildElement('ArrayLiteral', { list: extractOptional(elms, 1) || [] })
+          },
+        function(first, rest) {
+            return buildElement('ListLiteral', { list: buildList(first, rest, 3) })
+          },
+        function(id, params) {
+            var extracted_params = extractList(params, 1)
 
-        // lambda declaration
-        if (id.name == '$') {
-          if (extracted_params.length > 1)
-            throw new Error("FTL0001: lambda's arguments followed by calling arguments!")
-          return buildElement('ParamTupleBuilder', { params: extracted_params[0] })
-        }
+            // lambda declaration
+            if (id.name == '$') {
+              if (extracted_params.length > 1)
+                throw new Error("FTL0001: lambda's arguments followed by calling arguments!")
+              return buildElement('ParamTupleBuilder', { params: extracted_params[0] })
+            }
 
-        return buildElement('CallExpression', { name: id, params: extracted_params })
-      },
-      "{",
-      peg$literalExpectation("{", false),
-      "}",
-      peg$literalExpectation("}", false),
-      function() {return text()},
-      function() {
+            return buildElement('CallExpression', { name: id, params: extracted_params })
+          },
+        "{",
+        peg$literalExpectation("{", false),
+        "}",
+        peg$literalExpectation("}", false),
+        function() {
 
-        //# NativeBlock
-        return { type: 'native', script: text() }
-      },
-      peg$anyExpectation(),
-      function(name) {
-        return buildElement('Identifier', { name: name })
-      },
-      peg$otherExpectation("identifier"),
-      function(first, rest) {
-        return first + rest.join("")
-      },
-      "$",
-      peg$literalExpectation("$", false),
-      function() {
-        return buildElement('NamespaceIdentifier', { text: text() })
-      },
-      "false",
-      peg$literalExpectation("false", false),
-      "fn",
-      peg$literalExpectation("fn", false),
-      "null",
-      peg$literalExpectation("null", false),
-      "true",
-      peg$literalExpectation("true", false),
-      "module",
-      peg$literalExpectation("module", false),
-      "import",
-      peg$literalExpectation("import", false),
-      "var",
-      peg$literalExpectation("var", false),
-      "const",
-      peg$literalExpectation("const", false),
-      /^[A-Z]/,
-      peg$classExpectation([["A", "Z"]], false, false),
-      /^[a-z]/,
-      peg$classExpectation([["a", "z"]], false, false),
-      /^[0-9]/,
-      peg$classExpectation([["0", "9"]], false, false),
-      /^[!%&*+\-.\/:;<=>?\^|\xD7\xF7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]/,
-      peg$classExpectation(["!", "%", "&", "*", "+", "-", ".", "/", ":", ";", "<", "=", ">", "?", "^", "|", "\xD7", "\xF7", "\u220F", "\u2211", "\u2215", "\u2217", "\u2219", "\u221A", "\u221B", "\u221C", "\u2227", "\u2228", "\u2229", "\u222A", "\u223C", "\u2264", "\u2265", "\u2282", "\u2283"], false, false),
-      function() {
-        return buildElement('TrueToken', { value: true })
-      },
-      function() {
-        return buildElement('FalseToken', { value: false })
-      },
-      function(literal) { return buildElement('NumericLiteral', { value: literal }) },
-      function() { return parseFloat(text()) },
-      /^[\-]/,
-      peg$classExpectation(["-"], false, false),
-      /^[1-9]/,
-      peg$classExpectation([["1", "9"]], false, false),
-      "e",
-      peg$literalExpectation("e", true),
-      /^[+\-]/,
-      peg$classExpectation(["+", "-"], false, false),
-      "0x",
-      peg$literalExpectation("0x", true),
-      /^[0-9a-f]/i,
-      peg$classExpectation([["0", "9"], ["a", "f"]], false, true),
-      "\"",
-      peg$literalExpectation("\"", false),
-      function(chars) {
-        let str = text()
-        return buildElement('StringLiteral', { value: str.substr(1, str.length - 2) })
-      },
-      "'",
-      peg$literalExpectation("'", false),
-      "\\",
-      peg$literalExpectation("\\", false),
-      "b",
-      peg$literalExpectation("b", false),
-      "f",
-      peg$literalExpectation("f", false),
-      "n",
-      peg$literalExpectation("n", false),
-      "r",
-      peg$literalExpectation("r", false),
-      "t",
-      peg$literalExpectation("t", false),
-      "v",
-      peg$literalExpectation("v", false),
-      "x",
-      peg$literalExpectation("x", false),
-      "u",
-      peg$literalExpectation("u", false),
-      /^[\n\r]/,
-      peg$classExpectation(["\n", "\r"], false, false),
-      "\n",
-      peg$literalExpectation("\n", false),
-      "\r\n",
-      peg$literalExpectation("\r\n", false),
-      "\r",
-      peg$literalExpectation("\r", false),
-      "\t",
-      peg$literalExpectation("\t", false),
-      "\x0B",
-      peg$literalExpectation("\x0B", false),
-      "\f",
-      peg$literalExpectation("\f", false),
-      " ",
-      peg$literalExpectation(" ", false),
-      "\xA0",
-      peg$literalExpectation("\xA0", false),
-      peg$otherExpectation("comment"),
-      "/*",
-      peg$literalExpectation("/*", false),
-      "*/",
-      peg$literalExpectation("*/", false)
-    ],
+            //# NativeBlock
+            return { type: 'native', script: text() }
+          },
+        peg$anyExpectation(),
+        function(name) {
+            return buildElement('Identifier', { name: name })
+          },
+        peg$otherExpectation("identifier"),
+        function(first, rest) {
+            return first + rest.join("")
+          },
+        "$",
+        peg$literalExpectation("$", false),
+        function() {
+            return buildElement('NamespaceIdentifier', { text: text() })
+          },
+        "false",
+        peg$literalExpectation("false", false),
+        "fn",
+        peg$literalExpectation("fn", false),
+        "null",
+        peg$literalExpectation("null", false),
+        "true",
+        peg$literalExpectation("true", false),
+        "module",
+        peg$literalExpectation("module", false),
+        "import",
+        peg$literalExpectation("import", false),
+        "var",
+        peg$literalExpectation("var", false),
+        "const",
+        peg$literalExpectation("const", false),
+        /^[A-Z]/,
+        peg$classExpectation([["A", "Z"]], false, false),
+        /^[a-z]/,
+        peg$classExpectation([["a", "z"]], false, false),
+        /^[0-9]/,
+        peg$classExpectation([["0", "9"]], false, false),
+        /^[!%&*+\-.\/:;<=>?\^|\xD7\xF7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]/,
+        peg$classExpectation(["!", "%", "&", "*", "+", "-", ".", "/", ":", ";", "<", "=", ">", "?", "^", "|", "\xD7", "\xF7", "\u220F", "\u2211", "\u2215", "\u2217", "\u2219", "\u221A", "\u221B", "\u221C", "\u2227", "\u2228", "\u2229", "\u222A", "\u223C", "\u2264", "\u2265", "\u2282", "\u2283"], false, false),
+        function() {
+            return buildElement('TrueToken', { value: true })
+          },
+        function() {
+            return buildElement('FalseToken', { value: false })
+          },
+        function(literal) { return buildElement('NumericLiteral', { value: literal }) },
+        function() { return parseFloat(text()) },
+        /^[\-]/,
+        peg$classExpectation(["-"], false, false),
+        /^[1-9]/,
+        peg$classExpectation([["1", "9"]], false, false),
+        "e",
+        peg$literalExpectation("e", true),
+        /^[+\-]/,
+        peg$classExpectation(["+", "-"], false, false),
+        "0x",
+        peg$literalExpectation("0x", true),
+        /^[0-9a-f]/i,
+        peg$classExpectation([["0", "9"], ["a", "f"]], false, true),
+        "\"",
+        peg$literalExpectation("\"", false),
+        function(chars) {
+            let str = text()
+            return buildElement('StringLiteral', { value: str.substr(1, str.length - 2) })
+          },
+        "'",
+        peg$literalExpectation("'", false),
+        "\\",
+        peg$literalExpectation("\\", false),
+        "b",
+        peg$literalExpectation("b", false),
+        "f",
+        peg$literalExpectation("f", false),
+        "n",
+        peg$literalExpectation("n", false),
+        "r",
+        peg$literalExpectation("r", false),
+        "t",
+        peg$literalExpectation("t", false),
+        "v",
+        peg$literalExpectation("v", false),
+        "x",
+        peg$literalExpectation("x", false),
+        "u",
+        peg$literalExpectation("u", false),
+        /^[\n\r]/,
+        peg$classExpectation(["\n", "\r"], false, false),
+        "\n",
+        peg$literalExpectation("\n", false),
+        "\r\n",
+        peg$literalExpectation("\r\n", false),
+        "\r",
+        peg$literalExpectation("\r", false),
+        "\t",
+        peg$literalExpectation("\t", false),
+        "\x0B",
+        peg$literalExpectation("\x0B", false),
+        "\f",
+        peg$literalExpectation("\f", false),
+        " ",
+        peg$literalExpectation(" ", false),
+        "\xA0",
+        peg$literalExpectation("\xA0", false),
+        peg$otherExpectation("comment"),
+        "/*",
+        peg$literalExpectation("/*", false),
+        "*/",
+        peg$literalExpectation("*/", false)
+      ],
 
-    peg$bytecode = [
-      peg$decode("%;\x80/V#;!.\" &\"/H$;\x80/?$;$.\" &\"/1$;\x80/($8%: %!!)(%'#($'#(#'#(\"'#&'#"),
-      peg$decode("%;Y/M#;~/D$%;\"/,#;T/#$+\")(\"'#&'#/($8#:!#! )(#'#(\"'#&'#"),
-      peg$decode("%$%;T/>#2\"\"\"6\"7#.) &2$\"\"6$7%/#$+\")(\"'#&'#0H*%;T/>#2\"\"\"6\"7#.) &2$\"\"6$7%/#$+\")(\"'#&'#&/& 8!:&! )"),
-      peg$decode("%$%$2\"\"\"6\"7#/,#0)*2\"\"\"6\"7#&&&#/2#2$\"\"6$7%/#$+\")(\"'#&'#0U*%$2\"\"\"6\"7#/,#0)*2\"\"\"6\"7#&&&#/2#2$\"\"6$7%/#$+\")(\"'#&'#&/0#;\"/'$8\":'\" )(\"'#&'#"),
-      peg$decode("%;%/_#$%;\x7F/,#;%/#$+\")(\"'#&'#06*%;\x7F/,#;%/#$+\")(\"'#&'#&/)$8\":(\"\"! )(\"'#&'#"),
-      peg$decode(";&./ &;+.) &;-.# &;6"),
-      peg$decode("%;Z/:#;~/1$;(/($8#:)#! )(#'#(\"'#&'#"),
-      peg$decode("%;#/\x8B#;P.6 &;9.0 &%;m/( 8!:*!\"\" )/i$%;~/J#2+\"\"6+7,/;$;~/2$;P.# &;9/#$+$)($'#(#'#(\"'#&'#.\" &\"/*$8#:-##\"! )(#'#(\"'#&'#"),
-      peg$decode("%;*/\x8F#$%;~/D#2.\"\"6.7//5$;~/,$;*/#$+$)($'#(#'#(\"'#&'#0N*%;~/D#2.\"\"6.7//5$;~/,$;*/#$+$)($'#(#'#(\"'#&'#&/)$8\":0\"\"! )(\"'#&'#"),
-      peg$decode("%%;#/0#;T/'$8\":1\" )(\"'#&'#/p#;~/g$22\"\"6273/X$;~/O$;(.\" &\"/A$;~/8$24\"\"6475/)$8':6'\"&\")(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-      peg$decode(";).# &;'"),
-      peg$decode("%;\\.# &;[/f#;~/]$;P/T$;~/K$27\"\"6778/<$;~/3$;8/*$8':9'#&$ )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-      peg$decode("%;P/;#;~/2$;./)$8#::#\"\" )(#'#(\"'#&'#"),
-      peg$decode("%;V/S#;~/J$;=.# &;,/;$;~/2$;2/)$8%:;%\"\" )(%'#($'#(#'#(\"'#&'#"),
-      peg$decode("%2<\"\"6<7=/W#;~/N$;0.\" &\"/@$;~/7$2>\"\"6>7?/($8%:@%!\")(%'#($'#(#'#(\"'#&'#"),
-      peg$decode("%;./e#$%;~/,#;./#$+\")(\"'#&'#/9#06*%;~/,#;./#$+\")(\"'#&'#&&&#/)$8\":A\"\"! )(\"'#&'#"),
-      peg$decode("%;1/\x8F#$%;~/D#2.\"\"6.7//5$;~/,$;1/#$+$)($'#(#'#(\"'#&'#0N*%;~/D#2.\"\"6.7//5$;~/,$;1/#$+$)($'#(#'#(\"'#&'#&/)$8\":B\"\"! )(\"'#&'#"),
-      peg$decode("%%;P/;#;~/2$2C\"\"6C7D/#$+#)(#'#(\"'#&'#.\" &\"/;#;~/2$;5/)$8#:E#\"\" )(#'#(\"'#&'#"),
-      peg$decode(";N.b &%$%;4/,#;~/#$+\")(\"'#&'#/9#06*%;4/,#;~/#$+\")(\"'#&'#&&&#/' 8!:F!! )"),
-      peg$decode("%$%;7/,#;~/#$+\")(\"'#&'#06*%;7/,#;~/#$+\")(\"'#&'#&/8#;A.# &;8/)$8\":G\"\"! )(\"'#&'#"),
-      peg$decode("%2H\"\"6H7I/:#;~/1$;3/($8#:J#! )(#'#(\"'#&'#"),
-      peg$decode("%;3/_#$%;~/,#;4/#$+\")(\"'#&'#06*%;~/,#;4/#$+\")(\"'#&'#&/)$8\":K\"\"! )(\"'#&'#"),
-      peg$decode("%;5/' 8!:L!! )"),
-      peg$decode("%2M\"\"6M7N/7#;M.# &;P/($8\":O\"! )(\"'#&'#"),
-      peg$decode(";H.S &;G.M &;M.G &;L.A &;P.; &;I.5 &;/./ &;..) &;F.# &;B"),
-      peg$decode("%%<2P\"\"6P7Q=.##&&!&'#/]#%<2H\"\"6H7I=.##&&!&'#/B$;a/9$$;a0#*;a&/)$8$:R$\"! )($'#(#'#(\"'#&'#"),
-      peg$decode("%;P/' 8!:S!! )"),
-      peg$decode("%;P/2#;./)$8\":T\"\"! )(\"'#&'#"),
-      peg$decode(";;.# &;:"),
-      peg$decode(";>.) &;?.# &;@"),
-      peg$decode("%;9/;#;~/2$;</)$8#:U#\"\" )(#'#(\"'#&'#"),
-      peg$decode("%;</\x89#$%;~/>#;9/5$;~/,$;</#$+$)($'#(#'#(\"'#&'#/K#0H*%;~/>#;9/5$;~/,$;</#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":V\"\"! )(\"'#&'#"),
-      peg$decode("%;</;#;~/2$;9/)$8#:W#\"\" )(#'#(\"'#&'#"),
-      peg$decode("%;E.# &;C/' 8!:X!! )"),
-      peg$decode("%;9/;#;~/2$;8/)$8#:Y#\"\" )(#'#(\"'#&'#"),
-      peg$decode("%;8/;#;~/2$;9/)$8#:Z#\"\" )(#'#(\"'#&'#"),
-      peg$decode(";8.] &%2<\"\"6<7=/M#;~/D$;C/;$;~/2$2>\"\"6>7?/#$+%)(%'#($'#(#'#(\"'#&'#"),
-      peg$decode("%;D/\xAB#$%;~/>#;9/5$;~/,$;D/#$+$)($'#(#'#(\"'#&'#/K#0H*%;~/>#;9/5$;~/,$;D/#$+$)($'#(#'#(\"'#&'#&&&#/K$%;~/,#;9/#$+\")(\"'#&'#.\" &\"/*$8#:[##\"! )(#'#(\"'#&'#"),
-      peg$decode("%2\\\"\"6\\7]/k#2^\"\"6^7_.R &%;g/H#$;`0#*;`&/8$%<;R=.##&&!&'#/#$+#)(#'#(\"'#&'#/'$8\":`\" )(\"'#&'#"),
-      peg$decode("%;P/;#;~/2$;I/)$8#:a#\"\" )(#'#(\"'#&'#"),
-      peg$decode(";W./ &;c.) &;d.# &;m"),
-      peg$decode("%22\"\"6273/a#%;~/,#;J/#$+\")(\"'#&'#.\" &\"/@$;~/7$24\"\"6475/($8$:b$!\")($'#(#'#(\"'#&'#"),
-      peg$decode("%;K/\x8F#$%;~/D#2.\"\"6.7//5$;~/,$;K/#$+$)($'#(#'#(\"'#&'#0N*%;~/D#2.\"\"6.7//5$;~/,$;K/#$+$)($'#(#'#(\"'#&'#&/)$8\":c\"\"! )(\"'#&'#"),
-      peg$decode(";A.# &;8"),
-      peg$decode("%;P/r#;~/i$22\"\"6273/Z$;~/Q$$;0/&#0#*;0&&&#/;$;~/2$24\"\"6475/#$+')(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-      peg$decode("%;P/e#$%;~/,#;./#$+\")(\"'#&'#/9#06*%;~/,#;./#$+\")(\"'#&'#&&&#/)$8\":d\"\"! )(\"'#&'#"),
-      peg$decode("%2e\"\"6e7f/\u0152#;~/\u0149$%$%%<2e\"\"6e7f.) &2g\"\"6g7h=.##&&!&'#/,#;O/#$+\")(\"'#&'#0T*%%<2e\"\"6e7f.) &2g\"\"6g7h=.##&&!&'#/,#;O/#$+\")(\"'#&'#&/& 8!:i! )/\xCC$$;N0#*;N&/\xBC$;~/\xB3$%$%%<2e\"\"6e7f.) &2g\"\"6g7h=.##&&!&'#/,#;O/#$+\")(\"'#&'#0T*%%<2e\"\"6e7f.) &2g\"\"6g7h=.##&&!&'#/,#;O/#$+\")(\"'#&'#&/& 8!:i! )/6$2g\"\"6g7h/'$8':j' )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
-      peg$decode("1\"\"5!7k"),
-      peg$decode("%%<;b=.##&&!&'#/1#;Q/($8\":l\"! )(\"'#&'#"),
-      peg$decode("<%;R/9#$;S0#*;S&/)$8\":n\"\"! )(\"'#&'#=.\" 7m"),
-      peg$decode(";].5 &2o\"\"6o7p.) &2\\\"\"6\\7]"),
-      peg$decode(";R.# &;`"),
-      peg$decode("%;_/O#$;_.) &2\\\"\"6\\7]0/*;_.) &2\\\"\"6\\7]&/'$8\":q\" )(\"'#&'#"),
-      peg$decode("%2r\"\"6r7s/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode("%2t\"\"6t7u/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode("%2v\"\"6v7w/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode("%2x\"\"6x7y/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode("%2z\"\"6z7{/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode("%2|\"\"6|7}/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode("%2~\"\"6~7\x7F/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode("%2\x80\"\"6\x807\x81/8#%<;S=.##&&!&'#/#$+\")(\"'#&'#"),
-      peg$decode(";^.# &;_"),
-      peg$decode("4\x82\"\"5!7\x83"),
-      peg$decode("4\x84\"\"5!7\x85"),
-      peg$decode("4\x86\"\"5!7\x87"),
-      peg$decode("4\x88\"\"5!7\x89"),
-      peg$decode(";[.A &;\\.; &;V.5 &;Y./ &;Z.) &;W.# &;c"),
-      peg$decode("%;X/& 8!:\x8A! ).. &%;U/& 8!:\x8B! )"),
-      peg$decode("%;k/C#%<;R.# &;`=.##&&!&'#/($8\":\x8C\"!!)(\"'#&'#.M &%;e/C#%<;R.# &;`=.##&&!&'#/($8\":\x8C\"!!)(\"'#&'#"),
-      peg$decode("%;f/T#2\"\"\"6\"7#/E$$;`0#*;`&/5$;h.\" &\"/'$8$:\x8D$ )($'#(#'#(\"'#&'#.\x91 &%4\x8E\"\"5!7\x8F.\" &\"/Z#2\"\"\"6\"7#/K$$;`/&#0#*;`&&&#/5$;h.\" &\"/'$8$:\x8D$ )($'#(#'#(\"'#&'#.? &%;f/5#;h.\" &\"/'$8\":\x8D\" )(\"'#&'#"),
-      peg$decode("2^\"\"6^7_.Q &%4\x8E\"\"5!7\x8F.\" &\"/<#;g/3$$;`0#*;`&/#$+#)(#'#(\"'#&'#"),
-      peg$decode("4\x90\"\"5!7\x91"),
-      peg$decode("%;i/,#;j/#$+\")(\"'#&'#"),
-      peg$decode("3\x92\"\"5!7\x93"),
-      peg$decode("%4\x94\"\"5!7\x95.\" &\"/9#$;`/&#0#*;`&&&#/#$+\")(\"'#&'#"),
-      peg$decode("%3\x96\"\"5\"7\x97/@#%$;l/&#0#*;l&&&#/\"!&,)/#$+\")(\"'#&'#"),
-      peg$decode("4\x98\"\"5!7\x99"),
-      peg$decode("%2\x9A\"\"6\x9A7\x9B/G#$;n0#*;n&/7$2\x9A\"\"6\x9A7\x9B/($8#:\x9C#!!)(#'#(\"'#&'#.W &%2\x9D\"\"6\x9D7\x9E/G#$;o0#*;o&/7$2\x9D\"\"6\x9D7\x9E/($8#:\x9C#!!)(#'#(\"'#&'#"),
-      peg$decode("%%<2\x9A\"\"6\x9A7\x9B./ &2\x9F\"\"6\x9F7\xA0.# &;w=.##&&!&'#/,#;O/#$+\")(\"'#&'#.B &%2\x9F\"\"6\x9F7\xA0/,#;q/#$+\")(\"'#&'#.# &;p"),
-      peg$decode("%%<2\x9D\"\"6\x9D7\x9E./ &2\x9F\"\"6\x9F7\xA0.# &;w=.##&&!&'#/,#;O/#$+\")(\"'#&'#.B &%2\x9F\"\"6\x9F7\xA0/,#;q/#$+\")(\"'#&'#.# &;p"),
-      peg$decode("%2\x9F\"\"6\x9F7\xA0/,#;x/#$+\")(\"'#&'#"),
-      peg$decode(";r.N &%2^\"\"6^7_/8#%<;`=.##&&!&'#/#$+\")(\"'#&'#.# &;v"),
-      peg$decode(";s.# &;t"),
-      peg$decode("2\x9D\"\"6\x9D7\x9E.} &2\x9A\"\"6\x9A7\x9B.q &2\x9F\"\"6\x9F7\xA0.e &2\xA1\"\"6\xA17\xA2.Y &2\xA3\"\"6\xA37\xA4.M &2\xA5\"\"6\xA57\xA6.A &2\xA7\"\"6\xA77\xA8.5 &2\xA9\"\"6\xA97\xAA.) &2\xAB\"\"6\xAB7\xAC"),
-      peg$decode("%%<;u.# &;w=.##&&!&'#/,#;O/#$+\")(\"'#&'#"),
-      peg$decode(";s.; &;`.5 &2\xAD\"\"6\xAD7\xAE.) &2\xAF\"\"6\xAF7\xB0"),
-      peg$decode("%2\xAD\"\"6\xAD7\xAE/F#%%;l/,#;l/#$+\")(\"'#&'#/\"!&,)/#$+\")(\"'#&'#"),
-      peg$decode("4\xB1\"\"5!7\xB2"),
-      peg$decode("2\xB3\"\"6\xB37\xB4.5 &2\xB5\"\"6\xB57\xB6.) &2\xB7\"\"6\xB77\xB8"),
-      peg$decode("2\xB9\"\"6\xB97\xBA.M &2\xBB\"\"6\xBB7\xBC.A &2\xBD\"\"6\xBD7\xBE.5 &2\xBF\"\"6\xBF7\xC0.) &2\xC1\"\"6\xC17\xC2"),
-      peg$decode("<;|.# &;{=.\" 7\xC3"),
-      peg$decode("%2P\"\"6P7Q/q#$%%<;w=.##&&!&'#/,#;O/#$+\")(\"'#&'#0B*%%<;w=.##&&!&'#/,#;O/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
-      peg$decode("%2\xC4\"\"6\xC47\xC5/\x8C#$%%<2\xC6\"\"6\xC67\xC7=.##&&!&'#/,#;O/#$+\")(\"'#&'#0H*%%<2\xC6\"\"6\xC67\xC7=.##&&!&'#/,#;O/#$+\")(\"'#&'#&/2$2\xC6\"\"6\xC67\xC7/#$+#)(#'#(\"'#&'#"),
-      peg$decode("%2\xC4\"\"6\xC47\xC5/\x98#$%%<2\xC6\"\"6\xC67\xC7.# &;w=.##&&!&'#/,#;O/#$+\")(\"'#&'#0N*%%<2\xC6\"\"6\xC67\xC7.# &;w=.##&&!&'#/,#;O/#$+\")(\"'#&'#&/2$2\xC6\"\"6\xC67\xC7/#$+#)(#'#(\"'#&'#"),
-      peg$decode("%$;y.# &;z0)*;y.# &;z&/\xA5#$%$;x/&#0#*;x&&&#/E#$;y.# &;z/,#0)*;y.# &;z&&&#/#$+\")(\"'#&'#0\\*%$;x/&#0#*;x&&&#/E#$;y.# &;z/,#0)*;y.# &;z&&&#/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
-      peg$decode("$%$;y.# &;z0)*;y.# &;z&/,#;x/#$+\")(\"'#&'#/L#0I*%$;y.# &;z0)*;y.# &;z&/,#;x/#$+\")(\"'#&'#&&&#"),
-      peg$decode("$;y.) &;x.# &;z0/*;y.) &;x.# &;z&")
-    ],
+      peg$bytecode = [
+        peg$decode("%;\x81/V#;!.\" &\"/H$;\x81/?$;$.\" &\"/1$;\x81/($8%: %!!)(%'#($'#(#'#(\"'#&'#"),
+        peg$decode("%;Z/M#;\x7F/D$%;\"/,#;U/#$+\")(\"'#&'#/($8#:!#! )(#'#(\"'#&'#"),
+        peg$decode("%$%;U/>#2\"\"\"6\"7#.) &2$\"\"6$7%/#$+\")(\"'#&'#0H*%;U/>#2\"\"\"6\"7#.) &2$\"\"6$7%/#$+\")(\"'#&'#&/& 8!:&! )"),
+        peg$decode("%$%$2\"\"\"6\"7#/,#0)*2\"\"\"6\"7#&&&#/2#2$\"\"6$7%/#$+\")(\"'#&'#0U*%$2\"\"\"6\"7#/,#0)*2\"\"\"6\"7#&&&#/2#2$\"\"6$7%/#$+\")(\"'#&'#&/0#;\"/'$8\":'\" )(\"'#&'#"),
+        peg$decode("%;%/_#$%;\x80/,#;%/#$+\")(\"'#&'#06*%;\x80/,#;%/#$+\")(\"'#&'#&/)$8\":(\"\"! )(\"'#&'#"),
+        peg$decode(";&./ &;+.) &;-.# &;6"),
+        peg$decode("%;[/:#;\x7F/1$;(/($8#:)#! )(#'#(\"'#&'#"),
+        peg$decode("%;#/\x8B#;Q.6 &;9.0 &%;n/( 8!:*!\"\" )/i$%;\x7F/J#2+\"\"6+7,/;$;\x7F/2$;Q.# &;9/#$+$)($'#(#'#(\"'#&'#.\" &\"/*$8#:-##\"! )(#'#(\"'#&'#"),
+        peg$decode("%;*/\x8F#$%;\x7F/D#2.\"\"6.7//5$;\x7F/,$;*/#$+$)($'#(#'#(\"'#&'#0N*%;\x7F/D#2.\"\"6.7//5$;\x7F/,$;*/#$+$)($'#(#'#(\"'#&'#&/)$8\":0\"\"! )(\"'#&'#"),
+        peg$decode("%%;#/0#;U/'$8\":1\" )(\"'#&'#/p#;\x7F/g$22\"\"6273/X$;\x7F/O$;(.\" &\"/A$;\x7F/8$24\"\"6475/)$8':6'\"&\")(''#(&'#(%'#($'#(#'#(\"'#&'#"),
+        peg$decode(";).# &;'"),
+        peg$decode("%;].# &;\\/f#;\x7F/]$;Q/T$;\x7F/K$27\"\"6778/<$;\x7F/3$;8/*$8':9'#&$ )(''#(&'#(%'#($'#(#'#(\"'#&'#"),
+        peg$decode("%;Q/;#;\x7F/2$;./)$8#::#\"\" )(#'#(\"'#&'#"),
+        peg$decode("%;W/S#;\x7F/J$;=.# &;,/;$;\x7F/2$;2/)$8%:;%\"\" )(%'#($'#(#'#(\"'#&'#"),
+        peg$decode("%2<\"\"6<7=/W#;\x7F/N$;0.\" &\"/@$;\x7F/7$2>\"\"6>7?/($8%:@%!\")(%'#($'#(#'#(\"'#&'#"),
+        peg$decode("%;./e#$%;\x7F/,#;./#$+\")(\"'#&'#/9#06*%;\x7F/,#;./#$+\")(\"'#&'#&&&#/)$8\":A\"\"! )(\"'#&'#"),
+        peg$decode("%;1/\x8F#$%;\x7F/D#2.\"\"6.7//5$;\x7F/,$;1/#$+$)($'#(#'#(\"'#&'#0N*%;\x7F/D#2.\"\"6.7//5$;\x7F/,$;1/#$+$)($'#(#'#(\"'#&'#&/)$8\":B\"\"! )(\"'#&'#"),
+        peg$decode("%%;Q/;#;\x7F/2$2C\"\"6C7D/#$+#)(#'#(\"'#&'#.\" &\"/;#;\x7F/2$;5/)$8#:E#\"\" )(#'#(\"'#&'#"),
+        peg$decode(";N.b &%$%;4/,#;\x7F/#$+\")(\"'#&'#/9#06*%;4/,#;\x7F/#$+\")(\"'#&'#&&&#/' 8!:F!! )"),
+        peg$decode("%$%;7/,#;\x7F/#$+\")(\"'#&'#06*%;7/,#;\x7F/#$+\")(\"'#&'#&/8#;A.# &;8/)$8\":G\"\"! )(\"'#&'#"),
+        peg$decode("%2H\"\"6H7I/:#;\x7F/1$;3/($8#:J#! )(#'#(\"'#&'#"),
+        peg$decode("%;3/_#$%;\x7F/,#;4/#$+\")(\"'#&'#06*%;\x7F/,#;4/#$+\")(\"'#&'#&/)$8\":K\"\"! )(\"'#&'#"),
+        peg$decode("%;5/' 8!:L!! )"),
+        peg$decode("%2M\"\"6M7N/7#;M.# &;Q/($8\":O\"! )(\"'#&'#"),
+        peg$decode(";H.S &;G.M &;M.G &;L.A &;Q.; &;I.5 &;/./ &;..) &;F.# &;B"),
+        peg$decode("%%<2P\"\"6P7Q=.##&&!&'#/]#%<2H\"\"6H7I=.##&&!&'#/B$;b/9$$;b0#*;b&/)$8$:R$\"! )($'#(#'#(\"'#&'#"),
+        peg$decode("%;Q/' 8!:S!! )"),
+        peg$decode("%;Q/2#;./)$8\":T\"\"! )(\"'#&'#"),
+        peg$decode(";;.# &;:"),
+        peg$decode(";>.) &;?.# &;@"),
+        peg$decode("%;9/;#;\x7F/2$;</)$8#:U#\"\" )(#'#(\"'#&'#"),
+        peg$decode("%;</\x89#$%;\x7F/>#;9/5$;\x7F/,$;</#$+$)($'#(#'#(\"'#&'#/K#0H*%;\x7F/>#;9/5$;\x7F/,$;</#$+$)($'#(#'#(\"'#&'#&&&#/)$8\":V\"\"! )(\"'#&'#"),
+        peg$decode("%;</;#;\x7F/2$;9/)$8#:W#\"\" )(#'#(\"'#&'#"),
+        peg$decode("%;E.# &;C/' 8!:X!! )"),
+        peg$decode("%;9/;#;\x7F/2$;8/)$8#:Y#\"\" )(#'#(\"'#&'#"),
+        peg$decode("%;8/;#;\x7F/2$;9/)$8#:Z#\"\" )(#'#(\"'#&'#"),
+        peg$decode(";8.] &%2<\"\"6<7=/M#;\x7F/D$;C/;$;\x7F/2$2>\"\"6>7?/#$+%)(%'#($'#(#'#(\"'#&'#"),
+        peg$decode("%;D/\xAB#$%;\x7F/>#;9/5$;\x7F/,$;D/#$+$)($'#(#'#(\"'#&'#/K#0H*%;\x7F/>#;9/5$;\x7F/,$;D/#$+$)($'#(#'#(\"'#&'#&&&#/K$%;\x7F/,#;9/#$+\")(\"'#&'#.\" &\"/*$8#:[##\"! )(#'#(\"'#&'#"),
+        peg$decode("%2\\\"\"6\\7]/k#2^\"\"6^7_.R &%;h/H#$;a0#*;a&/8$%<;S=.##&&!&'#/#$+#)(#'#(\"'#&'#/'$8\":`\" )(\"'#&'#"),
+        peg$decode("%;Q/;#;\x7F/2$;I/)$8#:a#\"\" )(#'#(\"'#&'#"),
+        peg$decode(";X./ &;d.) &;e.# &;n"),
+        peg$decode("%22\"\"6273/a#%;\x7F/,#;J/#$+\")(\"'#&'#.\" &\"/@$;\x7F/7$24\"\"6475/($8$:b$!\")($'#(#'#(\"'#&'#"),
+        peg$decode("%;K/\x8F#$%;\x7F/D#2.\"\"6.7//5$;\x7F/,$;K/#$+$)($'#(#'#(\"'#&'#0N*%;\x7F/D#2.\"\"6.7//5$;\x7F/,$;K/#$+$)($'#(#'#(\"'#&'#&/)$8\":c\"\"! )(\"'#&'#"),
+        peg$decode(";A.# &;8"),
+        peg$decode("%;Q/r#;\x7F/i$22\"\"6273/Z$;\x7F/Q$$;0/&#0#*;0&&&#/;$;\x7F/2$24\"\"6475/#$+')(''#(&'#(%'#($'#(#'#(\"'#&'#"),
+        peg$decode("%;Q/e#$%;\x7F/,#;./#$+\")(\"'#&'#/9#06*%;\x7F/,#;./#$+\")(\"'#&'#&&&#/)$8\":d\"\"! )(\"'#&'#"),
+        peg$decode("%2e\"\"6e7f/\xA3#;\x7F/\x9A$$;O0#*;O&/\x8A$$%;N/3#$;O0#*;O&/#$+\")(\"'#&'#0=*%;N/3#$;O0#*;O&/#$+\")(\"'#&'#&/F$$;O0#*;O&/6$2g\"\"6g7h/'$8&:i& )(&'#(%'#($'#(#'#(\"'#&'#"),
+        peg$decode("%%<2e\"\"6e7f.) &2g\"\"6g7h=.##&&!&'#/,#;P/#$+\")(\"'#&'#"),
+        peg$decode("1\"\"5!7j"),
+        peg$decode("%%<;c=.##&&!&'#/1#;R/($8\":k\"! )(\"'#&'#"),
+        peg$decode("<%;S/9#$;T0#*;T&/)$8\":m\"\"! )(\"'#&'#=.\" 7l"),
+        peg$decode(";^.5 &2n\"\"6n7o.) &2\\\"\"6\\7]"),
+        peg$decode(";S.# &;a"),
+        peg$decode("%;`/O#$;`.) &2\\\"\"6\\7]0/*;`.) &2\\\"\"6\\7]&/'$8\":p\" )(\"'#&'#"),
+        peg$decode("%2q\"\"6q7r/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode("%2s\"\"6s7t/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode("%2u\"\"6u7v/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode("%2w\"\"6w7x/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode("%2y\"\"6y7z/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode("%2{\"\"6{7|/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode("%2}\"\"6}7~/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode("%2\x7F\"\"6\x7F7\x80/8#%<;T=.##&&!&'#/#$+\")(\"'#&'#"),
+        peg$decode(";_.# &;`"),
+        peg$decode("4\x81\"\"5!7\x82"),
+        peg$decode("4\x83\"\"5!7\x84"),
+        peg$decode("4\x85\"\"5!7\x86"),
+        peg$decode("4\x87\"\"5!7\x88"),
+        peg$decode(";\\.A &;].; &;W.5 &;Z./ &;[.) &;X.# &;d"),
+        peg$decode("%;Y/& 8!:\x89! ).. &%;V/& 8!:\x8A! )"),
+        peg$decode("%;l/C#%<;S.# &;a=.##&&!&'#/($8\":\x8B\"!!)(\"'#&'#.M &%;f/C#%<;S.# &;a=.##&&!&'#/($8\":\x8B\"!!)(\"'#&'#"),
+        peg$decode("%;g/T#2\"\"\"6\"7#/E$$;a0#*;a&/5$;i.\" &\"/'$8$:\x8C$ )($'#(#'#(\"'#&'#.\x91 &%4\x8D\"\"5!7\x8E.\" &\"/Z#2\"\"\"6\"7#/K$$;a/&#0#*;a&&&#/5$;i.\" &\"/'$8$:\x8C$ )($'#(#'#(\"'#&'#.? &%;g/5#;i.\" &\"/'$8\":\x8C\" )(\"'#&'#"),
+        peg$decode("2^\"\"6^7_.Q &%4\x8D\"\"5!7\x8E.\" &\"/<#;h/3$$;a0#*;a&/#$+#)(#'#(\"'#&'#"),
+        peg$decode("4\x8F\"\"5!7\x90"),
+        peg$decode("%;j/,#;k/#$+\")(\"'#&'#"),
+        peg$decode("3\x91\"\"5!7\x92"),
+        peg$decode("%4\x93\"\"5!7\x94.\" &\"/9#$;a/&#0#*;a&&&#/#$+\")(\"'#&'#"),
+        peg$decode("%3\x95\"\"5\"7\x96/@#%$;m/&#0#*;m&&&#/\"!&,)/#$+\")(\"'#&'#"),
+        peg$decode("4\x97\"\"5!7\x98"),
+        peg$decode("%2\x99\"\"6\x997\x9A/G#$;o0#*;o&/7$2\x99\"\"6\x997\x9A/($8#:\x9B#!!)(#'#(\"'#&'#.W &%2\x9C\"\"6\x9C7\x9D/G#$;p0#*;p&/7$2\x9C\"\"6\x9C7\x9D/($8#:\x9B#!!)(#'#(\"'#&'#"),
+        peg$decode("%%<2\x99\"\"6\x997\x9A./ &2\x9E\"\"6\x9E7\x9F.# &;x=.##&&!&'#/,#;P/#$+\")(\"'#&'#.B &%2\x9E\"\"6\x9E7\x9F/,#;r/#$+\")(\"'#&'#.# &;q"),
+        peg$decode("%%<2\x9C\"\"6\x9C7\x9D./ &2\x9E\"\"6\x9E7\x9F.# &;x=.##&&!&'#/,#;P/#$+\")(\"'#&'#.B &%2\x9E\"\"6\x9E7\x9F/,#;r/#$+\")(\"'#&'#.# &;q"),
+        peg$decode("%2\x9E\"\"6\x9E7\x9F/,#;y/#$+\")(\"'#&'#"),
+        peg$decode(";s.N &%2^\"\"6^7_/8#%<;a=.##&&!&'#/#$+\")(\"'#&'#.# &;w"),
+        peg$decode(";t.# &;u"),
+        peg$decode("2\x9C\"\"6\x9C7\x9D.} &2\x99\"\"6\x997\x9A.q &2\x9E\"\"6\x9E7\x9F.e &2\xA0\"\"6\xA07\xA1.Y &2\xA2\"\"6\xA27\xA3.M &2\xA4\"\"6\xA47\xA5.A &2\xA6\"\"6\xA67\xA7.5 &2\xA8\"\"6\xA87\xA9.) &2\xAA\"\"6\xAA7\xAB"),
+        peg$decode("%%<;v.# &;x=.##&&!&'#/,#;P/#$+\")(\"'#&'#"),
+        peg$decode(";t.; &;a.5 &2\xAC\"\"6\xAC7\xAD.) &2\xAE\"\"6\xAE7\xAF"),
+        peg$decode("%2\xAC\"\"6\xAC7\xAD/F#%%;m/,#;m/#$+\")(\"'#&'#/\"!&,)/#$+\")(\"'#&'#"),
+        peg$decode("4\xB0\"\"5!7\xB1"),
+        peg$decode("2\xB2\"\"6\xB27\xB3.5 &2\xB4\"\"6\xB47\xB5.) &2\xB6\"\"6\xB67\xB7"),
+        peg$decode("2\xB8\"\"6\xB87\xB9.M &2\xBA\"\"6\xBA7\xBB.A &2\xBC\"\"6\xBC7\xBD.5 &2\xBE\"\"6\xBE7\xBF.) &2\xC0\"\"6\xC07\xC1"),
+        peg$decode("<;}.# &;|=.\" 7\xC2"),
+        peg$decode("%2P\"\"6P7Q/q#$%%<;x=.##&&!&'#/,#;P/#$+\")(\"'#&'#0B*%%<;x=.##&&!&'#/,#;P/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
+        peg$decode("%2\xC3\"\"6\xC37\xC4/\x8C#$%%<2\xC5\"\"6\xC57\xC6=.##&&!&'#/,#;P/#$+\")(\"'#&'#0H*%%<2\xC5\"\"6\xC57\xC6=.##&&!&'#/,#;P/#$+\")(\"'#&'#&/2$2\xC5\"\"6\xC57\xC6/#$+#)(#'#(\"'#&'#"),
+        peg$decode("%2\xC3\"\"6\xC37\xC4/\x98#$%%<2\xC5\"\"6\xC57\xC6.# &;x=.##&&!&'#/,#;P/#$+\")(\"'#&'#0N*%%<2\xC5\"\"6\xC57\xC6.# &;x=.##&&!&'#/,#;P/#$+\")(\"'#&'#&/2$2\xC5\"\"6\xC57\xC6/#$+#)(#'#(\"'#&'#"),
+        peg$decode("%$;z.# &;{0)*;z.# &;{&/\xA5#$%$;y/&#0#*;y&&&#/E#$;z.# &;{/,#0)*;z.# &;{&&&#/#$+\")(\"'#&'#0\\*%$;y/&#0#*;y&&&#/E#$;z.# &;{/,#0)*;z.# &;{&&&#/#$+\")(\"'#&'#&/#$+\")(\"'#&'#"),
+        peg$decode("$%$;z.# &;{0)*;z.# &;{&/,#;y/#$+\")(\"'#&'#/L#0I*%$;z.# &;{0)*;z.# &;{&/,#;y/#$+\")(\"'#&'#&&&#"),
+        peg$decode("$;z.) &;y.# &;{0/*;z.) &;y.# &;{&")
+      ],
 
-    peg$currPos = 0,
-    peg$savedPos = 0,
-    peg$posDetailsCache = [{ line: 1, column: 1 }],
-    peg$maxFailPos = 0,
-    peg$maxFailExpected = [],
-    peg$silentFails = 0,
+      peg$currPos          = 0,
+      peg$savedPos         = 0,
+      peg$posDetailsCache  = [{ line: 1, column: 1 }],
+      peg$maxFailPos       = 0,
+      peg$maxFailExpected  = [],
+      peg$silentFails      = 0,
 
-    peg$resultsCache = {},
+      peg$resultsCache = {},
 
-    peg$result;
+      peg$result;
 
   if ("startRule" in options) {
     if (!(options.startRule in peg$startRuleIndices)) {
@@ -665,7 +665,7 @@ export function peg$parse(input, options) {
 
       details = peg$posDetailsCache[p];
       details = {
-        line: details.line,
+        line:   details.line,
         column: details.column
       };
 
@@ -687,17 +687,17 @@ export function peg$parse(input, options) {
 
   function peg$computeLocation(startPos, endPos) {
     var startPosDetails = peg$computePosDetails(startPos),
-      endPosDetails = peg$computePosDetails(endPos);
+        endPosDetails   = peg$computePosDetails(endPos);
 
     return {
       start: {
         offset: startPos,
-        line: startPosDetails.line,
+        line:   startPosDetails.line,
         column: startPosDetails.column
       },
       end: {
         offset: endPos,
-        line: endPosDetails.line,
+        line:   endPosDetails.line,
         column: endPosDetails.column
       }
     };
@@ -738,16 +738,16 @@ export function peg$parse(input, options) {
   }
 
   function peg$parseRule(index) {
-    var bc = peg$bytecode[index],
-      ip = 0,
-      ips = [],
-      end = bc.length,
-      ends = [],
-      stack = [],
-      params, i;
+    var bc    = peg$bytecode[index],
+        ip    = 0,
+        ips   = [],
+        end   = bc.length,
+        ends  = [],
+        stack = [],
+        params, i;
 
-    var key = peg$currPos * 97 + index,
-      cached = peg$resultsCache[key];
+    var key    = peg$currPos * 98 + index,
+        cached = peg$resultsCache[key];
 
     if (cached) {
       peg$currPos = cached.nextPos;
