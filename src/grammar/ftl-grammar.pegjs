@@ -523,19 +523,14 @@ CallExpression =
 
 // Native javascript block wrapped with "{" and "}"
 NativeBlock =
-  "{" _ SourceCharacterNoCurlyBrackets*
-  (NativeBlock SourceCharacterNoCurlyBrackets*)*
-  SourceCharacterNoCurlyBrackets* "}" {
-
+  "{" (!"}" SourceCharacter)* ("}" / ((EOL !"}" (WhiteSpace+ SourceCharacter*)? )* EOL "}") )
+  {
     //# NativeBlock
     return { type: 'native', script: text() }
   }
 
-SourceCharacterNoCurlyBrackets =
-  !("{" / "}") SourceCharacter
-
 SourceCharacter =
-  .
+  [^\0-\x08\x0A-\x1F]
 
 Identifier =
   !ReservedWord name:IdentifierName
@@ -736,17 +731,14 @@ WhiteSpace =
   / "\u00A0"
 
 Comment "comment" =
-  MultiLineComment
+  BlockComment
   / SingleLineComment
 
 SingleLineComment =
   "//" (!LineTerminator SourceCharacter)*
 
-MultiLineComment =
-  "/*" (!"*/" SourceCharacter)* "*/"
-
-MultiLineCommentNoLineTerminator =
-  "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
+BlockComment =
+  "/*" (!"*/" SourceCharacter)* ( (EOL (!"*/" SourceCharacter)*)* "*/")
 
 // any white spaces/comments, followed by end of line and spaces/comments
 _ =
