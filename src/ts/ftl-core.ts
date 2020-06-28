@@ -694,7 +694,7 @@ export class NativeFunctionFn extends Fn {
         has_default = true;
       else if (has_default && params.func(i) instanceof RefFn)
         throw new Error("Non default argument " + params.func(i).name + " follows default argument.");
-      params.setfunc(i, new NamedExprFn(params.func(i).name, new RefFn("_" + i)));
+      params.setfunc(i, new NamedExprFn(params.func(i).name, new RefFn("_" + i, null)));
     }
     return params;
   }
@@ -872,7 +872,7 @@ export class FunctionInterfaceFn extends Fn {
     if (this.isTail) {
       return bindingFunctions.pass_through.bind(new TailFn(input.getIndex(this.seq)));
     } else {
-      return this.fn_ref.bind({ fn: input.getIndex(this.seq), params: this.params });
+      return this.fn_ref.bind({ fn: input instanceof Tuple ? input.getIndex(this.seq) : input, params: this.params });
     }
     //      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params});
   }
@@ -1145,10 +1145,12 @@ export class PipeFn extends ComposedFn {
 export class RefFn extends Fn {
   name: string;
   params: any;
+  module: any
   unresolved: boolean;
-  constructor(name: string) {
+  constructor(name: string, module:any) {
     super();
-    this.name = name;
+    this.name = name
+    this.module = module
     this.unresolved = false;
   }
 
@@ -1200,8 +1202,16 @@ export class RefFn extends Fn {
       return input;
 
     // can not find ref, return itself
-    else
-      return this;
+    var f
+    if (this.module) {
+      f = this.module.getFn(this.name)
+    }
+
+    if (f) {
+      return f
+    }
+
+    return this;
   }
 }
 
@@ -1549,6 +1559,55 @@ export class ArrayElementSelectorFn extends Fn {
   }
 }
 
+export class ArrayRangeSelectorFn extends Fn {
+  name: string
+  start: number
+  end:number
+  interval:number
+  constructor(name:string, start:number, end:number, interval=1) {
+    super()
+    this.name = name
+    this.start = start
+    this.end = end
+    this.interval = interval
+  }
+
+  apply(input: any) {
+    let list = input && (
+      input instanceof Tuple && (input.get(this.name) || null)
+      || ((this.name == '_' || this.name == '_0') && input)
+      || []
+    )
+
+    let end = this.end == -1 ? list.length : this.end + 1
+    let len = Math.ceil((end - this.start) / this.interval)
+    let ret = new Array(len)
+    for (var i = this.start, j = 0; i < end; i += this.interval, j++) {
+      ret [j] = list[i]
+    }
+    return ret
+  }
+}
+
+export class RaiseFunctionForArrayFn extends Fn {
+  raised_function:any
+  constructor(raised_function:any) {
+    super()
+    this.raised_function = raised_function
+  }
+
+  apply(input:any, context:any) {
+    if (!Array.isArray(input)) {
+      input = [input]
+    }
+    var ret:any[] = []
+    input.forEach((element:any) => {
+      ret.push(this.raised_function.apply(element, context))
+    })
+    return ret
+  }
+}
+
 export class ExecutableFn extends WrapperFn {
 
   constructor(wrapped: Fn) {
@@ -1582,35 +1641,3 @@ export function addModule(module: any) {
     throw new Error("Module with name '" + name + "' already exists!");
   modules.set(name, module);
 }
-
-export default {
-  setRunPath,
-  Tuple,
-  Fn,
-  WrapperFn,
-  ConstFn,
-  ImmutableValFn,
-  VarFn,
-  ParamTupleFn,
-  SeqSelectorOrDefault,
-  NativeFunctionFn,
-  FunctionFn,
-  FunctionInterfaceFn,
-  FunctionalFn,
-  TupleFn,
-  NamedExprFn,
-  PipeFn,
-  RefFn,
-  TupleSelectorFn,
-  CallExprFn,
-  ExprRefFn,
-  ExprFn,
-  TailFn,
-  ArrayElementSelectorFn,
-  getModule,
-  addModule,
-  validateBuild,
-  FnValidator,
-  Module,
-  ModuleNotLoadedError
-};

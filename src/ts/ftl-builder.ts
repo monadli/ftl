@@ -131,7 +131,21 @@ function buildMapExpression(details:any, module:any, input?:any) {
 }
 
 function buildMapOperand(details:any, module:any, prev:any=null) {
-  let built = buildElement(details.expr, module, prev)
+  var built
+  var raise = false
+  try {
+    built = buildElement(details.expr, module, prev)
+  } catch (e)
+  {
+    // raise operator
+    if (e instanceof PrefixOperatorNotFoundError && e.op == '. ') {
+      raise = true
+      built = e.operand
+    } else {
+      throw e
+    }
+  }
+ 
   if (built instanceof ftl.RefFn) {
     let name = built.name
     if (name.startsWith('_') || prev instanceof ftl.TupleFn && prev.hasName(name))
@@ -140,7 +154,10 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
 
     // TODO: buildFunctionCall
     if (f)
-      return f
+      built = f
+  }
+  if (raise) {
+    return new ftl.RaiseFunctionForArrayFn(f)
   }
   return built
 }
@@ -178,7 +195,10 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
     } catch (e) {
 
       if (!(e instanceof PrefixOperatorNotFoundError)) {
-        throw e
+        if (e instanceof PostfixOperatorBuildError) {
+          operands.push(e.operand)
+          throw new N_aryOperatorBuildError(e.message, `${details.ops.join(' ')}${e.op}`, operands)
+        }
       }
 
       // try postfix operator
@@ -214,17 +234,22 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
       // no corresponding function found for single op
       if (!f) {
         if (index == 1)
-          throw new FtlBuildError("No function with name '" + op + "' found!");
+          throw new N_aryOperatorBuildError(`N-ary operator ${ops} not found!`, op, operands)
 
         index--;
-        var reduced = parse_operators(module, inputFn, ops, operands, index, false, extra);
 
-        if (extra.current_index == extra.stop_index)
-          return reduced;
+        try {
+          var reduced = parse_operators(module, inputFn, ops, operands, index, false, extra);
 
-        ops = ops.slice(index, ops.length)
-        operands = [reduced].concat(operands.slice(index + 1, operands.length))
-        return parse_operators(module, inputFn, ops, operands, ops.length, true, extra)
+          if (extra.current_index == extra.stop_index)
+            return reduced;
+
+          ops = ops.slice(index, ops.length)
+          operands = [reduced].concat(operands.slice(index + 1, operands.length))
+          return parse_operators(module, inputFn, ops, operands, ops.length, true, extra)
+        } catch(e) {
+          throw new N_aryOperatorBuildError(`N-ary operator ${ops} not found!`, op, operands)
+        }
       }
 
       for (var i = 0; i < f.params.fns.length; i++) {
@@ -335,13 +360,12 @@ function buildFunctionDeclaration(details:any, module:any) {
 }
 
 function buildPrefixOperatorExpression(details:any, module:any) {
-    let op = details.operator
-    let f = module.getAvailableFn(`${op} `)
-    if (!f) {
-      throw new PrefixOperatorNotFoundError(`${op} `);
-    }
-
+    let op = `${details.operator} `
+    let f = module.getAvailableFn(op)
     let expr = buildElement(details.expr, module)
+    if (!f) {
+      throw new PrefixOperatorNotFoundError(`Prefix operator "${op}" not found!`, op, expr)
+    }
 
     if (expr instanceof ftl.TupleFn && expr.fns.length == 1) {
       return new ftl.PipeFn(expr.fns[0], f)
@@ -353,10 +377,10 @@ function buildPrefixOperatorExpression(details:any, module:any) {
 function buildPostfixOperatorExpression(details:any, module:any) {
   let operator = ` ${details.operator}`
   let f = module.getAvailableFn(operator)
-  if (!f) {
-    throw new Error(`Postfix operator ${details.operator} not found!`)
-  }
   let expr = buildElement(details.expr, module)
+  if (!f) {
+    throw new PostfixOperatorBuildError(`Postfix operator "${operator}" not found!`, operator, expr)
+  }
   return new ftl.PipeFn(expr, f)
 }
 
@@ -373,7 +397,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
     let name = buildElement(details.name, module).name
     let f = module.getAvailableFn(name)
     if (!f) {
-      f = prev && prev.hasName(name) && new ftl.RefFn(name)
+      f = prev && prev.hasName(name) && new ftl.RefFn(name, module)
       if (!f)
         throw new Error(`${name} not found!`)
     }
@@ -416,8 +440,19 @@ function buildCallExpression(details:any, module:any, prev:any) {
 
   function buildArrayElementSelector(details:any, module:any) {
     let name = buildElement(details.id, module).name
-    let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
-    return new ftl.ArrayElementSelectorFn(name, index)
+    try {
+      let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
+      return new ftl.ArrayElementSelectorFn(name, index)
+    }
+    catch(e) {
+      if (e instanceof N_aryOperatorBuildError) {
+        if (e.op == ': :') {
+          let end = e.operands.length == 2 ? -1 : e.operands[2].apply()
+          return new ftl.ArrayRangeSelectorFn(name, e.operands[0].apply(), end, e.operands[1].apply())
+        }
+      }
+      throw e
+    }
   }
   
   function buildTuple(details:any, module:any, prev?:any) {
@@ -433,7 +468,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
   }
 
   function buildIdentifier(details:any, module:any) {
-    return new ftl.RefFn(details.name)
+    return new ftl.RefFn(details.name, module)
   }
 
 // builds function parameter
@@ -474,21 +509,42 @@ function join(value:any) {
   }
 
   class FtlBuildError extends Error {
-    constructor(... params:any[]) {
-      super(... params);
-      let stack = this.stack as string
-      var start = stack.indexOf(' at new ') + 8;
-      this.message = stack.substring(start, stack.indexOf(' ', start)) + ': ' + this.message;
+    constructor(message:string) {
+      super(message);
     }
   }
 
   class PrefixOperatorNotFoundError extends FtlBuildError {
     op:string
-    constructor(op:string) {
-      super();
+    operand:any
+    constructor(message:string, op:string, operand:any) {
+      super(message);
       this.op = op
+      this.operand = operand
     }
   }
+
+  class N_aryOperatorBuildError extends FtlBuildError {
+    op:string
+    operands:any[]
+    constructor(message:string, op:string, operands:any[]) {
+      super(message)
+      this.op = op
+      this.operands = operands
+    }
+  }
+
+  class PostfixOperatorBuildError extends FtlBuildError {
+    op:string
+    operand:any
+    constructor(message:string, op:string, operand:any) {
+      super(message)
+      this.op = op
+      this.operand = operand
+    }
+  }
+
+
 
   /**
    * Type for build only.
@@ -553,13 +609,13 @@ function join(value:any) {
 
     build(module:any, inputFn:any) {
       if (this.name.startsWith('_') || inputFn instanceof ftl.TupleFn && inputFn.hasName(this.name))
-        return new ftl.RefFn(this.name);
+        return new ftl.RefFn(this.name, null);
 
       var f = module.getAvailableFn(this.name);
       if (f)
         return buildFunctionCall(f, module, inputFn);
 
-      let ret = new ftl.RefFn(this.name);
+      let ret = new ftl.RefFn(this.name, null);
       ret.unresolved = true;
       return ret;
     }
@@ -867,7 +923,7 @@ function join(value:any) {
         return new FunctionInterfaceBuilder(this.name, this.params[0], this.seq).build(module, inputFn);
 
       // Not resolved. It may be a recursive function call
-      let unresolved = new ftl.RefFn(this.name)
+      let unresolved = new ftl.RefFn(this.name, null)
       unresolved.unresolved = true;
       return new ftl.CallExprFn(this.name, unresolved, [this.combineMultiTuples(module, inputFn, this.params.map((p:any) => p.build(module, inputFn)))]);
     }
