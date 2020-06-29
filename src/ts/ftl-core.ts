@@ -1608,6 +1608,25 @@ export class RaiseFunctionForArrayFn extends Fn {
   }
 }
 
+export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
+  constructor(raised_function:any) {
+    super(raised_function)
+  }
+
+  apply(input:Tuple, context:any) {
+    var first = input.getIndex(0)
+    var second = input.getIndex(1)
+    if (!Array.isArray(first)) {
+      first = [first]
+    }
+    var ret:any[] = []
+    first.forEach((element:any) => {
+      ret.push(this.raised_function.apply(Tuple.fromList(element, second), context))
+    })
+    return ret
+  }
+}
+
 export class ExecutableFn extends WrapperFn {
 
   constructor(wrapped: Fn) {

@@ -230,12 +230,20 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
       // operand at index 1 is for operator at 
       var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
       var f = module.getAvailableFn(op);
-
+      var raise = false
       // no corresponding function found for single op
-      if (!f) {
-        if (index == 1)
-          throw new N_aryOperatorBuildError(`N-ary operator ${ops} not found!`, op, operands)
+ 
+      if (!f && index == 1 && op.length > 1 && op.startsWith('.')) {
+        op = op.substring(1)
+        raise = true
+        f = module.getAvailableFn(op)
+      }
 
+      if (!f) {
+        if (index == 1) {
+          throw new N_aryOperatorBuildError(`N-ary operator ${ops} not found!`, op, operands)
+        }
+        
         index--;
 
         try {
@@ -265,9 +273,9 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
       }
 
       extra.current_index += index;
-      var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fns.length));
+      var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fns.length))
 
-      return new ftl.PipeFn(operands_tuple, f);
+      return new ftl.PipeFn(operands_tuple, raise ? new ftl.RaiseBinaryOperatorForArrayFn(f) : f)
     }
   )(module, input, details.ops, operands, details.ops.length, true, {current_index:0, stop_index:details.ops.length})
 }
