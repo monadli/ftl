@@ -1,4 +1,5 @@
-import ftl/math[sin, cos]
+import ftl/lang[*, ==]
+import ftl/math.cos
 
 // raise '*' operator
 [1, 2] .* 2 == [2, 4]

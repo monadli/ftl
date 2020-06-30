@@ -137,11 +137,28 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
     built = buildElement(details.expr, module, prev)
   } catch (e)
   {
+    // array initializer
+    if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
+      let start = e.operands[0].apply()
+      let interval = e.op == ':' ? 1 : e.operands[1].apply()
+      let end = e.op == ':' ? e.operands[1].apply() : e.operands[2].apply()
+      let len = Math.ceil((end + 1 - start) / interval)
+      var array = new Array(len)
+      var val = start
+      for (var i = 0; i < len; i++) {
+        array[i] = val
+        val += interval
+      }
+      return new ftl.ConstFn(array)
+    }
+
     // raise operator
-    if (e instanceof PrefixOperatorNotFoundError && e.op == '. ') {
+    else if (e instanceof PrefixOperatorNotFoundError && e.op == '. ') {
       raise = true
       built = e.operand
-    } else {
+    }
+    
+    else {
       throw e
     }
   }
@@ -415,33 +432,14 @@ function buildCallExpression(details:any, module:any, prev:any) {
 
   
   function buildArrayLiteral(details:any, module:any) {
-    try {
-      let elms = buildElement(details.list, module)
-      for (let i = 0; i < elms.length; i++) {
-        if (elms[i] instanceof ftl.ConstFn) {
-          elms[i] = elms[i].apply()
-        }
+    let elms = buildElement(details.list, module)
+    for (let i = 0; i < elms.length; i++) {
+      if (elms[i] instanceof ftl.ConstFn) {
+        elms[i] = elms[i].apply()
       }
-
-      return new ftl.ConstFn(elms)
-    } catch (e) {
-      if (e instanceof N_aryOperatorBuildError) {
-        if (e.op == ':' || e.op == ': :') {
-          let start = e.operands[0].apply()
-          let interval = e.op == ':' ? 1 : e.operands[1].apply()
-          let end = e.op == ':' ? e.operands[1].apply() : e.operands[2].apply()
-          let len = Math.ceil((end + 1 - start) / interval)
-          var array = new Array(len)
-          var val = start
-          for (var i = 0; i < len; i++) {
-            array[i] = val
-            val += interval
-          }
-          return new ftl.ConstFn(array)
-        }
-      }
-      throw e
     }
+
+    return new ftl.ConstFn(elms)
   }
   
   function buildListLiteral(details:any, module:any) {
