@@ -969,7 +969,7 @@ export class TupleFn extends ComposedFn {
         tuple.addValue(res);
     }
 
-    return tuple;
+    return tuple
   }
 }
 
@@ -1516,6 +1516,38 @@ export class TailFn extends WrapperFn {
     return FnUtil.unwrapMonad(res);
   }
 }
+
+/**
+ * Array initializer with values of start, end, and interval.
+ */
+export class ArrayInitializerFn extends Fn {
+  start_val:Fn
+  end_val:Fn
+  interval:Fn
+
+  constructor(start_val:Fn, end_val:Fn, interval:Fn) {
+    super()
+    this.start_val = start_val
+    this.end_val = end_val
+    this.interval = interval
+  }
+
+  apply(input:any, context:any) {
+    let start = this.start_val.apply(input, context)
+    let interval = this.interval.apply(input, context)
+    let end = this.end_val.apply(input, context)
+    end = FnUtil.unwrapMonad(end)
+    let len = Math.ceil((end + 1 - start) / interval)
+    var array = new Array(len)
+    var val = start
+    for (var i = 0; i < len; i++) {
+      array[i] = val
+      val += interval
+    }
+    return array
+  }
+}
+
 
 /**
  * Array element selector.

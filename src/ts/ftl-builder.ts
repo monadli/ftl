@@ -139,17 +139,10 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
   {
     // array initializer
     if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
-      let start = e.operands[0].apply()
-      let interval = e.op == ':' ? 1 : e.operands[1].apply()
-      let end = e.op == ':' ? e.operands[1].apply() : e.operands[2].apply()
-      let len = Math.ceil((end + 1 - start) / interval)
-      var array = new Array(len)
-      var val = start
-      for (var i = 0; i < len; i++) {
-        array[i] = val
-        val += interval
-      }
-      return new ftl.ConstFn(array)
+      let start = e.operands[0]
+      let interval = e.op == ':' ? new ftl.ConstFn(1) : e.operands[1]
+      let end = e.op == ':' ? e.operands[1] : e.operands[2]
+      return new ftl.ArrayInitializerFn(start, end, interval)
     }
 
     // raise operator
