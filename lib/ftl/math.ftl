@@ -47,3 +47,5 @@ fn sqrt(x) { return Math.sqrt(x) }
 fn tan(x) { return Math.tan(x) }
 fn tanh(x) { return Math.tanh(x) }
 fn trunc(x) { return Math.trunc(x) }
+
+fn PI() { return Math.PI }

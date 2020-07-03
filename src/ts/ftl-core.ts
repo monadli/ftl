@@ -1621,6 +1621,22 @@ export class ArrayRangeSelectorFn extends Fn {
   }
 }
 
+// property accessor operator
+export class PropertyAccessorFn extends Fn {
+  elm_name:RefFn
+  prop_name:string
+  constructor(elm_name:RefFn, prop_name:string) {
+    super()
+    this.elm_name = elm_name
+    this.prop_name = prop_name
+  }
+
+  apply(input:any, context:any) {
+    var elm = this.elm_name.apply(input, context)
+    return (elm instanceof Tuple) ? elm.get(this.prop_name) : elm.sub
+  }
+}
+
 export class RaiseFunctionForArrayFn extends Fn {
   raised_function:any
   constructor(raised_function:any) {

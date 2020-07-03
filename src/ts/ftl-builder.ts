@@ -145,6 +145,10 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
       return new ftl.ArrayInitializerFn(start, end, interval)
     }
 
+    if (e instanceof N_aryOperatorBuildError && (e.op == '.')) {
+      return new ftl.PropertyAccessorFn(e.operands[0], e.operands[1].name)
+    }
+
     // raise operator
     else if (e instanceof PrefixOperatorNotFoundError && e.op == '. ') {
       raise = true
