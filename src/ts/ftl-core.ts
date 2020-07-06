@@ -1517,10 +1517,27 @@ export class TailFn extends WrapperFn {
   }
 }
 
+export class ArrayInitializerFn extends Fn {
+  values:any[]
+
+  constructor(... values:any[]) {
+    super()
+    this.values = values
+  }
+
+  apply(input:any, context:any) {
+    var ret:any[] = []
+    this.values.forEach((v:any) => {
+      ret.push(v.apply(input, context))
+    })
+    return ret
+  }
+}
+
 /**
  * Array initializer with values of start, end, and interval.
  */
-export class ArrayInitializerFn extends Fn {
+export class ArrayInitializerWithRangeFn extends Fn {
   start_val:Fn
   end_val:Fn
   interval:Fn
@@ -1624,16 +1641,26 @@ export class ArrayRangeSelectorFn extends Fn {
 // property accessor operator
 export class PropertyAccessorFn extends Fn {
   elm_name:RefFn
-  prop_name:string
-  constructor(elm_name:RefFn, prop_name:string) {
+  prop_names:string[]
+  constructor(elm_name:RefFn, ... prop_names:string[]) {
     super()
     this.elm_name = elm_name
-    this.prop_name = prop_name
+    this.prop_names = prop_names
   }
 
   apply(input:any, context:any) {
+    var resolve = (elm:any, prop:string) => {
+      return elm ? elm instanceof Tuple ? elm.get(prop) : elm.prop : null
+    }
+
     var elm = this.elm_name.apply(input, context)
-    return (elm instanceof Tuple) ? elm.get(this.prop_name) : elm.sub
+    for (var i = 0; i < this.prop_names.length; i++) {
+      elm = resolve(elm, this.prop_names[i])
+      if (!elm) {
+        return null
+      }
+    }
+    return elm
   }
 }
 
@@ -1645,12 +1672,20 @@ export class RaiseFunctionForArrayFn extends Fn {
   }
 
   apply(input:any, context:any) {
+    var raised_f = this.raised_function
+    if (raised_f instanceof RefFn) {
+      raised_f = this.raised_function.apply(input, context)
+      if (!raised_f || raised_f == this.raised_function) {
+        throw new Error(`Function for '${this.raised_function.name}' not found`)
+      }
+    }
+
     if (!Array.isArray(input)) {
       input = [input]
     }
     var ret:any[] = []
     input.forEach((element:any) => {
-      ret.push(this.raised_function.apply(element, context))
+      ret.push(raised_f.apply(element, context))
     })
     return ret
   }
@@ -1664,13 +1699,33 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
   apply(input:Tuple, context:any) {
     var first = input.getIndex(0)
     var second = input.getIndex(1)
-    if (!Array.isArray(first)) {
-      first = [first]
+    let is_first_array = Array.isArray(first)
+    let is_second_array = Array.isArray(second)
+    
+    if (!is_first_array && !is_second_array) {
+      return this.raised_function.apply(Tuple.fromList(first, second))
     }
+
+    if (!is_first_array) {
+      throw new Error('first is not array!')
+    }
+
+    if (!is_second_array) {
+      var ret:any[] = []
+      first.forEach((element:any) => {
+        ret.push(this.raised_function.apply(Tuple.fromList(element, second), context))
+      })
+      return ret
+    }
+
+    if (first.length != second.length) {
+      throw new Error('first and second array sizes are different!')
+    }
+
     var ret:any[] = []
-    first.forEach((element:any) => {
-      ret.push(this.raised_function.apply(Tuple.fromList(element, second), context))
-    })
+    for (var i = 0; i < first.length; i++) {
+      ret.push(this.raised_function.apply(Tuple.fromList(first[i], second[i]), context))
+    }
     return ret
   }
 }

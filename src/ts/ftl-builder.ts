@@ -142,11 +142,11 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
       let start = e.operands[0]
       let interval = e.op == ':' ? new ftl.ConstFn(1) : e.operands[1]
       let end = e.op == ':' ? e.operands[1] : e.operands[2]
-      return new ftl.ArrayInitializerFn(start, end, interval)
+      return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
     }
 
-    if (e instanceof N_aryOperatorBuildError && (e.op == '.')) {
-      return new ftl.PropertyAccessorFn(e.operands[0], e.operands[1].name)
+    if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
+      return new ftl.PropertyAccessorFn(e.operands[0], ... e.operands.slice(1).map(o => o.name))
     }
 
     // raise operator
@@ -170,10 +170,8 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
     if (f)
       built = f
   }
-  if (raise) {
-    return new ftl.RaiseFunctionForArrayFn(f)
-  }
-  return built
+
+  return raise ? new ftl.RaiseFunctionForArrayFn(built) : built
 }
 
 function buildOperatorExpression(details:any, module:any, input?:any) {
@@ -430,13 +428,30 @@ function buildCallExpression(details:any, module:any, prev:any) {
   
   function buildArrayLiteral(details:any, module:any) {
     let elms = buildElement(details.list, module)
-    for (let i = 0; i < elms.length; i++) {
-      if (elms[i] instanceof ftl.ConstFn) {
-        elms[i] = elms[i].apply()
+    let consts = elms.filter((e:any) => {
+      e instanceof ftl.ConstFn
+    })
+    if (consts.length == elms.length) {
+      var res:any[] = []
+      for (let i = 0; i < elms.length; i++) {
+        if (elms[i] instanceof ftl.ConstFn) {
+          var val = elms[i].apply()
+          if (Array.isArray(val)) {
+            res.splice(res.length, 0, ... val)
+          } else {
+            res.push(val)
+          }
+        } else {
+  
+        }
       }
+  
+      return new ftl.ConstFn(res)  
     }
 
-    return new ftl.ConstFn(elms)
+    else {
+      return new ftl.ArrayInitializerFn(... elms)
+    }
   }
   
   function buildListLiteral(details:any, module:any) {
@@ -465,6 +480,14 @@ function buildCallExpression(details:any, module:any, prev:any) {
     let name = buildElement(details.id, module).name
     try {
       let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
+      if (index instanceof ftl.ArrayInitializerFn) {
+
+        // TODO allow ArrayElementSelectorFn takes multiple values
+        if (index.values.length != 1) {
+          throw new Error('ArrayElementSelectorFn not supporting multiple values yet!')
+        }
+        return new ftl.ArrayElementSelectorFn(name, index.values[0])
+      }
       return new ftl.ArrayElementSelectorFn(name, index)
     }
     catch(e) {
