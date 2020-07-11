@@ -1512,8 +1512,12 @@ export class TailFn extends WrapperFn {
   }
 
   apply(input: any, context?: any) {
-    var res = this.wrapped.apply(this.closure, context);
-    return FnUtil.unwrapMonad(res);
+    var res = this.wrapped.apply(this.closure, context)
+    res = FnUtil.unwrapMonad(res)
+    if (res instanceof Tuple && res.hasTail()) {
+      return new TailFn(res.toTupleFn())
+    }
+    return res
   }
 }
 
