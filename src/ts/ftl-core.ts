@@ -92,7 +92,7 @@ class FnUtil {
 
   // unwraps the single value of tuple that contains a single value (monad) 
   static unwrapMonad(tuple: any): any {
-    return tuple instanceof Tuple && tuple.size == 1 ? tuple.getIndex(0) : tuple;
+    return tuple instanceof Tuple && tuple.size == 1 && tuple._names.size == 1 ? tuple.getIndex(0) : tuple;
   }
 
   static getFn(fns: any, predicate: any) {
@@ -458,7 +458,7 @@ export class Tuple {
   }
 
   hasTail(): boolean {
-    return this._values.find(elm => elm instanceof TailFn || (elm instanceof Tuple && elm.hasTail())) !== undefined;
+    return this._values.find(elm => TailFn.isTail(elm) || (elm instanceof Tuple && elm.hasTail())) !== undefined;
   }
 
   // checks if any element is a reference
@@ -503,7 +503,25 @@ export class Tuple {
   // converts into a tuple fn
   // TODO presesrve names
   toTupleFn():Fn {
-    return new TupleFn(... this._values.map(elm => elm instanceof Tuple ? elm.toTupleFn() : elm instanceof Fn ? elm : new ConstFn(elm)))
+    var converted:any[] = []
+    let value_map = new Map<number, string>()
+    this._names.forEach((value, key, map) => {
+      value_map.set(value, key)
+    })
+    value_map.forEach((value, key) => {
+      var val = this._values[key]
+      if (val instanceof Tuple) {
+        val = val.toTupleFn()
+      } else if (!(val instanceof Fn)) {
+        val = new ConstFn(val)
+      }
+      if (value.startsWith('_') && !isNaN(parseInt(value.substring(1))))
+        converted.push(val)
+      else
+        converted.push(new NamedExprFn(value, val))
+    })
+
+    return new TupleFn(... converted)
   }
 
   toString() {
@@ -961,8 +979,8 @@ export class TupleFn extends ComposedFn {
       if (fn instanceof NamedExprFn) {
 
         // if no name is resolved, return itself
-        if (res === fn.wrapped)
-          return this;
+        ////if (res === fn.wrapped)
+        ////  return this;
         tuple.addKeyValue(fn.name, res);
       }
       else
@@ -1443,7 +1461,7 @@ export class ExprRefFn extends WrapperFn {
  * pick the next tail to execute. This process is repeated until all tails are resolved.
  */
 export class TailFn extends WrapperFn {
-  closure: any;
+  closure: any
   _tails = new Array<TupleFn>()
 
   constructor(fn: any, closure?: any) {
@@ -1452,7 +1470,7 @@ export class TailFn extends WrapperFn {
 
     if (fn instanceof PipeFn) {
       var first = fn.fns[0]
-      if (first instanceof TailFn) {
+      if (TailFn.isTail(first)) {
         fn.fns[0] = first.wrapped
       } else if (first instanceof TupleFn) {
         this.addTail(first)
@@ -1461,7 +1479,7 @@ export class TailFn extends WrapperFn {
   }
 
   addTail(tail:TupleFn) {
-    if (tail.fns.find(elm => elm instanceof TailFn) !== undefined) {
+    if (tail.fns.find(elm => TailFn.isTail(elm)) !== undefined) {
       this._tails.unshift(tail)
     }
     else {
@@ -1486,6 +1504,10 @@ export class TailFn extends WrapperFn {
     return this._tails.pop()
   }
 
+  static isTail(elm:any) {
+    return elm instanceof TailFn || (elm instanceof NamedExprFn && elm.wrapped instanceof TailFn)
+  }
+
   ResolveNextTail(context: any) {
     var tail = this.nextTail()
     if (!tail) {
@@ -1495,15 +1517,18 @@ export class TailFn extends WrapperFn {
     var tuple = tail.fns
     for (var i = 0; i < tuple.length; i++) {
       var elm = tuple[i]
-      if (elm instanceof TailFn) {
+      if (TailFn.isTail(elm)) {
         var next = elm.apply(null, context)
-        if (next instanceof TailFn) {
+        if (TailFn.isTail(next)) {
           this.addAllTails(next)
           tuple[i] = next.wrapped
         }
 
         // end of recursive
-        else {
+        else if (elm instanceof NamedExprFn) {
+          elm.wrapped = next instanceof Fn ? next : new ConstFn(next)
+          tuple[i] = elm
+        } else {
           tuple[i] = next
         }
       }
@@ -1532,7 +1557,12 @@ export class ArrayInitializerFn extends Fn {
   apply(input:any, context:any) {
     var ret:any[] = []
     this.values.forEach((v:any) => {
-      ret.push(v.apply(input, context))
+      let val = v.apply(input, context)
+      if (Array.isArray(val)) {
+        ret.splice(ret.length, 0, ... val)
+      } else {
+        ret.push(v.apply(input, context))
+      }
     })
     return ret
   }
@@ -1744,7 +1774,7 @@ export class ExecutableFn extends WrapperFn {
     let ret = this.wrapped.apply();
 
     // TODO tail
-    while (ret instanceof TailFn) {
+    while (TailFn.isTail(ret)) {
       ret = ret.apply(null)
 
     }
