@@ -458,7 +458,7 @@ export class Tuple {
   }
 
   hasTail(): boolean {
-    return this._values.find(elm => TailFn.isTail(elm) || (elm instanceof Tuple && elm.hasTail())) !== undefined;
+    return this._values.find(elm => TailFn.isTail(elm)) !== undefined
   }
 
   // checks if any element is a reference
@@ -517,6 +517,11 @@ export class Tuple {
       }
       if (value.startsWith('_') && !isNaN(parseInt(value.substring(1))))
         converted.push(val)
+      else if (val instanceof TailFn) {
+        // TODO test in what situation there is TailFn
+        val.name = value
+        converted.push(val)
+      }
       else
         converted.push(new NamedExprFn(value, val))
     })
@@ -976,9 +981,10 @@ export class TupleFn extends ComposedFn {
           res = fn;
       }
 
-      if (fn instanceof NamedExprFn) {
+      if (fn instanceof NamedExprFn || fn instanceof TailFn) {
 
         // if no name is resolved, return itself
+        // TODO test is this needed?
         ////if (res === fn.wrapped)
         ////  return this;
         tuple.addKeyValue(fn.name, res);
@@ -1463,6 +1469,7 @@ export class ExprRefFn extends WrapperFn {
 export class TailFn extends WrapperFn {
   closure: any
   _tails = new Array<TupleFn>()
+  _name:string|null = null
 
   constructor(fn: any, closure?: any) {
     super(fn)
@@ -1476,6 +1483,14 @@ export class TailFn extends WrapperFn {
         this.addTail(first)
       }
     }
+  }
+
+  get name():string|null {
+    return this._name
+  }
+
+  set name(name:string|null) {
+    this._name = name
   }
 
   addTail(tail:TupleFn) {
@@ -1504,8 +1519,12 @@ export class TailFn extends WrapperFn {
     return this._tails.pop()
   }
 
+  /**
+   * Tells if elm is a TailFn
+   * @param elm element to be tested
+   */
   static isTail(elm:any) {
-    return elm instanceof TailFn || (elm instanceof NamedExprFn && elm.wrapped instanceof TailFn)
+    return elm instanceof TailFn
   }
 
   ResolveNextTail(context: any) {
@@ -1521,15 +1540,12 @@ export class TailFn extends WrapperFn {
         var next = elm.apply(null, context)
         if (TailFn.isTail(next)) {
           this.addAllTails(next)
-          tuple[i] = next.wrapped
+          tuple[i] = elm.name ? new NamedExprFn(elm.name, next.wrapped) : next.wrapped
         }
 
         // end of recursive
-        else if (elm instanceof NamedExprFn) {
-          elm.wrapped = next instanceof Fn ? next : new ConstFn(next)
-          tuple[i] = elm
-        } else {
-          tuple[i] = next
+        else {
+          tuple[i] = elm.name ? new NamedExprFn(elm.name, next instanceof Fn ? next : new ConstFn(next)) : next
         }
       }
     }
