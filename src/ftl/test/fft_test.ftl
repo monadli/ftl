@@ -19,8 +19,8 @@ fn fft(real, imag, N) -> N == 1 ?? (real, imag) ::
     )
     ->
     (
-      x_e_r: x_e_r,
-      x_e_i: x_e_i,
+      x_e_r,
+      x_e_i,
       e_r: x_o_r .* c_r .- (x_o_i .* c_i),
       e_i: x_o_r .* c_i .+ (x_o_i .* c_r)
     )
