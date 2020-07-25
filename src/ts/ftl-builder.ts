@@ -415,13 +415,21 @@ function buildPostfixOperatorDeclaration(details:any, module:any, prev:any) {
 
 function buildCallExpression(details:any, module:any, prev:any) {
     let name = buildElement(details.name, module).name
-    let f = module.getAvailableFn(name)
+    let f:ftl.FunctionBaseFn|ftl.RefFn = module.getAvailableFn(name)
     if (!f) {
       f = prev && prev.hasName(name) && new ftl.RefFn(name, module)
       if (!f)
         throw new Error(`${name} not found!`)
     }
+
     let params = details.params.map((p:any) => buildElement(p, module, prev))
+    if (f instanceof ftl.FunctionBaseFn) {
+      let minParamCount = f.params.fns.filter((p:ftl.NamedExprFn) => p.wrapped instanceof ftl.TupleSelectorFn).length
+      if (params[0].size < minParamCount) {
+        throw new FtlBuildError(`At least ${minParamCount} arguments are needed to call ${f.name}`)
+      }
+    }
+
     return new ftl.CallExprFn(name, f, params)
   }
 

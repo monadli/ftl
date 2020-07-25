@@ -669,14 +669,27 @@ class VarFn extends ImmutableValFn {
   }
 }
 
-/**
- * Native javascript function.
- */
-export class NativeFunctionFn extends Fn {
+export class FunctionBaseFn extends Fn {
   name: string;
   params: any;
   body: Fn;
 
+  constructor(name: string, params: any, body: any) {
+    super()
+    this.name = name
+    this.params = params
+    this.body = body
+  }
+
+apply(input: any, context: any) {
+    return this.body.apply(input, context)
+  }
+}
+
+/**
+ * Native javascript function.
+ */
+export class NativeFunctionFn extends FunctionBaseFn {
   static NativeScriptFn = class extends Fn {
     jsfunc: any;
     constructor(jsfunc: Function) {
@@ -694,14 +707,11 @@ export class NativeFunctionFn extends Fn {
   // params:TupleFn parameter list
   // script: javascript function with parameter declaration and body.
   constructor(name: string, params: any, jsfunc: Function) {
+
     FnValidator.assertElmType(params, TupleFn);
     FnValidator.assertElmsTypes(params.fns, RefFn, NamedExprFn, FunctionInterfaceFn);
 
-    super();
-    this.name = name;
-
-    this.params = params;
-    this.body = new NativeFunctionFn.NativeScriptFn(jsfunc);
+    super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc))
   }
 
   // Builds parameter function
@@ -759,7 +769,7 @@ export class NativeFunctionFn extends Fn {
 /**
  * Function function.
  */
-export class FunctionFn extends Fn {
+export class FunctionFn extends FunctionBaseFn {
   static FunctionBodyFn = class extends WrapperFn {
     constructor(expr: any) {
       super(expr);
@@ -782,21 +792,8 @@ export class FunctionFn extends Fn {
     }
   }
 
-  name: string;
-  params: AnalyserNode;
-  body: Fn;
   constructor(name: string, params: any, expr: any) {
-    super();
-    this.name = name;
-    this.params = params
-    this.body = new FunctionFn.FunctionBodyFn(expr);
-    // new - direct computation
-    // this.body = expr
-  }
-
-  apply(input: any, context: any) {
-    let res = this.body.apply(input, context)
-    return res
+    super(name, params, new FunctionFn.FunctionBodyFn(expr))
   }
 }
 
