@@ -1458,12 +1458,15 @@ export class ExprRefFn extends WrapperFn {
 /**
  * This class holds information about tail and provides executeRecursive() to resolve tail.
  * 
+ * It is stateful. It will never be used in statement/function construction but only used
+ * as transient during execution.
+ * 
  * When being executed, a tail is picked and executed. If it results in another or more tails,
  * these tails will not be recursively executed right away. Instead they are added into the tail list
  * and the whole tail will be return back, from where executeRecursive() is executed again to
  * pick the next tail to execute. This process is repeated until all tails are resolved.
  */
-export class TailFn extends WrapperFn {
+class TailFn extends WrapperFn {
   closure: any
   _tails = new Array<TupleFn>()
   _name:string|null = null

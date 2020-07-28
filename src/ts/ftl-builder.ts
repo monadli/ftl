@@ -425,8 +425,8 @@ function buildCallExpression(details:any, module:any, prev:any) {
     let params = details.params.map((p:any) => buildElement(p, module, prev))
     if (f instanceof ftl.FunctionBaseFn) {
       let minParamCount = f.params.fns.filter((p:ftl.NamedExprFn) => p.wrapped instanceof ftl.TupleSelectorFn).length
-      if (params[0].size < minParamCount) {
-        throw new FtlBuildError(`At least ${minParamCount} arguments are needed to call ${f.name}`)
+      if (minParamCount > 0 && params[0].size == 0) {
+        throw new FtlBuildError(`At least 1 argument is needed to call ${f.name}`)
       }
     }
 
@@ -552,8 +552,10 @@ function build_function_parameters(params:ftl.TupleFn) {
     if (p instanceof ftl.RefFn) {
       return new ftl.NamedExprFn(p.name, new ftl.TupleSelectorFn(i))
     }
-    else if (p instanceof ftl.NamedExprFn && p.wrapped instanceof ftl.RefFn) {
-      p.wrapped = new ftl.TupleSelectorFn(i)
+    else if (p instanceof ftl.NamedExprFn) {
+      p.wrapped = p.wrapped instanceof ftl.RefFn
+        ? new ftl.TupleSelectorFn(i)
+        : new ftl.SeqSelectorOrDefault(i, p.wrapped)
       return p
     }
     else if (p instanceof ftl.FunctionInterfaceFn)
@@ -561,6 +563,16 @@ function build_function_parameters(params:ftl.TupleFn) {
     else
       return p
   })
+
+  var has_default = false
+  fns.forEach((p:ftl.NamedExprFn, i:number) => {
+    if (p.wrapped instanceof ftl.SeqSelectorOrDefault) {
+      has_default = true
+    } else if (has_default) {
+      throw new FtlBuildError(`Parameter ${p.name} is after a parameter with default value!`)
+    }
+  })
+
   return new ftl.TupleFn(... fns)
 }
 
