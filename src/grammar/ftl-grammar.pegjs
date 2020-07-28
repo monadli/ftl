@@ -22,25 +22,25 @@ function buildElement(name, buildInfo) {
 }
 
 function extractOptional(optional, index) {
-  return optional ? optional[index] : null;
+  return optional ? optional[index] : null
 }
 
 function extractList(list, index) {
-  var result = new Array(list.length);
+  var result = new Array(list.length)
 
   for (var i = 0; i < list.length; i++) {
-    result[i] = list[i][index];
+    result[i] = list[i][index]
   }
 
-  return result;
+  return result
 }
 
 function buildList(first, rest, index) {
-  return [first].concat(extractList(rest, index));
+  return [first].concat(extractList(rest, index))
 }
 
 function optionalList(value) {
-  return value || [];
+  return value || []
 }
 
 function buildFirstRest(first, rest) {
@@ -80,7 +80,7 @@ ImportModulePath =
 Declarations =
   first:Declaration rest:(__ Declaration)*
   {
-    return buildElement('Declarations', {declarations: buildList(first, rest, 1)})
+    return buildElement('Declarations', { declarations: buildList(first, rest, 1) })
   }
 
 Declaration =
@@ -98,7 +98,7 @@ ImportDeclaration =
 ImportSingleItem =
   path:ImportModulePath name:(Identifier / Operator / compOp:StringLiteral { return compOp.details.value } ) as:(_ "as" _ (Identifier / Operator))?
   {
-    return buildElement('ImportSingleItem', { path:path, name: name, item: extractOptional(as, 3) })
+    return buildElement('ImportSingleItem', { path: path, name: name, item: extractOptional(as, 3) })
   }
 
 ImportMultiItems =
@@ -136,8 +136,8 @@ FunctionSignature =
     return buildElement(
       'FunctionSignature',
       {
-        name:id,
-        params:params
+        name: id,
+        params: params
       }
     )
   }
@@ -243,7 +243,7 @@ FunctionBody =
   NativeBlock
   / expressions:(ArrowExpression _)+
   {
-    return extractList(expressions,0)
+    return extractList(expressions, 0)
   }
 
 MapOperand =
@@ -294,7 +294,7 @@ Executable =
   {
     return buildElement('Executable', {
       executable: executable
-    });
+    })
   }
 
 /*
@@ -336,7 +336,7 @@ Operator =
 
     //# Operator
 
-    return text();
+    return text()
   }
 
 OperandValueDeclaration =
@@ -344,7 +344,7 @@ OperandValueDeclaration =
 
     //# OperandValueDeclaration
 
-    return id;
+    return id
   }
 
 OperandFunctionDeclaration =
@@ -425,7 +425,7 @@ PrefixOperatorExpression, such as -(1, 2).
 PrefixOperatorExpression =
   op:Operator _ expr:PrimaryExpression
   {
-    return buildElement('PrefixOperatorExpression', { operator: op, expr: expr})
+    return buildElement('PrefixOperatorExpression', { operator: op, expr: expr })
   }
 
 /*
@@ -460,12 +460,12 @@ if defined infix operators overlaps from begining, the longest will be used firs
 N_aryOperatorExpression =
   first:N_aryOperandExpression rest:(_ Operator _ N_aryOperandExpression)+ last: (_ Operator)?
   {
-    var params = buildList(first, rest, 3);
+    var params = buildList(first, rest, 3)
     if (last) {
       let post_op = extractOptional(last, 1)
       params[params.length - 1] = buildElement('PostfixOperatorExpression', { operator: post_op, expr: params[params.length - 1] })
     }
-    return buildElement('N_aryOperatorExpression', { ops: extractList(rest, 1), operands: params })      
+    return buildElement('N_aryOperatorExpression', { ops: extractList(rest, 1), operands: params })
   }
 
 TupleSelector =
@@ -475,7 +475,7 @@ TupleSelector =
   }
 
 ArrayElementSelector =
-  id: Identifier _ "[" index:("0" / (NonZeroDigit DecimalDigit* {return text()}) / Identifier) _ "]"
+  id: Identifier _ index:ArrayLiteral
   {
     return buildElement('ArrayElementSelector', { id: id, index: index })
   }
@@ -487,18 +487,22 @@ Literal =
   / StringLiteral
 
 ArrayLiteral =
-  "[" elms:(_ LiteralList)? _ "]"
+  "[" elms:(_ ListLiteral)? _ "]"
   {
     return buildElement('ArrayLiteral', { list: extractOptional(elms, 1) || [] })
   }
 
-LiteralList =
-  first:PrimaryExpression rest:(_ "," _ PrimaryExpression)*
+ListLiteral =
+  first:ListLiteralElement rest:(_ "," _ ListLiteralElement)*
   {
-    return buildElement('LiteralList', { list: buildList(first, rest, 3) })
+    return buildElement('ListLiteral', { list: buildList(first, rest, 3) })
   }
 
+ListLiteralElement =
+  OperatorExpression / PrimaryExpression
+
 // expression for getting member of variable
+// not sure if it is useful
 MemberExpression =
   Identifier _ "[" _ ( TupleElementList)+ _ "]"
 
@@ -510,8 +514,8 @@ CallExpression =
     // lambda declaration
     if (id.name == '$') {
       if (extracted_params.length > 1)
-        throw new Error("FTL0001: lambda's arguments followed by calling arguments!");
-      return buildElement('ParamTupleBuilder', { params:extracted_params[0] })
+        throw new Error("FTL0001: lambda's arguments followed by calling arguments!")
+      return buildElement('ParamTupleBuilder', { params: extracted_params[0] })
     }
 
     return buildElement('CallExpression', { name: id, params: extracted_params })
@@ -519,16 +523,14 @@ CallExpression =
 
 // Native javascript block wrapped with "{" and "}"
 NativeBlock =
-  "{" _ ((!("{" / "}") SourceCharacter)* {return text()})
-    NativeBlock* _
-    ((!("{" / "}") SourceCharacter)* {return text()}) "}" {
-
+  "{" (!"}" SourceCharacter)* ("}" / ((EOL !"}" (WhiteSpace+ SourceCharacter*)? )* EOL "}") )
+  {
     //# NativeBlock
-    return {type:'native', script: text()}
+    return { type: 'native', script: text() }
   }
 
 SourceCharacter =
-  .
+  [^\0-\x08\x0A-\x1F]
 
 Identifier =
   !ReservedWord name:IdentifierName
@@ -597,7 +599,7 @@ DecimalDigit =
   [0-9]
 
 OperatorSymbol =
-  [!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
+  [!%&*+\-./:;<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
 
 ReservedWord =
   VarToken
@@ -729,19 +731,16 @@ WhiteSpace =
   / "\u00A0"
 
 Comment "comment" =
-  MultiLineComment
+  BlockComment
   / SingleLineComment
 
 SingleLineComment =
   "//" (!LineTerminator SourceCharacter)*
 
-MultiLineComment =
-  "/*" (!"*/" SourceCharacter)* "*/"
+BlockComment =
+  "/*" (!"*/" SourceCharacter)* ( (EOL (!"*/" SourceCharacter)*)* "*/")
 
-MultiLineCommentNoLineTerminator =
-  "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
-
-// any white space, comment, with end of line
+// any white spaces/comments, followed by end of line and spaces/comments
 _ =
   (WhiteSpace / Comment)* (EOL+ (WhiteSpace / Comment)+)*
 

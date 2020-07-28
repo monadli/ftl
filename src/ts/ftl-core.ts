@@ -2,8 +2,8 @@ import fs from 'fs'
 
 // ftl core functions and classes.
 var version = '0.0.0.2';
-var TupleSelectorPattern = /_\d+$/;
-var VALIDATE_BUILD = false;
+var TupleSelectorPattern = /_\d+$/
+var VALIDATE_BUILD = false
 
 var runPath: string;
 
@@ -92,7 +92,7 @@ class FnUtil {
 
   // unwraps the single value of tuple that contains a single value (monad) 
   static unwrapMonad(tuple: any): any {
-    return tuple instanceof Tuple && tuple.size == 1 ? tuple.getIndex(0) : tuple;
+    return tuple instanceof Tuple && tuple.size == 1 && tuple._names.size == 1 ? tuple.getIndex(0) : tuple;
   }
 
   static getFn(fns: any, predicate: any) {
@@ -458,7 +458,7 @@ export class Tuple {
   }
 
   hasTail(): boolean {
-    return this._values.find(elm => elm instanceof TailFn || (elm instanceof Tuple && elm.hasTail())) !== undefined;
+    return this._values.find(elm => TailFn.isTail(elm)) !== undefined
   }
 
   // checks if any element is a reference
@@ -503,7 +503,30 @@ export class Tuple {
   // converts into a tuple fn
   // TODO presesrve names
   toTupleFn():Fn {
-    return new TupleFn(... this._values.map(elm => elm instanceof Tuple ? elm.toTupleFn() : elm instanceof Fn ? elm : new ConstFn(elm)))
+    var converted:any[] = []
+    let value_map = new Map<number, string>()
+    this._names.forEach((value, key, map) => {
+      value_map.set(value, key)
+    })
+    value_map.forEach((value, key) => {
+      var val = this._values[key]
+      if (val instanceof Tuple) {
+        val = val.toTupleFn()
+      } else if (!(val instanceof Fn)) {
+        val = new ConstFn(val)
+      }
+      if (value.startsWith('_') && !isNaN(parseInt(value.substring(1))))
+        converted.push(val)
+      else if (val instanceof TailFn) {
+        // TODO test in what situation there is TailFn
+        val.name = value
+        converted.push(val)
+      }
+      else
+        converted.push(new NamedExprFn(value, val))
+    })
+
+    return new TupleFn(... converted)
   }
 
   toString() {
@@ -646,14 +669,27 @@ class VarFn extends ImmutableValFn {
   }
 }
 
-/**
- * Native javascript function.
- */
-export class NativeFunctionFn extends Fn {
+export class FunctionBaseFn extends Fn {
   name: string;
   params: any;
   body: Fn;
 
+  constructor(name: string, params: any, body: any) {
+    super()
+    this.name = name
+    this.params = params
+    this.body = body
+  }
+
+apply(input: any, context: any) {
+    return this.body.apply(input, context)
+  }
+}
+
+/**
+ * Native javascript function.
+ */
+export class NativeFunctionFn extends FunctionBaseFn {
   static NativeScriptFn = class extends Fn {
     jsfunc: any;
     constructor(jsfunc: Function) {
@@ -671,14 +707,11 @@ export class NativeFunctionFn extends Fn {
   // params:TupleFn parameter list
   // script: javascript function with parameter declaration and body.
   constructor(name: string, params: any, jsfunc: Function) {
+
     FnValidator.assertElmType(params, TupleFn);
     FnValidator.assertElmsTypes(params.fns, RefFn, NamedExprFn, FunctionInterfaceFn);
 
-    super();
-    this.name = name;
-
-    this.params = params;
-    this.body = new NativeFunctionFn.NativeScriptFn(jsfunc);
+    super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc))
   }
 
   // Builds parameter function
@@ -694,7 +727,7 @@ export class NativeFunctionFn extends Fn {
         has_default = true;
       else if (has_default && params.func(i) instanceof RefFn)
         throw new Error("Non default argument " + params.func(i).name + " follows default argument.");
-      params.setfunc(i, new NamedExprFn(params.func(i).name, new RefFn("_" + i)));
+      params.setfunc(i, new NamedExprFn(params.func(i).name, new RefFn("_" + i, null)));
     }
     return params;
   }
@@ -736,7 +769,7 @@ export class NativeFunctionFn extends Fn {
 /**
  * Function function.
  */
-export class FunctionFn extends Fn {
+export class FunctionFn extends FunctionBaseFn {
   static FunctionBodyFn = class extends WrapperFn {
     constructor(expr: any) {
       super(expr);
@@ -759,21 +792,8 @@ export class FunctionFn extends Fn {
     }
   }
 
-  name: string;
-  params: AnalyserNode;
-  body: Fn;
   constructor(name: string, params: any, expr: any) {
-    super();
-    this.name = name;
-    this.params = params
-    this.body = new FunctionFn.FunctionBodyFn(expr);
-    // new - direct computation
-    // this.body = expr
-  }
-
-  apply(input: any, context: any) {
-    let res = this.body.apply(input, context)
-    return res
+    super(name, params, new FunctionFn.FunctionBodyFn(expr))
   }
 }
 
@@ -872,7 +892,7 @@ export class FunctionInterfaceFn extends Fn {
     if (this.isTail) {
       return bindingFunctions.pass_through.bind(new TailFn(input.getIndex(this.seq)));
     } else {
-      return this.fn_ref.bind({ fn: input.getIndex(this.seq), params: this.params });
+      return this.fn_ref.bind({ fn: input instanceof Tuple ? input.getIndex(this.seq) : input, params: this.params });
     }
     //      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params});
   }
@@ -958,18 +978,19 @@ export class TupleFn extends ComposedFn {
           res = fn;
       }
 
-      if (fn instanceof NamedExprFn) {
+      if (fn instanceof NamedExprFn || fn instanceof TailFn) {
 
         // if no name is resolved, return itself
-        if (res === fn.wrapped)
-          return this;
+        // TODO test is this needed?
+        ////if (res === fn.wrapped)
+        ////  return this;
         tuple.addKeyValue(fn.name, res);
       }
       else
         tuple.addValue(res);
     }
 
-    return tuple;
+    return tuple
   }
 }
 
@@ -1145,10 +1166,12 @@ export class PipeFn extends ComposedFn {
 export class RefFn extends Fn {
   name: string;
   params: any;
+  module: any
   unresolved: boolean;
-  constructor(name: string) {
+  constructor(name: string, module:any) {
     super();
-    this.name = name;
+    this.name = name
+    this.module = module
     this.unresolved = false;
   }
 
@@ -1200,8 +1223,16 @@ export class RefFn extends Fn {
       return input;
 
     // can not find ref, return itself
-    else
-      return this;
+    var f
+    if (this.module) {
+      f = this.module.getFn(this.name)
+    }
+
+    if (f) {
+      return f
+    }
+
+    return this;
   }
 }
 
@@ -1427,14 +1458,18 @@ export class ExprRefFn extends WrapperFn {
 /**
  * This class holds information about tail and provides executeRecursive() to resolve tail.
  * 
+ * It is stateful. It will never be used in statement/function construction but only used
+ * as transient during execution.
+ * 
  * When being executed, a tail is picked and executed. If it results in another or more tails,
  * these tails will not be recursively executed right away. Instead they are added into the tail list
  * and the whole tail will be return back, from where executeRecursive() is executed again to
  * pick the next tail to execute. This process is repeated until all tails are resolved.
  */
-export class TailFn extends WrapperFn {
-  closure: any;
+class TailFn extends WrapperFn {
+  closure: any
   _tails = new Array<TupleFn>()
+  _name:string|null = null
 
   constructor(fn: any, closure?: any) {
     super(fn)
@@ -1442,7 +1477,7 @@ export class TailFn extends WrapperFn {
 
     if (fn instanceof PipeFn) {
       var first = fn.fns[0]
-      if (first instanceof TailFn) {
+      if (TailFn.isTail(first)) {
         fn.fns[0] = first.wrapped
       } else if (first instanceof TupleFn) {
         this.addTail(first)
@@ -1450,8 +1485,16 @@ export class TailFn extends WrapperFn {
     }
   }
 
+  get name():string|null {
+    return this._name
+  }
+
+  set name(name:string|null) {
+    this._name = name
+  }
+
   addTail(tail:TupleFn) {
-    if (tail.fns.find(elm => elm instanceof TailFn) !== undefined) {
+    if (tail.fns.find(elm => TailFn.isTail(elm)) !== undefined) {
       this._tails.unshift(tail)
     }
     else {
@@ -1476,6 +1519,14 @@ export class TailFn extends WrapperFn {
     return this._tails.pop()
   }
 
+  /**
+   * Tells if elm is a TailFn
+   * @param elm element to be tested
+   */
+  static isTail(elm:any) {
+    return elm instanceof TailFn
+  }
+
   ResolveNextTail(context: any) {
     var tail = this.nextTail()
     if (!tail) {
@@ -1485,16 +1536,16 @@ export class TailFn extends WrapperFn {
     var tuple = tail.fns
     for (var i = 0; i < tuple.length; i++) {
       var elm = tuple[i]
-      if (elm instanceof TailFn) {
+      if (TailFn.isTail(elm)) {
         var next = elm.apply(null, context)
-        if (next instanceof TailFn) {
+        if (TailFn.isTail(next)) {
           this.addAllTails(next)
-          tuple[i] = next.wrapped
+          tuple[i] = elm.name ? new NamedExprFn(elm.name, next.wrapped) : next.wrapped
         }
 
         // end of recursive
         else {
-          tuple[i] = next
+          tuple[i] = elm.name ? new NamedExprFn(elm.name, next instanceof Fn ? next : new ConstFn(next)) : next
         }
       }
     }
@@ -1502,10 +1553,68 @@ export class TailFn extends WrapperFn {
   }
 
   apply(input: any, context?: any) {
-    var res = this.wrapped.apply(this.closure, context);
-    return FnUtil.unwrapMonad(res);
+    var res = this.wrapped.apply(this.closure, context)
+    res = FnUtil.unwrapMonad(res)
+    if (res instanceof Tuple && res.hasTail()) {
+      return new TailFn(res.toTupleFn())
+    }
+    return res
   }
 }
+
+export class ArrayInitializerFn extends Fn {
+  values:any[]
+
+  constructor(... values:any[]) {
+    super()
+    this.values = values
+  }
+
+  apply(input:any, context:any) {
+    var ret:any[] = []
+    this.values.forEach((v:any) => {
+      let val = v.apply(input, context)
+      if (Array.isArray(val)) {
+        ret.splice(ret.length, 0, ... val)
+      } else {
+        ret.push(v.apply(input, context))
+      }
+    })
+    return ret
+  }
+}
+
+/**
+ * Array initializer with values of start, end, and interval.
+ */
+export class ArrayInitializerWithRangeFn extends Fn {
+  start_val:Fn
+  end_val:Fn
+  interval:Fn
+
+  constructor(start_val:Fn, end_val:Fn, interval:Fn) {
+    super()
+    this.start_val = start_val
+    this.end_val = end_val
+    this.interval = interval
+  }
+
+  apply(input:any, context:any) {
+    let start = this.start_val.apply(input, context)
+    let interval = this.interval.apply(input, context)
+    let end = this.end_val.apply(input, context)
+    end = FnUtil.unwrapMonad(end)
+    let len = Math.ceil((end + 1 - start) / interval)
+    var array = new Array(len)
+    var val = start
+    for (var i = 0; i < len; i++) {
+      array[i] = val
+      val += interval
+    }
+    return array
+  }
+}
+
 
 /**
  * Array element selector.
@@ -1521,7 +1630,14 @@ export class ArrayElementSelectorFn extends Fn {
   constructor(name: string, index: Fn | number) {
     super()
     this.name = name;
-    this.index = index;
+    this.index = index instanceof ConstFn ? index.apply(null) : index
+    if (Array.isArray(this.index)) {
+      if (this.index.length == 1) {
+        this.index = this.index[0]
+      } else {
+        throw new Error('multiple selectors not supported yet!')
+      }
+    }
   }
 
   apply(input: any) {
@@ -1542,6 +1658,128 @@ export class ArrayElementSelectorFn extends Fn {
   }
 }
 
+export class ArrayRangeSelectorFn extends Fn {
+  name: string
+  start: number
+  end:number
+  interval:number
+  constructor(name:string, start:number, end:number, interval=1) {
+    super()
+    this.name = name
+    this.start = start
+    this.end = end
+    this.interval = interval
+  }
+
+  apply(input: any) {
+    let list = input && (
+      input instanceof Tuple && (input.get(this.name) || null)
+      || ((this.name == '_' || this.name == '_0') && input)
+      || []
+    )
+
+    let end = this.end == -1 ? list.length : this.end + 1
+    let len = Math.ceil((end - this.start) / this.interval)
+    let ret = new Array(len)
+    for (var i = this.start, j = 0; i < end; i += this.interval, j++) {
+      ret [j] = list[i]
+    }
+    return ret
+  }
+}
+
+// property accessor operator
+export class PropertyAccessorFn extends Fn {
+  elm_name:RefFn
+  prop_names:string[]
+  constructor(elm_name:RefFn, ... prop_names:string[]) {
+    super()
+    this.elm_name = elm_name
+    this.prop_names = prop_names
+  }
+
+  apply(input:any, context:any) {
+    var resolve = (elm:any, prop:string) => {
+      return elm ? elm instanceof Tuple ? elm.get(prop) : elm.prop : null
+    }
+
+    var elm = this.elm_name.apply(input, context)
+    for (var i = 0; i < this.prop_names.length; i++) {
+      elm = resolve(elm, this.prop_names[i])
+      if (!elm) {
+        return null
+      }
+    }
+    return elm
+  }
+}
+
+export class RaiseFunctionForArrayFn extends Fn {
+  raised_function:any
+  constructor(raised_function:any) {
+    super()
+    this.raised_function = raised_function
+  }
+
+  apply(input:any, context:any) {
+    var raised_f = this.raised_function
+    if (raised_f instanceof RefFn) {
+      raised_f = this.raised_function.apply(input, context)
+      if (!raised_f || raised_f == this.raised_function) {
+        throw new Error(`Function for '${this.raised_function.name}' not found`)
+      }
+    }
+
+    if (!Array.isArray(input)) {
+      input = [input]
+    }
+    var ret:any[] = []
+    input.forEach((element:any) => {
+      ret.push(raised_f.apply(element, context))
+    })
+    return ret
+  }
+}
+
+export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
+  constructor(raised_function:any) {
+    super(raised_function)
+  }
+
+  apply(input:Tuple, context:any) {
+    var first = input.getIndex(0)
+    var second = input.getIndex(1)
+    let is_first_array = Array.isArray(first)
+    let is_second_array = Array.isArray(second)
+    
+    if (!is_first_array && !is_second_array) {
+      return this.raised_function.apply(Tuple.fromList(first, second))
+    }
+
+    if (!is_first_array) {
+      throw new Error('first is not array!')
+    }
+
+    if (!is_second_array) {
+      var ret:any[] = []
+      first.forEach((element:any) => {
+        ret.push(this.raised_function.apply(Tuple.fromList(element, second), context))
+      })
+      return ret
+    }
+
+    if (first.length != second.length) {
+      throw new Error('first and second array sizes are different!')
+    }
+
+    var ret:any[] = []
+    for (var i = 0; i < first.length; i++) {
+      ret.push(this.raised_function.apply(Tuple.fromList(first[i], second[i]), context))
+    }
+    return ret
+  }
+}
+
 export class ExecutableFn extends WrapperFn {
 
   constructor(wrapped: Fn) {
@@ -1552,7 +1790,7 @@ export class ExecutableFn extends WrapperFn {
     let ret = this.wrapped.apply();
 
     // TODO tail
-    while (ret instanceof TailFn) {
+    while (TailFn.isTail(ret)) {
       ret = ret.apply(null)
 
     }
@@ -1575,35 +1813,3 @@ export function addModule(module: any) {
     throw new Error("Module with name '" + name + "' already exists!");
   modules.set(name, module);
 }
-
-export default {
-  setRunPath,
-  Tuple,
-  Fn,
-  WrapperFn,
-  ConstFn,
-  ImmutableValFn,
-  VarFn,
-  ParamTupleFn,
-  SeqSelectorOrDefault,
-  NativeFunctionFn,
-  FunctionFn,
-  FunctionInterfaceFn,
-  FunctionalFn,
-  TupleFn,
-  NamedExprFn,
-  PipeFn,
-  RefFn,
-  TupleSelectorFn,
-  CallExprFn,
-  ExprRefFn,
-  ExprFn,
-  TailFn,
-  ArrayElementSelectorFn,
-  getModule,
-  addModule,
-  validateBuild,
-  FnValidator,
-  Module,
-  ModuleNotLoadedError
-};
