@@ -415,6 +415,19 @@ function buildPostfixOperatorDeclaration(details:any, module:any, prev:any) {
 
 function buildCallExpression(details:any, module:any, prev:any) {
     let name = buildElement(details.name, module).name
+
+    let params = details.params.map((p:any) => buildElement(p, module, prev))
+
+    // lambda calculus
+    if (name == '$') {
+      if (params.length == 1) {
+        return build_function_parameters(params[0])
+      }
+      else {
+        throw new FtlBuildError('Lambda calculus not supporting curry yet')
+      }
+    }
+
     let f:ftl.FunctionBaseFn|ftl.RefFn = module.getAvailableFn(name)
     if (!f) {
       f = prev && prev.hasName(name) && new ftl.RefFn(name, module)
@@ -422,7 +435,6 @@ function buildCallExpression(details:any, module:any, prev:any) {
         throw new Error(`${name} not found!`)
     }
 
-    let params = details.params.map((p:any) => buildElement(p, module, prev))
     if (f instanceof ftl.FunctionBaseFn) {
       let minParamCount = f.params.fns.filter((p:ftl.NamedExprFn) => p.wrapped instanceof ftl.TupleSelectorFn).length
       if (minParamCount > 0 && params[0].size == 0) {
