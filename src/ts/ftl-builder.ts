@@ -30,10 +30,13 @@ export function buildToModule(ftl_content:string, module:any) {
   return module
 }
 
-function buildElement(buildInfo:any, module:any, input:any=null) {
+function buildElement(buildInfo:any, module:any, input:any=null):any {
   if (buildInfo instanceof ftl_parser.BuildInfo) {
     let builder = getBuilder(buildInfo.name)
     return builder(buildInfo.details, module, input)
+  }
+  else if (Array.isArray(buildInfo) && buildInfo.some(e => e instanceof ftl_parser.BuildInfo)) {
+    return buildInfo.map(e => buildElement(e, module, input))
   }
   else
     return buildInfo
@@ -556,6 +559,23 @@ function buildTupleElement(details:any, module:any, prev?:any) {
 
 function buildIdentifier(details:any, module:any) {
   return new ftl.RefFn(details.name, module)
+}
+
+function buildExpressionCurry(details:any, module:any, prev?:any) {
+  let expr = buildElement(details.expr, module, prev)
+  let params_list = buildElement(details.list, module)
+
+  params_list.forEach((params:ftl.TupleFn) => {
+    if (params.size == 0) {
+      throw new FtlBuildError('At least one argument for expression currying has to be provided!')
+    }
+
+    if (params.fns.filter(param => param instanceof ftl.NamedExprFn).length != params.fns.length) {
+      throw new FtlBuildError('All arguments for expression currying have to be named!')
+    }
+  });
+
+  return new ftl.CurryExprFn(expr, params_list)
 }
 
 // builds function parameter
