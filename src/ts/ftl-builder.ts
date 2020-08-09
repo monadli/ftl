@@ -4,6 +4,8 @@ import * as  ftl_parser from './ftl-parser'
 
 var runPath: string
 
+Error.stackTraceLimit = Infinity
+
 export function setRunPath(path: string) {
   runPath = path
 }
@@ -11,6 +13,11 @@ export function setRunPath(path: string) {
 const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283';
 
 type BuildInfo = ftl_parser.BuildInfo
+
+function buildingFor(context:string) {
+  let stack = new Error().stack
+  return stack?.includes(`at build${context} (`)
+}
 
 export function buildModuleWithContent(content:string) {
   let module = new ftl.Module('')
@@ -140,14 +147,6 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
     built = buildElement(details.expr, module, prev)
   } catch (e)
   {
-    // array initializer
-    if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
-      let start = e.operands[0]
-      let interval = e.op == ':' ? new ftl.ConstFn(1) : e.operands[1]
-      let end = e.op == ':' ? e.operands[1] : e.operands[2]
-      return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
-    }
-
     if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
       return new ftl.PropertyAccessorFn(e.operands[0], ... e.operands.slice(1).map(o => o.name))
     }
@@ -178,7 +177,39 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
 }
 
 function buildOperatorExpression(details:any, module:any, input?:any) {
-  return buildElement(details.unit, module, input)
+  try {
+    return buildElement(details.unit, module, input)
+  } catch (e) {
+
+    // array initializer
+    if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
+      let start = e.operands[0]
+      let interval = e.op == ':' ? new ftl.ConstFn(1) : e.operands[1]
+      let end = e.op == ':' ? e.operands[1] : e.operands[2]
+      if (end == undefined) {
+        end = new ftl.ConstFn(-1)
+      }
+      return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
+    }
+
+    // array selector
+    else if (e instanceof PostfixOperatorBuildError && e.op == ' :') {
+      let start = e.operand
+      let interval = new ftl.ConstFn(1)
+      let end = new ftl.ConstFn(-1)
+      return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
+    }
+
+    // tuple element selector
+    else if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
+      return new ftl.PropertyAccessorFn(e.operands[0], ... e.operands.slice(1).map(o => o.name))
+    }
+
+    else {
+      throw e
+    }
+
+  }
 }
 
 /**
@@ -347,7 +378,7 @@ function buildFunctionSignature(details:any, module:any) {
 }
 
 function buildFunctionDeclaration(details:any, module:any) {
-  let signature = buildElement(details.signature, module)
+  let signature = buildElement(details.signature, module, null)
 
   let f_name
   let params:any
@@ -434,8 +465,13 @@ function buildCallExpression(details:any, module:any, prev:any) {
     let f:ftl.FunctionBaseFn|ftl.RefFn = module.getAvailableFn(name)
     if (!f) {
       f = prev && prev.hasName(name) && new ftl.RefFn(name, module)
-      if (!f)
-        throw new Error(`${name} not found!`)
+      if (!f) {
+        if (!buildingFor('FunctionDeclaration')) {
+          throw new Error(`${name} not found!`)
+        }
+
+        return new ftl.FunctionInterfaceFn(name, params)
+      }
     }
 
     if (f instanceof ftl.FunctionBaseFn) {
@@ -443,8 +479,22 @@ function buildCallExpression(details:any, module:any, prev:any) {
       if (minParamCount > 0 && params[0].size == 0) {
         throw new FtlBuildError(`At least 1 argument is needed to call ${f.name}`)
       }
-    }
 
+      // modify certain parameter
+      // TODO check all parameter groups
+      for (var i = 0; i < params[0].fns.length && i < f.params.fns.length; i++) {
+        if (f.params.fns[i].wrapped instanceof ftl.FunctionInterfaceFn && params[0].fns[i] instanceof ftl.FunctionBaseFn) {
+          params[0].fns[i] = new ftl.ConstFn(params[0].fns[i])
+        }
+      }
+    }
+/*
+    for (var i = 0; i < params.length; i++) {
+      if (params[i] instanceof ftl.FunctionBaseFn) {
+        params[i] = new ftl.ConstFn(params[i])
+      }
+    }
+*/
     return new ftl.CallExprFn(name, f, params)
   }
 
@@ -501,27 +551,20 @@ function buildFalseToken(details:any, module:any) {
 
 function buildArrayElementSelector(details:any, module:any) {
   let name = buildElement(details.id, module).name
-  try {
-    let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
-    if (index instanceof ftl.ArrayInitializerFn) {
+  let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
+  if (index instanceof ftl.ArrayInitializerFn) {
 
-      // TODO allow ArrayElementSelectorFn takes multiple values
-      if (index.values.length != 1) {
-        throw new Error('ArrayElementSelectorFn not supporting multiple values yet!')
-      }
-      return new ftl.ArrayElementSelectorFn(name, index.values[0])
+    // TODO allow ArrayElementSelectorFn takes multiple values
+    if (index.values.length != 1) {
+      throw new Error('ArrayElementSelectorFn not supporting multiple values yet!')
     }
-    return new ftl.ArrayElementSelectorFn(name, index)
-  }
-  catch(e) {
-    if (e instanceof N_aryOperatorBuildError) {
-      if (e.op == ': :') {
-        let end = e.operands.length == 2 ? -1 : e.operands[2].apply()
-        return new ftl.ArrayRangeSelectorFn(name, e.operands[0].apply(), end, e.operands[1].apply())
-      }
+    let index_info = index.values[0]
+    if (index_info instanceof ftl.ArrayInitializerWithRangeFn) {
+      return new ftl.ArrayRangeSelectorFn(name, index_info.start_val.apply(), index_info.end_val.apply(), index_info.interval.apply())
     }
-    throw e
+    return new ftl.ArrayElementSelectorFn(name, index_info)
   }
+  return new ftl.ArrayElementSelectorFn(name, index)
 }
   
 function buildTuple(details:any, module:any, prev?:any) {

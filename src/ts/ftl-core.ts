@@ -620,8 +620,7 @@ export class ConstFn extends Fn {
 
     super();
 
-    // evaluate the value
-    this.value = value instanceof Fn ? value.apply() : value;
+    this.value = value;
   }
 
   get valueType() {
@@ -883,6 +882,12 @@ export class FunctionInterfaceFn extends Fn {
     } else if (this.params instanceof TupleFn) {
       tpl = FunctionInterfaceFn.js_args_to_tuple(this.params, arguments);
       start = this.params.fns.length;
+    }
+
+    // call expr where params is array of TupleFn
+    else if (Array.isArray(this.params) && this.params[0] instanceof TupleFn) {
+      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params[0], arguments);
+      start = this.params[0].fns.length;
     }
 
     var res = this.fn.apply(tpl);
