@@ -18,3 +18,13 @@ fn list => mapper(item) {
 
 // an array containing number that are mapped into another number with 2 added.
 [1, 2, 3] => (item + 2) == [3, 4, 5]
+
+// achieve the same using function
+fn map(list, mapper(item)) {
+  var ret = []
+  for (var i = 0; i < list.length; i++)
+    ret.push(mapper(list[i]))
+  return ret
+}
+
+map([1, 2, 3], (item + 2)) == [3, 4, 5]

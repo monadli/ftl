@@ -339,7 +339,7 @@ function buildInfixOperatorDeclaration(details:any, module:any) {
   for (let i = 0; i < details.operands.length; i++) {
     let operand = buildElement(details.operands[i], module)
     if (operand instanceof ftl.FunctionInterfaceFn)
-      (operand as ftl.FunctionInterfaceFn).seq = i
+      operand.seq = i
     operands.push(operand)
   }
 
@@ -483,7 +483,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
       // modify certain parameter
       // TODO check all parameter groups
       for (var i = 0; i < params[0].fns.length && i < f.params.fns.length; i++) {
-        if (f.params.fns[i].wrapped instanceof ftl.FunctionInterfaceFn && params[0].fns[i] instanceof ftl.FunctionBaseFn) {
+        if (f.params.fns[i].wrapped instanceof ftl.FunctionInterfaceFn && params[0].fns[i]) {
           params[0].fns[i] = new ftl.ConstFn(params[0].fns[i])
         }
       }
@@ -588,6 +588,8 @@ function buildTuple(details:any, module:any, prev?:any) {
     let elm = all_elms[i]
     if (elm instanceof ftl.RefFn && !all_names.has(elm.name)) {
       all_elms[i] = new ftl.NamedExprFn(elm.name, elm)
+    } else if (elm instanceof ftl.FunctionInterfaceFn) {
+      elm.seq = i;
     }
   }
 
