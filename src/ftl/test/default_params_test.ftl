@@ -6,6 +6,11 @@ import ftl/lang[==]
 
 fn test(x, y:1, z:3) { return x + y + z }
 
+// x
 test(1) == 5
+
+// x, y
 test(1, 2) == 6
+
+// x, y, z
 test(1, 2, 4) == 7

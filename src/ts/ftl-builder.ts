@@ -474,19 +474,122 @@ function buildCallExpression(details:any, module:any, prev:any) {
       }
     }
 
+    const reform_param = (param:any, arg:any) => {
+      return param.wrapped instanceof ftl.FunctionInterfaceFn ? new ftl.ConstFn(arg) : arg
+    }
+
+    var new_params:any[] = []
     if (f instanceof ftl.FunctionBaseFn) {
+
+      var positional_args = new Set<string>()
+      var named_args = new Map<string, any>()
+
+      if (params[0].size == 0 && f.params.fns[0].wrapped instanceof ftl.TupleSelectorFn) {
+        throw new FtlBuildError(`At least 1 argument is needed to call ${f.name}`)
+      }
+
+        for (var i = 0; i < f.params.fns.length; i++) {
+          if (i == params[0].fns.length) {
+            let left = f.params.fns.slice(i)
+            for (var j = 0; j < left.length; j++) {
+              new_params.push(new ftl.NamedExprFn(left[j].name, new ftl.TupleSelectorFn(j)))
+            }
+            break
+          }
+
+          let param = f.params.fns[i]
+          let arg = params[0].fns[i]
+        
+          // named arg
+          if (arg instanceof ftl.NamedExprFn) {
+            if (arg.name == param.name) {
+              new_params.push(reform_param(param, arg))
+            }
+            else if (positional_args.has(arg.name)) {
+                throw new FtlBuildError(`${name} is already taken as positional argument!`)
+            } 
+            else {
+              named_args.set(arg.name, arg)
+              let existing_named = named_args.get(param.name)
+              if (existing_named) {
+                new_params.push(reform_param(param, existing_named))
+                named_args.delete(param.name)
+              }
+              else {
+                new_params.push(param)
+              }
+            }
+          }
+
+          // non-named /positional arg
+          else {
+            if (named_args.size > 0) {
+              throw new FtlBuildError(`positional argument after named argument!`)
+            }
+            positional_args.add(f.params.fns[i].name)
+            new_params.push(reform_param(param, arg))
+          }
+        }
+
+        if (named_args.size > 0) {
+          for (var i = 0; i < new_params.length; i++) {
+            let param = new_params[i]
+            if (param instanceof ftl.NamedExprFn && param.wrapped instanceof ftl.TupleSelectorFn) {
+              let existing_named = named_args.get(param.name)
+              if (existing_named) {
+                new_params[i] = reform_param(param, existing_named)
+                named_args.delete(param.name)
+                if (named_args.size == 0) break
+              }
+            }
+          }
+
+          if (named_args.size > 0) throw new FtlBuildError(`Some names do not match parameter names`)
+        }
+
+      /*      
       let minParamCount = f.params.fns.filter((p:ftl.NamedExprFn) => p.wrapped instanceof ftl.TupleSelectorFn).length
       if (minParamCount > 0 && params[0].size == 0) {
         throw new FtlBuildError(`At least 1 argument is needed to call ${f.name}`)
       }
+*/
 
       // modify certain parameter
       // TODO check all parameter groups
+/*
       for (var i = 0; i < params[0].fns.length && i < f.params.fns.length; i++) {
+        let arg = params[0].fns[i]
+
+
+        // named arg
+        if (arg instanceof ftl.NamedExprFn) {
+          if (!(f.params as ftl.TupleFn).hasName(arg.name)) {
+            throw new FtlBuildError(`${name} not in parameter list for function ${f.name}!`)
+          }
+          if (positional_args.has(arg.name)) {
+            throw new FtlBuildError(`${name} is already taken as positional argument!`)
+          }
+        }
+
+        // non-named /positional arg
+        else {
+          if (positional_args.size > 0) {
+            throw new FtlBuildError(`positional argument after named argument!`)
+          }
+          positional_args.add(f.params.fns[i].name)
+        }
+
         if (f.params.fns[i].wrapped instanceof ftl.FunctionInterfaceFn && params[0].fns[i]) {
           params[0].fns[i] = new ftl.ConstFn(params[0].fns[i])
         }
       }
+*/
+
+      // all named args
+      
+    }
+    else {
+      new_params = params
     }
 /*
     for (var i = 0; i < params.length; i++) {
@@ -495,10 +598,9 @@ function buildCallExpression(details:any, module:any, prev:any) {
       }
     }
 */
-    return new ftl.CallExprFn(name, f, params)
-  }
+    return new ftl.CallExprFn(name, f, [new ftl.TupleFn(... new_params)])
+}
 
-  
 function buildArrayLiteral(details:any, module:any) {
   let elms = buildElement(details.list, module)
   let consts = elms.filter((e:any) => {
