@@ -18,6 +18,8 @@ contains('this is a test', 'test')
 // names after that parameter have to be matched as well. Otherwise,
 // error is raised.
 
+contains('this is a test', sub:'test')
+
 contains(str:'this is a test', sub:'test')
 contains(sub:'test', str:'this is a test')
 
@@ -33,3 +35,8 @@ contains(sub:'test', str:'this is a test')
 'this is a test' -> contains(sub:'test')
 'test' -> contains('this is a test')
 'test' -> contains(str:'this is a test')
+
+// currying
+contains('this is a test')('test')
+contains(str:'this is a test')(sub:'test')
+contains(sub:'test')(str:'this is a test')
