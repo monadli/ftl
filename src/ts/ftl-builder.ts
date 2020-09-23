@@ -478,8 +478,9 @@ function buildCallExpression(details:any, module:any, prev:any) {
     return param.wrapped instanceof ftl.FunctionInterfaceFn ? new ftl.ConstFn(arg) : arg
   }
 
-  var new_params:any[] = f.params.fns
+  let new_params:any[]
   if (f instanceof ftl.FunctionBaseFn) {
+    new_params = Array.from(f.params.fns)
 
     var positional_args = new Set<string>()
     var named_args = new Set<string>()
@@ -557,7 +558,22 @@ function buildCallExpression(details:any, module:any, prev:any) {
       if (unproced_named_args.size > 0) throw new FtlBuildError(`Some names do not match parameter names`)
     }
   }
+
+  // recursive function call with function not resolved yet
+  // assume the calling is correct
+  // TODO passing parameters to check
+  else if (f instanceof ftl.FunctionHolder) {
+    new_params = params
+  }
   else {
+    // function is passing from prev
+    let f_def = prev.getNamedFn(name).wrapped
+    if (f_def instanceof ftl.FunctionInterfaceFn && params.length < f_def.params.length) {
+      throw new Error(`Reference for ${name} is not a fucntional interface!`)
+    }
+    if (params.length < f_def.params.length) {
+      throw new Error(`Parameter counts for ${name} is less than expected!`)
+    }
     new_params = params
   }
 
@@ -566,7 +582,11 @@ function buildCallExpression(details:any, module:any, prev:any) {
   for (var i = 0; i < new_params.length; i++) {
     let param = new_params[i]
     if (param instanceof ftl.NamedExprFn && param.wrapped instanceof ftl.TupleSelectorFn) {
-      new_params[i] = new ftl.NamedExprFn(param.name, new ftl.TupleSelectorFn(newSeq++))
+      if (param.wrapped instanceof ftl.SeqSelectorOrDefault) {
+        new_params[i] = new ftl.NamedExprFn(param.name, new ftl.SeqSelectorOrDefault(newSeq++, new ftl.ConstFn(param.wrapped.defaultValue)))
+      } else {
+        new_params[i] = new ftl.NamedExprFn(param.name, new ftl.TupleSelectorFn(newSeq++))
+      }
     }
   }
 

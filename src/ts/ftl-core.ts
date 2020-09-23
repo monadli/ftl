@@ -1319,7 +1319,7 @@ export class SeqSelectorOrDefault extends TupleSelectorFn {
 
   apply(input: any) {
     var sv = super.apply(input);
-    if (sv !== undefined && sv != null)
+    if (sv !== undefined && sv != null && sv != this)
       return sv;
     return this.defaultValue;
   }
