@@ -895,10 +895,16 @@ export class FunctionInterfaceFn extends Fn {
   }
 
   apply(input: any) {
+
+    let f = input.getIndex(this.seq)
+    if (typeof f == 'function' && (f.name == 'bound fn_ref' || f.name == 'bound pass_through')) {
+      return f
+    }
+
     if (this.isTail) {
-      return bindingFunctions.pass_through.bind(new TailFn(input.getIndex(this.seq)));
+      return bindingFunctions.pass_through.bind(new TailFn(f));
     } else {
-      return this.fn_ref.bind({ fn: input instanceof Tuple ? input.getIndex(this.seq) : input, params: this.params });
+      return this.fn_ref.bind({ fn: input instanceof Tuple ? f : input, params: this.params });
     }
     //      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params});
   }
@@ -1373,10 +1379,14 @@ export class CallExprFn extends Fn {
     if (f instanceof RefFn) {
       f = f.apply(input);
     }
-    let intermediate = this.params[0].apply(input);
+    let intermediate = FnUtil.unwrapMonad(this.params[0].apply(input))
     let ret;
     if (typeof f == 'function') {
-      ret = f(...intermediate.toList());
+      if (intermediate instanceof Tuple) {
+        ret = f(...intermediate.toList())
+      } else {
+        ret = f(intermediate)
+      }
     } else {
       ret = f.apply(intermediate);
     }

@@ -474,10 +474,6 @@ function buildCallExpression(details:any, module:any, prev:any) {
     }
   }
 
-  const reform_param = (param:any, arg:any) => {
-    return param.wrapped instanceof ftl.FunctionInterfaceFn ? new ftl.ConstFn(arg) : arg
-  }
-
   let new_params:any[]
   if (f instanceof ftl.FunctionBaseFn) {
     new_params = Array.from(f.params.fns)
@@ -512,10 +508,11 @@ function buildCallExpression(details:any, module:any, prev:any) {
         let arg = params[n].fns[index]
        
         // named arg
-        if (arg instanceof ftl.NamedExprFn) {
+        // excluding simple RefFn wrapped as NamedExprFn which share the smae name
+        if (arg instanceof ftl.NamedExprFn && (!(arg.wrapped instanceof ftl.RefFn) || arg.wrapped.name != arg.name)) {
           named_args.add(param.name)
           if (arg.name == param.name) {
-            new_params[i] = reform_param(param, arg)
+            new_params[i] = arg
           }
           else if (positional_args.has(arg.name)) {
             throw new FtlBuildError(`${name} is already taken as positional argument!`)
@@ -524,7 +521,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
             unproced_named_args.set(arg.name, arg)
             let existing_named = unproced_named_args.get(param.name)
             if (existing_named) {
-              new_params[i] = reform_param(param, existing_named)
+              new_params[i] = existing_named
               unproced_named_args.delete(param.name)
             }
           }
@@ -536,7 +533,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
             throw new FtlBuildError(`positional argument after named argument!`)
           }
           positional_args.add(new_params[i].name)
-          new_params[i] = reform_param(param, arg)
+          new_params[i] = arg
         }
         index++
       }
@@ -548,7 +545,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
         if (param instanceof ftl.NamedExprFn && param.wrapped instanceof ftl.TupleSelectorFn) {
           let existing_named = unproced_named_args.get(param.name)
           if (existing_named) {
-            new_params[i] = reform_param(param, existing_named)
+            new_params[i] = existing_named
             unproced_named_args.delete(param.name)
             if (unproced_named_args.size == 0) break
           }
