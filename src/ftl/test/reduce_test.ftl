@@ -4,7 +4,7 @@ fn len(list) {
   return list.length;
 }
 
-fn _reduce(list, accu, index, reducer) -> index == len(list) ?? accu :: _reduce(list, reducer(accu, list[index]), index + 1, reducer)
+fn _reduce(list, accu, index, reducer(accu, item)) -> index == len(list) ?? accu :: _reduce(list, reducer(accu, list[index]), index + 1, reducer)
 
 /**
  * Reduce that takes a list and reducer function.
