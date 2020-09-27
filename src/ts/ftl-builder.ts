@@ -474,6 +474,18 @@ function buildCallExpression(details:any, module:any, prev:any) {
     }
   }
 
+  if (f instanceof ftl.FunctionBaseFn && f.params.fns.length == 0) {
+    if (params.length > 1) {
+      throw new FtlBuildError(`${name} has no parameters and more than one calls is found!`)
+    }
+
+    if (params[0].size > 0) {
+      throw new FtlBuildError(`${name} has no parameters and ${params[0].size} arguments are provided!`)
+    }
+
+    return new ftl.CallExprFn(name, f, [new ftl.TupleFn()])
+  }
+
   let new_params:any[]
   if (f instanceof ftl.FunctionBaseFn) {
     new_params = Array.from(f.params.fns)
