@@ -4,6 +4,8 @@ import * as  ftl_parser from './ftl-parser'
 
 var runPath: string
 
+Error.stackTraceLimit = Infinity
+
 export function setRunPath(path: string) {
   runPath = path
 }
@@ -11,6 +13,11 @@ export function setRunPath(path: string) {
 const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283';
 
 type BuildInfo = ftl_parser.BuildInfo
+
+function buildingFor(context:string) {
+  let stack = new Error().stack
+  return stack?.includes(`at build${context} (`)
+}
 
 export function buildModuleWithContent(content:string) {
   let module = new ftl.Module('')
@@ -30,10 +37,13 @@ export function buildToModule(ftl_content:string, module:any) {
   return module
 }
 
-function buildElement(buildInfo:any, module:any, input:any=null) {
+function buildElement(buildInfo:any, module:any, input:any=null):any {
   if (buildInfo instanceof ftl_parser.BuildInfo) {
     let builder = getBuilder(buildInfo.name)
     return builder(buildInfo.details, module, input)
+  }
+  else if (Array.isArray(buildInfo) && buildInfo.some(e => e instanceof ftl_parser.BuildInfo)) {
+    return buildInfo.map(e => buildElement(e, module, input))
   }
   else
     return buildInfo
@@ -137,14 +147,6 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
     built = buildElement(details.expr, module, prev)
   } catch (e)
   {
-    // array initializer
-    if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
-      let start = e.operands[0]
-      let interval = e.op == ':' ? new ftl.ConstFn(1) : e.operands[1]
-      let end = e.op == ':' ? e.operands[1] : e.operands[2]
-      return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
-    }
-
     if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
       return new ftl.PropertyAccessorFn(e.operands[0], ... e.operands.slice(1).map(o => o.name))
     }
@@ -175,7 +177,39 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
 }
 
 function buildOperatorExpression(details:any, module:any, input?:any) {
-  return buildElement(details.unit, module, input)
+  try {
+    return buildElement(details.unit, module, input)
+  } catch (e) {
+
+    // array initializer
+    if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
+      let start = e.operands[0]
+      let interval = e.op == ':' ? new ftl.ConstFn(1) : e.operands[1]
+      let end = e.op == ':' ? e.operands[1] : e.operands[2]
+      if (end == undefined) {
+        end = new ftl.ConstFn(-1)
+      }
+      return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
+    }
+
+    // array selector
+    else if (e instanceof PostfixOperatorBuildError && e.op == ' :') {
+      let start = e.operand
+      let interval = new ftl.ConstFn(1)
+      let end = new ftl.ConstFn(-1)
+      return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
+    }
+
+    // tuple element selector
+    else if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
+      return new ftl.PropertyAccessorFn(e.operands[0], ... e.operands.slice(1).map(o => o.name))
+    }
+
+    else {
+      throw e
+    }
+
+  }
 }
 
 /**
@@ -305,7 +339,7 @@ function buildInfixOperatorDeclaration(details:any, module:any) {
   for (let i = 0; i < details.operands.length; i++) {
     let operand = buildElement(details.operands[i], module)
     if (operand instanceof ftl.FunctionInterfaceFn)
-      (operand as ftl.FunctionInterfaceFn).seq = i
+      operand.seq = i
     operands.push(operand)
   }
 
@@ -344,7 +378,7 @@ function buildFunctionSignature(details:any, module:any) {
 }
 
 function buildFunctionDeclaration(details:any, module:any) {
-  let signature = buildElement(details.signature, module)
+  let signature = buildElement(details.signature, module, null)
 
   let f_name
   let params:any
@@ -414,26 +448,160 @@ function buildPostfixOperatorDeclaration(details:any, module:any, prev:any) {
 }
 
 function buildCallExpression(details:any, module:any, prev:any) {
-    let name = buildElement(details.name, module).name
-    let f:ftl.FunctionBaseFn|ftl.RefFn = module.getAvailableFn(name)
+  let name = buildElement(details.name, module).name
+
+  let params = details.params.map((p:any) => buildElement(p, module, prev))
+
+  // lambda calculus
+  if (name == '$') {
+    if (params.length == 1) {
+      return build_function_parameters(params[0])
+    }
+    else {
+      throw new FtlBuildError('Lambda calculus not supporting curry yet')
+    }
+  }
+
+  let f:ftl.FunctionBaseFn|ftl.RefFn = module.getAvailableFn(name)
+  if (!f) {
+    f = prev && prev.hasName(name) && new ftl.RefFn(name, module)
     if (!f) {
-      f = prev && prev.hasName(name) && new ftl.RefFn(name, module)
-      if (!f)
+      if (!buildingFor('FunctionDeclaration')) {
         throw new Error(`${name} not found!`)
+      }
+
+      return new ftl.FunctionInterfaceFn(name, params)
+    }
+  }
+
+  if (f instanceof ftl.FunctionBaseFn && f.params.fns.length == 0) {
+    if (params.length > 1) {
+      throw new FtlBuildError(`${name} has no parameters and more than one calls is found!`)
     }
 
-    let params = details.params.map((p:any) => buildElement(p, module, prev))
-    if (f instanceof ftl.FunctionBaseFn) {
-      let minParamCount = f.params.fns.filter((p:ftl.NamedExprFn) => p.wrapped instanceof ftl.TupleSelectorFn).length
-      if (minParamCount > 0 && params[0].size == 0) {
-        throw new FtlBuildError(`At least 1 argument is needed to call ${f.name}`)
+    if (params[0].size > 0) {
+      throw new FtlBuildError(`${name} has no parameters and ${params[0].size} arguments are provided!`)
+    }
+
+    return new ftl.CallExprFn(name, f, [new ftl.TupleFn()])
+  }
+
+  let new_params:any[]
+  if (f instanceof ftl.FunctionBaseFn) {
+    new_params = Array.from(f.params.fns)
+
+    var positional_args = new Set<string>()
+    var named_args = new Set<string>()
+    var unproced_named_args = new Map<string, any>()
+
+    if (params[0].size == 0 && f.params.fns[0].wrapped instanceof ftl.TupleSelectorFn) {
+      throw new FtlBuildError(`At least 1 argument is needed to call ${f.name}`)
+    }
+
+    for (var n = 0; n < params.length; n++) {
+      if (n > 0 && params[n].fns.length == 0) {
+        throw new Error('Currying with no arguments!')
+      }
+
+      let left_params = new_params.filter((p:ftl.Fn) => p instanceof ftl.NamedExprFn && p.wrapped instanceof ftl.TupleSelectorFn)
+      if (left_params.length == 0) {
+        throw new Error('Currying with excessive arguments!')
+      }
+
+      let index = 0;
+      for (var i = 0; i < new_params.length; i++) {
+        if (!(new_params[i] instanceof ftl.NamedExprFn)) continue
+
+        if (index == params[n].fns.length) {
+          break
+        }
+
+        let param = new_params[i]
+        let arg = params[n].fns[index]
+       
+        // named arg
+        // excluding simple RefFn wrapped as NamedExprFn which share the smae name
+        if (arg instanceof ftl.NamedExprFn && (!(arg.wrapped instanceof ftl.RefFn) || arg.wrapped.name != arg.name)) {
+          named_args.add(param.name)
+          if (arg.name == param.name) {
+            new_params[i] = arg
+          }
+          else if (positional_args.has(arg.name)) {
+            throw new FtlBuildError(`${name} is already taken as positional argument!`)
+          } 
+          else {
+            unproced_named_args.set(arg.name, arg)
+            let existing_named = unproced_named_args.get(param.name)
+            if (existing_named) {
+              new_params[i] = existing_named
+              unproced_named_args.delete(param.name)
+            }
+          }
+        }
+
+        // non-named /positional arg
+        else {
+          if (named_args.size > 0) {
+            throw new FtlBuildError(`positional argument after named argument!`)
+          }
+          positional_args.add(new_params[i].name)
+          new_params[i] = arg
+        }
+        index++
       }
     }
 
-    return new ftl.CallExprFn(name, f, params)
+    if (unproced_named_args.size > 0) {
+      for (var i = 0; i < new_params.length; i++) {
+        let param = new_params[i]
+        if (param instanceof ftl.NamedExprFn && param.wrapped instanceof ftl.TupleSelectorFn) {
+          let existing_named = unproced_named_args.get(param.name)
+          if (existing_named) {
+            new_params[i] = existing_named
+            unproced_named_args.delete(param.name)
+            if (unproced_named_args.size == 0) break
+          }
+        }
+      }
+
+      if (unproced_named_args.size > 0) throw new FtlBuildError(`Some names do not match parameter names`)
+    }
   }
 
-  
+  // recursive function call with function not resolved yet
+  // assume the calling is correct
+  // TODO passing parameters to check
+  else if (f instanceof ftl.FunctionHolder) {
+    new_params = params
+  }
+  else {
+    // function is passing from prev
+    let f_def = prev.getNamedFn(name).wrapped
+    if (f_def instanceof ftl.FunctionInterfaceFn && params.length < f_def.params.length) {
+      throw new Error(`Reference for ${name} is not a fucntional interface!`)
+    }
+    if (params.length < f_def.params.length) {
+      throw new Error(`Parameter counts for ${name} is less than expected!`)
+    }
+    new_params = params
+  }
+
+  // re-sequence unresolved parameters
+  let newSeq = 0
+  for (var i = 0; i < new_params.length; i++) {
+    let param = new_params[i]
+    if (param instanceof ftl.NamedExprFn && param.wrapped instanceof ftl.TupleSelectorFn) {
+      if (param.wrapped instanceof ftl.SeqSelectorOrDefault) {
+        new_params[i] = new ftl.NamedExprFn(param.name, new ftl.SeqSelectorOrDefault(newSeq++, new ftl.ConstFn(param.wrapped.defaultValue)))
+      } else {
+        new_params[i] = new ftl.NamedExprFn(param.name, new ftl.TupleSelectorFn(newSeq++))
+      }
+    }
+  }
+
+  return new ftl.CallExprFn(name, f, [new ftl.TupleFn(... new_params)])
+}
+
 function buildArrayLiteral(details:any, module:any) {
   let elms = buildElement(details.list, module)
   let consts = elms.filter((e:any) => {
@@ -486,27 +654,20 @@ function buildFalseToken(details:any, module:any) {
 
 function buildArrayElementSelector(details:any, module:any) {
   let name = buildElement(details.id, module).name
-  try {
-    let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
-    if (index instanceof ftl.ArrayInitializerFn) {
+  let index = typeof details.index == 'string' ? parseInt(details.index) : buildElement(details.index, module)
+  if (index instanceof ftl.ArrayInitializerFn) {
 
-      // TODO allow ArrayElementSelectorFn takes multiple values
-      if (index.values.length != 1) {
-        throw new Error('ArrayElementSelectorFn not supporting multiple values yet!')
-      }
-      return new ftl.ArrayElementSelectorFn(name, index.values[0])
+    // TODO allow ArrayElementSelectorFn takes multiple values
+    if (index.values.length != 1) {
+      throw new Error('ArrayElementSelectorFn not supporting multiple values yet!')
     }
-    return new ftl.ArrayElementSelectorFn(name, index)
-  }
-  catch(e) {
-    if (e instanceof N_aryOperatorBuildError) {
-      if (e.op == ': :') {
-        let end = e.operands.length == 2 ? -1 : e.operands[2].apply()
-        return new ftl.ArrayRangeSelectorFn(name, e.operands[0].apply(), end, e.operands[1].apply())
-      }
+    let index_info = index.values[0]
+    if (index_info instanceof ftl.ArrayInitializerWithRangeFn) {
+      return new ftl.ArrayRangeSelectorFn(name, index_info.start_val.apply(), index_info.end_val.apply(), index_info.interval.apply())
     }
-    throw e
+    return new ftl.ArrayElementSelectorFn(name, index_info)
   }
+  return new ftl.ArrayElementSelectorFn(name, index)
 }
   
 function buildTuple(details:any, module:any, prev?:any) {
@@ -530,6 +691,8 @@ function buildTuple(details:any, module:any, prev?:any) {
     let elm = all_elms[i]
     if (elm instanceof ftl.RefFn && !all_names.has(elm.name)) {
       all_elms[i] = new ftl.NamedExprFn(elm.name, elm)
+    } else if (elm instanceof ftl.FunctionInterfaceFn) {
+      elm.seq = i;
     }
   }
 
@@ -544,6 +707,23 @@ function buildTupleElement(details:any, module:any, prev?:any) {
 
 function buildIdentifier(details:any, module:any) {
   return new ftl.RefFn(details.name, module)
+}
+
+function buildExpressionCurry(details:any, module:any, prev?:any) {
+  let expr = buildElement(details.expr, module, prev)
+  let params_list = buildElement(details.list, module)
+
+  params_list.forEach((params:ftl.TupleFn) => {
+    if (params.size == 0) {
+      throw new FtlBuildError('At least one argument for expression currying has to be provided!')
+    }
+
+    if (params.fns.filter(param => param instanceof ftl.NamedExprFn).length != params.fns.length) {
+      throw new FtlBuildError('All arguments for expression currying have to be named!')
+    }
+  });
+
+  return new ftl.CurryExprFn(expr, params_list)
 }
 
 // builds function parameter

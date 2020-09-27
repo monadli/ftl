@@ -9,7 +9,7 @@ fn list += item {
   return list
 }
 
-fn _map(src, mapped, index, mapper) -> index == len(src) ?? mapped :: _map(src, mapped += mapper(src[index]), index + 1, mapper)
+fn _map(src, mapped, index, mapper(item)) -> index == len(src) ?? mapped :: _map(src, mapped += mapper(src[index]), index + 1, mapper)
 
 /**
  * mapping operator =>
@@ -22,3 +22,9 @@ fn _map(src, mapped, index, mapper) -> index == len(src) ?? mapped :: _map(src, 
 fn list => mapper(item) -> _map(list, [], 0, mapper)
 
 [1, 2, 3] => (item + 2) == [3, 4, 5]
+
+
+// We can also use function to achieve the same:
+fn map(list, mapper(item)) -> _map(list, [], 0, mapper)
+
+map([1, 2, 3], (item + 2)) == [3, 4, 5]

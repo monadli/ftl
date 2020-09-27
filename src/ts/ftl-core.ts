@@ -461,10 +461,11 @@ export class Tuple {
     return this._values.find(elm => TailFn.isTail(elm)) !== undefined
   }
 
-  // checks if any element is a reference
-  // it does not go into nested elements
-  hasRef() {
-    return this._values.find(elm => elm instanceof RefFn) !== undefined;
+  // checks if any element or nested element is a reference
+  // In essence it is equivalent to having any function
+  hasRef():boolean {
+//    return this._values.find(elm => elm instanceof RefFn || elm instanceof Tuple && elm.hasRef()) !== undefined;
+    return this._values.find(elm => elm instanceof Fn) !== undefined
   }
 
   toList() {
@@ -619,8 +620,7 @@ export class ConstFn extends Fn {
 
     super();
 
-    // evaluate the value
-    this.value = value instanceof Fn ? value.apply() : value;
+    this.value = value;
   }
 
   get valueType() {
@@ -800,7 +800,7 @@ export class FunctionFn extends FunctionBaseFn {
 // This is used to represent functional argument in a function parameter or operand declaration.
 // The purpose of function interface is to wrap an expression that is executed only when it is needed.
 //
-// For example, the y() in :
+// For example, the y() below:
 //   fn x || y()
 //
 // We know that in this operator || which represents logic "or", if x is true, y is not needed.
@@ -884,15 +884,27 @@ export class FunctionInterfaceFn extends Fn {
       start = this.params.fns.length;
     }
 
+    // call expr where params is array of TupleFn
+    else if (Array.isArray(this.params) && this.params[0] instanceof TupleFn) {
+      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params[0], arguments);
+      start = this.params[0].fns.length;
+    }
+
     var res = this.fn.apply(tpl);
     return FnUtil.unwrapMonad(res);
   }
 
   apply(input: any) {
+
+    let f = input.getIndex(this.seq)
+    if (typeof f == 'function' && (f.name == 'bound fn_ref' || f.name == 'bound pass_through')) {
+      return f
+    }
+
     if (this.isTail) {
-      return bindingFunctions.pass_through.bind(new TailFn(input.getIndex(this.seq)));
+      return bindingFunctions.pass_through.bind(new TailFn(f));
     } else {
-      return this.fn_ref.bind({ fn: input instanceof Tuple ? input.getIndex(this.seq) : input, params: this.params });
+      return this.fn_ref.bind({ fn: input instanceof Tuple ? f : input, params: this.params });
     }
     //      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params});
   }
@@ -1313,7 +1325,7 @@ export class SeqSelectorOrDefault extends TupleSelectorFn {
 
   apply(input: any) {
     var sv = super.apply(input);
-    if (sv !== undefined && sv != null)
+    if (sv !== undefined && sv != null && sv != this)
       return sv;
     return this.defaultValue;
   }
@@ -1367,10 +1379,14 @@ export class CallExprFn extends Fn {
     if (f instanceof RefFn) {
       f = f.apply(input);
     }
-    let intermediate = this.params[0].apply(input);
+    let intermediate = FnUtil.unwrapMonad(this.params[0].apply(input))
     let ret;
     if (typeof f == 'function') {
-      ret = f(...intermediate.toList());
+      if (intermediate instanceof Tuple) {
+        ret = f(...intermediate.toList())
+      } else {
+        ret = f(intermediate)
+      }
     } else {
       ret = f.apply(intermediate);
     }
@@ -1796,6 +1812,36 @@ export class ExecutableFn extends WrapperFn {
     }
     return FnUtil.unwrapMonad(ret)
   }  
+}
+
+export class CurryExprFn extends Fn {
+  expr:Fn
+  params: Fn[]
+
+  constructor(expr:Fn, params:Fn[]) {
+    super()
+    this.expr = expr
+    this.params = params
+  }
+
+  apply(input:any, module:any) {
+    let expr_res = FnUtil.unwrapMonad(this.expr.apply(input, module))
+    if (expr_res instanceof Tuple) {
+      expr_res = expr_res.toTupleFn()
+    }
+
+    let res = expr_res
+
+    for (var i = 0; i < this.params.length; i++) {
+      let param = this.params[i].apply(input)
+      res = FnUtil.unwrapMonad(res.apply(param))
+      if (res instanceof Tuple) {
+        res = res.toTupleFn()
+      }
+    }
+
+    return res
+  }
 }
 
 // runtime modules
