@@ -10,7 +10,7 @@ export function setRunPath(path: string) {
   runPath = path
 }
 
-const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283';
+const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283'
 
 type BuildInfo = ftl_parser.BuildInfo
 
@@ -50,7 +50,7 @@ function buildElement(buildInfo:any, module:any, input:any=null):any {
 }
 
 function getBuilder(name:string) {
-  let builder =  eval(`build${name}`);//buildElements[name]
+  let builder =  eval(`build${name}`) //buildElements[name]
   if (!builder)
     throw new Error(`Builder for ${name} not found!`)
   return builder
@@ -106,24 +106,24 @@ function buildImportSingleItem(details:any, module:any) {
     path = `lib/${path}`
   }
 
-  var mod = ftl.getModule(path);
+  var mod = ftl.getModule(path)
   if (!mod) {
     mod = buildModule(runPath, path)
     if (!mod)
-      throw new ftl.ModuleNotLoadedError(path);
+      throw new ftl.ModuleNotLoadedError(path)
   }
 
   // import all
   if (!name) {
     //if (asName != null)
-    //  throw new Error("Importing * (all) can not have alias name!");
-    var fns = mod.getAllFns();
+    //  throw new Error("Importing * (all) can not have alias name!")
+    var fns = mod.getAllFns()
     Object.keys(fns).forEach(key => {
-      module.addImport(key, fns[key]);
-    });
+      module.addImport(key, fns[key])
+    })
   }
   else
-    module.addImport(/*asName ||*/ name, mod.getFn(name));
+    module.addImport(/*asName ||*/ name, mod.getFn(name))
 }
 
 function buildExecutable(details:any, module:any) {
@@ -166,7 +166,7 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
     let name = built.name
     if (name.startsWith('_') || prev instanceof ftl.TupleFn && prev.hasName(name))
       return built
-    var f = module.getAvailableFn(name);
+    var f = module.getAvailableFn(name)
 
     // TODO: buildFunctionCall
     if (f)
@@ -275,7 +275,7 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
 
       // operand at index 1 is for operator at 
       var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
-      var f = module.getAvailableFn(op);
+      var f = module.getAvailableFn(op)
       var raise = false
       // no corresponding function found for single op
  
@@ -290,13 +290,13 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
           throw new N_aryOperatorBuildError(`N-ary operator ${ops} not found!`, op, operands)
         }
         
-        index--;
+        index--
 
         try {
-          var reduced = parse_operators(module, inputFn, ops, operands, index, false, extra);
+          var reduced = parse_operators(module, inputFn, ops, operands, index, false, extra)
 
           if (extra.current_index == extra.stop_index)
-            return reduced;
+            return reduced
 
           ops = ops.slice(index, ops.length)
           operands = [reduced].concat(operands.slice(index + 1, operands.length))
@@ -307,10 +307,10 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
       }
 
       for (var i = 0; i < f.params.fns.length; i++) {
-        var fn = f.params.fns[i];
+        var fn = f.params.fns[i]
         if (fn instanceof ftl.NamedExprFn && fn.wrapped instanceof ftl.FunctionInterfaceFn) {
-          //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn;
-          console.debug(inputFn);
+          //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn
+          console.debug(inputFn)
 
           // wrap functional interface and input function with ExprRefFn.
           // This can be done only here with inputFn available
@@ -318,7 +318,7 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
         }
       }
 
-      extra.current_index += index;
+      extra.current_index += index
       var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fns.length))
 
       return new ftl.PipeFn(operands_tuple, raise ? new ftl.RaiseBinaryOperatorForArrayFn(f) : f)
@@ -359,7 +359,7 @@ function buildOperandFunctionDeclaration(details:any, module:any, prevElm:any=nu
   let is_tail = false
   if (name.endsWith('$')) {
     is_tail = true
-    name = name.substr(0, name.length - 1);
+    name = name.substr(0, name.length - 1)
   }
 
   let params = buildElement(details.params, module, prevElm)
@@ -508,7 +508,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
         throw new Error('Currying with excessive arguments!')
       }
 
-      let index = 0;
+      let index = 0
       for (var i = 0; i < new_params.length; i++) {
         if (!(new_params[i] instanceof ftl.NamedExprFn)) continue
 
@@ -692,7 +692,7 @@ function buildTuple(details:any, module:any, prev?:any) {
     if (elm instanceof ftl.RefFn && !all_names.has(elm.name)) {
       all_elms[i] = new ftl.NamedExprFn(elm.name, elm)
     } else if (elm instanceof ftl.FunctionInterfaceFn) {
-      elm.seq = i;
+      elm.seq = i
     }
   }
 
@@ -718,10 +718,10 @@ function buildExpressionCurry(details:any, module:any, prev?:any) {
       throw new FtlBuildError('At least one argument for expression currying has to be provided!')
     }
 
-    if (params.fns.filter(param => param instanceof ftl.NamedExprFn).length != params.fns.length) {
+    if (params.fns.filter(param => param instanceof ftl.NamedExprFn).length != params.size) {
       throw new FtlBuildError('All arguments for expression currying have to be named!')
     }
-  });
+  })
 
   return new ftl.CurryExprFn(expr, params_list)
 }
@@ -766,7 +766,7 @@ function validate_tuple_elements(elms:any[]) {
 
 
 // this is for building function / operator parameters
-var dummy_param_tuple = new ftl.TupleFn();
+var dummy_param_tuple = new ftl.TupleFn()
 
   // The following functions are used for parsing
 
@@ -776,13 +776,13 @@ function join(value:any) {
 
 function optionalList(value:any) {
   if (value == null)
-    throw new Error('catching null');
-  return value || [];
+    throw new Error('catching null')
+  return value || []
 }
 
 class FtlBuildError extends Error {
   constructor(message:string) {
-    super(message);
+    super(message)
   }
 }
 
@@ -790,7 +790,7 @@ class PrefixOperatorNotFoundError extends FtlBuildError {
   op:string
   operand:any
   constructor(message:string, op:string, operand:any) {
-    super(message);
+    super(message)
     this.op = op
     this.operand = operand
   }

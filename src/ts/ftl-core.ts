@@ -1,19 +1,9 @@
 import fs from 'fs'
 
 // ftl core functions and classes.
-var version = '0.0.0.2';
+var version = '0.0.1'
 var TupleSelectorPattern = /_\d+$/
 var VALIDATE_BUILD = false
-
-var runPath: string;
-
-function setRunPath(path: string) {
-  runPath = path
-}
-
-function validateBuild(value: any) {
-  VALIDATE_BUILD = value;
-}
 
 function getValueString(value: any) {
   if (Array.isArray(value) || typeof value == 'string')
@@ -24,16 +14,16 @@ function getValueString(value: any) {
 
 let bindingFunctions = {
   pass_through() {
-    return this;
+    return this
   }
 }
 
 class FtlValidationError extends Error {
   constructor(...params: any[]) {
-    super(...params);
+    super(...params)
     if (this.stack) {
-      var start = this.stack.indexOf(' at new ') + 8;
-      this.message = this.stack.substring(start, this.stack.indexOf(' ', start)) + ': ' + this.message;
+      var start = this.stack.indexOf(' at new ') + 8
+      this.message = this.stack.substring(start, this.stack.indexOf(' ', start)) + ': ' + this.message
     }
   }
 }
@@ -42,7 +32,7 @@ export class ModuleNotLoadedError extends Error {
   moduleName: string
 
   constructor(moduleName: string) {
-    super();
+    super()
     this.moduleName = moduleName
     this.message = 'Module not exist!'
   }
@@ -51,7 +41,7 @@ export class ModuleNotLoadedError extends Error {
 class FnUtil {
   // Test if an element is undefined or null
   static isNone(elm: any) {
-    return elm === undefined || elm === null;
+    return elm === undefined || elm === null
   }
 
   static isNumber(elm: any) {
@@ -67,14 +57,14 @@ class FnUtil {
   }
 
   static isArray(elm: any) {
-    return !FnUtil.isNone(elm) && Array.isArray(elm);
+    return !FnUtil.isNone(elm) && Array.isArray(elm)
   }
 
   /**
    * Tests if elm is of type.
    */
   static isType(elm: any, type: any) {
-    return elm && type && elm instanceof type;
+    return elm && type && elm instanceof type
   }
 
   /**
@@ -82,27 +72,27 @@ class FnUtil {
    */
   static isOneType(elm: any, ...types: any[]) {
     if (FnUtil.isNone(elm) || types.length == 0)
-      return false;
+      return false
 
     for (var i = 0; i < types.length; i++)
       if (FnUtil.isType(elm, types[i]))
-        return true;
-    return false;
+        return true
+    return false
   }
 
   // unwraps the single value of tuple that contains a single value (monad) 
   static unwrapMonad(tuple: any): any {
-    return tuple instanceof Tuple && tuple.size == 1 && tuple._names.size == 1 ? tuple.getIndex(0) : tuple;
+    return tuple instanceof Tuple && tuple.size == 1 && tuple.names.size == 1 ? tuple.getIndex(0) : tuple
   }
 
   static getFn(fns: any, predicate: any) {
     for (var i = 0; i < fns.length; i++) {
-      var fn = fns[i];
+      var fn = fns[i]
       if (predicate(fn))
-        return fn;
+        return fn
     }
 
-    return null;
+    return null
   }
 }
 
@@ -110,59 +100,59 @@ export class FnValidator {
 
   static assertNonNull(elm: any) {
     if (FnUtil.isNone(elm))
-      throw new FtlValidationError('elm is undefined or null!');
+      throw new FtlValidationError('elm is undefined or null!')
   }
 
   static assertNumberType(elm: any) {
     if (!FnUtil.isNumber(elm))
-      throw new FtlValidationError('elm is not a Number!');
+      throw new FtlValidationError('elm is not a Number!')
   }
 
   static assertObjectType(elm: any) {
     if (!FnUtil.isObject(elm))
-      throw new FtlValidationError('elm is not Object!');
+      throw new FtlValidationError('elm is not Object!')
   }
 
   static assertStringType(elm: any) {
     if (!FnUtil.isString(elm))
-      throw new FtlValidationError('elm is not String!');
+      throw new FtlValidationError('elm is not String!')
   }
 
   static assertArrayType(elm: any) {
     if (VALIDATE_BUILD && !FnUtil.isArray(elm))
-      throw new FtlValidationError('elm is not Array!');
+      throw new FtlValidationError('elm is not Array!')
   }
 
   static assertNonEmptyArray(elm: any) {
-    FnValidator.assertArrayType(elm);
+    FnValidator.assertArrayType(elm)
     if (VALIDATE_BUILD && elm.length == 0)
-      throw new FtlValidationError('elm is empty array!');
+      throw new FtlValidationError('elm is empty array!')
   }
 
   static assertElmType(elm: any, ...types: any[]) {
     if (VALIDATE_BUILD && !FnUtil.isOneType(elm, ...types))
-      throw new FtlValidationError('elm is not one of types!');
+      throw new FtlValidationError('elm is not one of types!')
   }
 
   static assertElmsTypes(elms: any, ...types: any[]) {
     if (VALIDATE_BUILD) {
-      FnValidator.assertArrayType(elms);
+      FnValidator.assertArrayType(elms)
       elms.forEach((e: any) => {
-        FnValidator.assertElmType(e, ...types);
-      });
+        FnValidator.assertElmType(e, ...types)
+      })
     }
   }
 
   static assetNoDupNames(...fns: any[]) {
-    let names = new Set();
+    let names = new Set()
     fns.forEach(fn => {
       if (fn instanceof NamedExprFn) {
         if (names.has(fn.name)) {
-          // TODO             throw new FtlBuildError("Name " + fn.name + " is defined more than once!");
+          // TODO             throw new FtlBuildError("Name " + fn.name + " is defined more than once!")
         }
-        names.add(fn.name);
+        names.add(fn.name)
       }
-    });
+    })
   }
 }
 
@@ -171,72 +161,79 @@ export class FnValidator {
  */
 class FnConstructionError extends Error {
   constructor(...params: any[]) {
-    super(...params);
+    super(...params)
     if (this.stack) {
-      var start = this.stack.indexOf(' at new ') + 8;
-      this.message = this.stack.substring(start, this.stack.indexOf(' ', start)) + ': ' + this.message;
+      var start = this.stack.indexOf(' at new ') + 8
+      this.message = this.stack.substring(start, this.stack.indexOf(' ', start)) + ': ' + this.message
     }
   }
 }
 
 class FtlRuntimeError extends Error {
   constructor(...params: any[]) {
-    super(...params);
+    super(...params)
   }
 }
 
 
 /**
  * A module holds a list of defined identifiers that can be seen from the outside
- * (except the ones starts with '_' which are private to the module)
+ * (except the ones starting with '_' which are private to the module).
  *
- * Any imported identifies are private to the module.
- *
+ * Any imported identifies are private to the module and will not be exportable.
  */
 export class Module {
 
-  _name: string;
-  _functions: any;
-  _imports: any;
-  _executables: any[];
+  #name: string
+  #functions: Record<string, Fn>
+  #imports: Record<string, Fn>
+  #executables: Fn[]
 
-  // creates a module with name, such as 'ftl.lang'
+  /**
+   * Creates a module with name, such as 'ftl.lang'
+   */
   constructor(name: string) {
-    this._name = name || '';
-    this._functions = {};
-    this._imports = {};
-    this._executables = [];
+    this.#name = name || ''
+    this.#functions = {}
+    this.#imports = {}
+    this.#executables = []
   }
 
+  /**
+   * Returns module name.
+   */
   get name() {
-    return this._name;
+    return this.#name
   }
 
-  // Sets a module name.
-  // A module can have the name set once only.
+  /**
+   * Sets module name.
+   * 
+   * A module can not be set to a different name once it is set.
+   */
   set name(name) {
-    if (this._name)
-      throw new Error(`The module name already has name "${this._name}".`);
+    if (this.#name && name !== this.#name)
+      throw new FtlRuntimeError(`The module name already has name "${this.#name}".`)
 
-    this._name = name;
+    this.#name = name
   }
 
   importStatement(path: string, items: any[]) {
     items.forEach(item => {
       if (item.type == 'single') {
-        var name = item.name;
-        var asName = item.asName;
+        var name = item.name
+        var asName = item.asName
 
         // import * operator
         if (name == '*') {
-          var mod = getModule(path);
+          var mod = getModule(path)
           if (mod == null)
-            throw new Error('Module ' + path + ' does not exist!');
-          var f = mod.getFn(name);
+            throw new FtlRuntimeError('Module ' + path + ' does not exist!')
+          var f = mod.getFn(name)
           if (!f)
-            throw new Error('Operator * not found in ' + path + '!');
-          this.addImport(asName || name, f);
-          return;
+            throw new FtlRuntimeError('Operator * not found in ' + path + '!')
+          this.addImport(asName || name, f)
+          return
         }
 
         // name starts with '.' is module relateive to path
@@ -252,92 +249,93 @@ export class Module {
           name = 'lib/' + name
         }
 
-        var dotIdx = name.lastIndexOf('.');
+        var dotIdx = name.lastIndexOf('.')
         if (dotIdx < 0)
-          throw new Error(name + ' is not a module!');
+          throw new FtlRuntimeError(name + ' is not a module!')
 
-        var id = name.substring(dotIdx + 1);
-        var moduleName = name.substring(0, dotIdx);
-        var mod = getModule(moduleName);
+        var id = name.substring(dotIdx + 1)
+        var moduleName = name.substring(0, dotIdx)
+        var mod = getModule(moduleName)
         if (!mod) {
-          throw new ModuleNotLoadedError(moduleName);
+          throw new ModuleNotLoadedError(moduleName)
         }
 
         // import all
         if (id == '*') {
           if (asName != null)
-            throw new Error("Importing * (all) can not have alias name!");
-          var fns = mod.getAllFns();
+            throw new FtlRuntimeError("Importing * (all) can not have alias name!")
+          var fns = mod.getAllFns()
           Object.keys(fns).forEach(key => {
-            this.addImport(key, fns[key]);
-          });
+            this.addImport(key, fns[key])
+          })
         }
         else {
-          this.addImport(asName || id, mod.getFn(id));
+          this.addImport(asName || id, mod.getFn(id))
         }
       }
 
       // import list of items
       else {
-        var subPath = item.path;
+        var subPath = item.path
 
         item.importList.forEach((sub: any) => {
-          this.importStatement(subPath, Array.isArray(sub) ? sub : [sub]);
-        });
+          this.importStatement(subPath, Array.isArray(sub) ? sub : [sub])
+        })
       }
-    });
+    })
   }
 
-  addImport(name: string, f: any) {
+  addImport(name: string, f: Fn) {
     if (!f)
-      throw new Error('Can not import null for ' + name + '!')
+      throw new FtlRuntimeError('Can not import null for ' + name + '!')
 
-    if (this._imports[name]) {
-      console.log("import " + name + " exists! Overriding.");
+    if (this.#imports[name]) {
+      console.log("import " + name + " exists! Overriding.")
     }
 
-    this._imports[name] = f;
+    this.#imports[name] = f
   }
 
   addFn(f: NativeFunctionFn | FunctionFn) {
-    if (this._functions[f.name] != null) {
-      if (this._functions[f.name] instanceof FunctionHolder)
-        this._functions[f.name].wrapped = f
+    if (this.#functions[f.name] != null) {
+      let nf = this.#functions[f.name]
+      if (nf instanceof FunctionHolder)
+        nf.wrapped = f
       else
         throw { message: "'" + f.name + "' exists and can not be declared again!" }
     }
 
-    this._functions[f.name] = f;
+    this.#functions[f.name] = f
   }
 
   // Returns module defined identifier. 
   getFn(name: string) {
-    return this._functions[name];
+    return this.#functions[name]
   }
 
   // Tells if module contains a function with name.
   hasFn(name: string) {
-    return this.getAvailableFn(name) != null;
+    return this.getAvailableFn(name) != null
   }
 
   // Returns either module defined or imported identifier. 
   getAvailableFn(name: string) {
-    return this._functions[name] || this._imports[name];
+    return this.#functions[name] || this.#imports[name]
   }
 
   getAllFns() {
-    return this._functions;
+    return this.#functions
   }
 
   addExecutable(exec: Fn) {
     // passing empty tuple as input
-    this._executables.push(exec);
+    this.#executables.push(exec)
   }
 
-  get executables(): any[] { return this._executables }
+  get executables(): any[] { return this.#executables }
 
   get lastExecutable() {
-    return this._executables[this._executables.length - 1]
+    return this.#executables[this.#executables.length - 1]
   }
 
   apply() {
@@ -356,25 +354,26 @@ export class Module {
  * This class  is a data structure carrying computation results from one tuple to next tuple.
  */
 export class Tuple {
-  _names: Map<string, any>;
-  _values: Array<any>;
+  #names: Map<string, any>
+  #values: Array<any>
+
   constructor() {
 
     // full map of named or unnamed values
-    this._names = new Map();
-    this._values = [];
+    this.#names = new Map()
+    this.#values = []
   }
 
   static fromKeyValue(key: string, value: any) {
-    var t = new Tuple();
+    var t = new Tuple()
     t.addKeyValue(key, value)
-    return t;
+    return t
   }
 
   static fromValue(value: any) {
-    var t = new Tuple();
+    var t = new Tuple()
     t.addValue(value)
-    return t;
+    return t
   }
 
   static fromList(... list: any[]) {
@@ -382,40 +381,43 @@ export class Tuple {
     if (list == null)
       return t
 
-    list.forEach(elm => t.addValue(elm));
+    list.forEach(elm => t.addValue(elm))
 
-    return t;
+    return t
+  }
+
+  get names() {
+    return this.#names
   }
 
   get size() {
-    return this._values.length;
+    return this.#values.length
   }
 
   // add value without id
   addValue(value: any) {
-    this.addKeyValue(null, value);
+    this.addKeyValue(null, value)
   }
 
-
   addKeyValue(key: string|null, value: any) {
-    if (key && this._names.has(key)) {
-      throw new FtlRuntimeError("Tuple.addKeyValue(.): key " + key + " already exists!");
+    if (key && this.#names.has(key)) {
+      throw new FtlRuntimeError("Tuple.addKeyValue(.): key " + key + " already exists!")
     }
 
     let seq = this.size
-    this._names.set(`_${seq}`, seq)
-    if (key) this._names.set(key, seq)
+    this.#names.set(`_${seq}`, seq)
+    if (key) this.#names.set(key, seq)
 
-    this._values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value);
+    this.#values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value)
   }
 
   /**
    * Invokes callback(key, value) for each pair of (key, value) in this tuple.
    */
   forEach(callback: Function) {
-    this._names.forEach((value, key, map) => {
-      callback(key, this._values[value]);
-    });
+    this.#names.forEach((value, key, map) => {
+      callback(key, this.#values[value])
+    })
   }
 
   /**
@@ -423,53 +425,53 @@ export class Tuple {
    */
   appendAll(tuple: Tuple | any) {
     if (tuple == null)
-      return;
+      return
 
     if (tuple instanceof Tuple) {
       let value_map = new Map<number, string>()
-      tuple._names.forEach((value, key, map) => {
+      tuple.#names.forEach((value, key, map) => {
         value_map.set(value, key)
       })
       value_map.forEach((value, key) => {
         if (value.startsWith('_') && !isNaN(parseInt(value.substring(1))))
-          this.addValue(tuple._values[key])
+          this.addValue(tuple.#values[key])
         else
-          this.addKeyValue(value, tuple._values[key])
+          this.addKeyValue(value, tuple.#values[key])
       })
     }
     else
-      this.addValue(tuple);
+      this.addValue(tuple)
   }
 
   // returns list of all names
   //
   getNames() {
-    return [];// TODO this._names.keys..filter(key => !key.startsWith("_"));
+    return []// TODO this._names.keys..filter(key => !key.startsWith("_"))
   }
 
   // returns named element value
   get(key: any) {
-    return this._values[this._names.get(key)];
+    return this.#values[this.#names.get(key)]
   }
 
   // returns indexed value
   getIndex(index: number) {
-    return this._values[index];
+    return this.#values[index]
   }
 
   hasTail(): boolean {
-    return this._values.find(elm => TailFn.isTail(elm)) !== undefined
+    return this.#values.find(elm => TailFn.isTail(elm)) !== undefined
   }
 
   // checks if any element or nested element is a reference
   // In essence it is equivalent to having any function
   hasRef():boolean {
-//    return this._values.find(elm => elm instanceof RefFn || elm instanceof Tuple && elm.hasRef()) !== undefined;
-    return this._values.find(elm => elm instanceof Fn) !== undefined
+//    return this._values.find(elm => elm instanceof RefFn || elm instanceof Tuple && elm.hasRef()) !== undefined
+    return this.#values.find(elm => elm instanceof Fn) !== undefined
   }
 
   toList() {
-    return this._values;
+    return this.#values
   }
 
   // Checkes equality of each value in both tuples sequentially. 
@@ -477,28 +479,28 @@ export class Tuple {
     function arrayIdentical(a:any, b:any) {
       if (!Array.isArray(a) || !Array.isArray(b))
         return false
-      var i = a.length;
-      if (i != b.length) return false;
+      var i = a.length
+      if (i != b.length) return false
       while (i--) {
-          if (a[i] != b[i]) return false;
+          if (a[i] != b[i]) return false
       }
-      return true;
+      return true
     }
     
     if (!(o instanceof Tuple))
-      return false;
+      return false
 
     if (o.size != this.size)
-      return false;
+      return false
 
     for (var i = 0; i < this.size; i++) {
-      var ith = this.getIndex(i);
-      var oth = o.getIndex(i);
+      var ith = this.getIndex(i)
+      var oth = o.getIndex(i)
       
       if (ith != oth && !arrayIdentical(ith, oth) && (!(ith instanceof Tuple) || !ith.equals(oth)))
-        return false;
+        return false
     }
-    return true;
+    return true
   }
 
   // converts into a tuple fn
@@ -506,11 +508,11 @@ export class Tuple {
   toTupleFn():Fn {
     var converted:any[] = []
     let value_map = new Map<number, string>()
-    this._names.forEach((value, key, map) => {
+    this.#names.forEach((value, key, map) => {
       value_map.set(value, key)
     })
     value_map.forEach((value, key) => {
-      var val = this._values[key]
+      var val = this.#values[key]
       if (val instanceof Tuple) {
         val = val.toTupleFn()
       } else if (!(val instanceof Fn)) {
@@ -531,17 +533,17 @@ export class Tuple {
   }
 
   toString() {
-    if (this._values.length == 0)
-      return "()";
+    if (this.#values.length == 0)
+      return "()"
 
     var buf: any[] = []
-    this._names.forEach((value, key, map) => {
-      var value_str = getValueString(this._values[value]);
+    this.#names.forEach((value, key, map) => {
+      var value_str = getValueString(this.#values[value])
       if (!key.startsWith('_'))
-        buf.push(key + ':' + value_str);
+        buf.push(key + ':' + value_str)
       else
-        buf.push(value_str);
-    });
+        buf.push(value_str)
+    })
 
     return '(' + buf.join(', ') + ')'
   }
@@ -554,12 +556,12 @@ export class Fn {
 
   // returns class name.
   get typeName() {
-    return this.constructor.name;
+    return this.constructor.name
   }
 
   // Applies function with input and context.
   apply(input?: any, context?: any): Tuple | any {
-    return new Tuple();
+    return new Tuple()
   }
 }
 
@@ -570,17 +572,27 @@ export class Fn {
  * fns: array of child functions
  */
 class ComposedFn extends Fn {
-  fns: Array<any>
-  // fns: function items
-  constructor(...fns: any[]) {
-    FnValidator.assertElmsTypes(fns, Fn);
 
-    super();
-    this.fns = fns || [];
+  #fns: Fn[]
+
+  // fns: function items
+  constructor(...fns: Fn[]) {
+    super()
+    FnValidator.assertElmsTypes(fns, Fn)
+
+    this.#fns = fns || []
+  }
+
+  get fns() {
+    return this.#fns
+  }
+
+  set fns(fns: Fn[]) {
+    this.#fns = fns
   }
 
   get size() {
-    return this.fns.length;
+    return this.#fns.length
   }
 }
 
@@ -588,22 +600,22 @@ class ComposedFn extends Fn {
  * Abstract function with func functions.
  */
 export class WrapperFn extends Fn {
-  wrapped: Fn;
+  wrapped: Fn
 
   // @param wrapped: any non-array Fn
   constructor(wrapped: Fn) {
-    FnValidator.assertElmType(wrapped, Fn);
+    FnValidator.assertElmType(wrapped, Fn)
 
-    super();
-    this.wrapped = wrapped;
+    super()
+    this.wrapped = wrapped
   }
 
   apply(input: any, context?: any) {
-    return this.wrapped.apply(input, context);
+    return this.wrapped.apply(input, context)
   }
 
   toString() {
-    return this.wrapped.toString();
+    return this.wrapped.toString()
   }
 }
 
@@ -614,25 +626,27 @@ export class WrapperFn extends Fn {
  *   non-null value
  */
 export class ConstFn extends Fn {
-  value: any;
+  #value: any
   constructor(value: Fn | any) {
+    super()
     FnValidator.assertNonNull(value)
-
-    super();
-
-    this.value = value;
+    this.#value = value
   }
 
   get valueType() {
-    return typeof this.value;
+    return typeof this.#value
+  }
+
+  get value() {
+    return this.#value
   }
 
   apply(input: any) {
-    return Array.isArray(this.value) ? Array.from(this.value) : this.value;
+    return Array.isArray(this.#value) ? Array.from(this.#value) : this.#value
   }
 
   toString() {
-    return getValueString(this.value);
+    return getValueString(this.#value)
   }
 }
 
@@ -643,11 +657,11 @@ export class ConstFn extends Fn {
  */
 class ImmutableValFn extends ConstFn {
 
-  name: string;
+  name: string
   // during construction, the value is computed and stored
   constructor(name: string, value: any) {
-    super(value);
-    this.name = name;
+    super(value)
+    this.name = name
   }
 }
 
@@ -655,24 +669,24 @@ class ImmutableValFn extends ConstFn {
  * Variable function.
  */
 class VarFn extends ImmutableValFn {
-  _val: any;
+  _val: any
   // during construction, the value is computed and stored
   constructor(name: string, value: any) {
-    super(name, value);
+    super(name, value)
   }
 
   // sets value
   set value(value: any) {
     if (value == undefined)
-      throw new Error("value to VarFn can not be undefined!")
-    this._val = value;
+      throw new FtlRuntimeError("value to VarFn can not be undefined!")
+    this._val = value
   }
 }
 
 export class FunctionBaseFn extends Fn {
-  name: string;
-  params: any;
-  body: Fn;
+  name: string
+  params: any
+  body: Fn
 
   constructor(name: string, params: any, body: any) {
     super()
@@ -691,14 +705,14 @@ apply(input: any, context: any) {
  */
 export class NativeFunctionFn extends FunctionBaseFn {
   static NativeScriptFn = class extends Fn {
-    jsfunc: any;
+    jsfunc: any
     constructor(jsfunc: Function) {
-      super();
-      this.jsfunc = jsfunc;
+      super()
+      this.jsfunc = jsfunc
     }
 
     apply(input: any) {
-      return this.jsfunc.apply(null, (input instanceof Tuple) && input.toList() || [input]);
+      return this.jsfunc.apply(null, (input instanceof Tuple) && input.toList() || [input])
     }
   }
 
@@ -708,8 +722,8 @@ export class NativeFunctionFn extends FunctionBaseFn {
   // script: javascript function with parameter declaration and body.
   constructor(name: string, params: any, jsfunc: Function) {
 
-    FnValidator.assertElmType(params, TupleFn);
-    FnValidator.assertElmsTypes(params.fns, RefFn, NamedExprFn, FunctionInterfaceFn);
+    FnValidator.assertElmType(params, TupleFn)
+    FnValidator.assertElmsTypes(params.fns, RefFn, NamedExprFn, FunctionInterfaceFn)
 
     super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc))
   }
@@ -721,48 +735,48 @@ export class NativeFunctionFn extends FunctionBaseFn {
   static buildParameters(params: any) {
     if (params instanceof RefFn)
       return new TupleFn(params)
-    var has_default = false;
+    var has_default = false
     for (var i = 0; i < params.funcCount; i++) {
       if (!has_default && params.func(i) instanceof NamedExprFn)
-        has_default = true;
+        has_default = true
       else if (has_default && params.func(i) instanceof RefFn)
-        throw new Error("Non default argument " + params.func(i).name + " follows default argument.");
-      params.setfunc(i, new NamedExprFn(params.func(i).name, new RefFn("_" + i, null)));
+        throw new FtlRuntimeError("Non default argument " + params.func(i).name + " follows default argument.")
+      params.setfunc(i, new NamedExprFn(params.func(i).name, new RefFn("_" + i, null)))
     }
-    return params;
+    return params
   }
 
   static buildParameters1(module: any, params: any) {
     //if (params instanceof RefFn)
-    //  params = new TupleFn(params).build(module, new TupleFn());
+    //  params = new TupleFn(params).build(module, new TupleFn())
 
-    //      var valid = params.isPureRefs;
-    var default_count = 0;
+    //      var valid = params.isPureRefs
+    var default_count = 0
     for (var i = 0; i < params.fns.length; i++) {
-      let node: RefFn | NamedExprFn = params.fns[i];
+      let node: RefFn | NamedExprFn = params.fns[i]
 
       if (node instanceof RefFn) {
-        params.fns[i] = new NamedExprFn(node.name, new TupleSelectorFn(i));
+        params.fns[i] = new NamedExprFn(node.name, new TupleSelectorFn(i))
       } else if (node instanceof NamedExprFn) {
         if (node.wrapped instanceof TupleSelectorFn) {
           if ((node.wrapped as TupleSelectorFn).seq != + i)
-            throw new Error("Parameter " + node.name + " has tuple selector for the wrong sequence " + node.wrapped.seq + "!");
+            throw new FtlRuntimeError("Parameter " + node.name + " has tuple selector for the wrong sequence " + node.wrapped.seq + "!")
         } else
-          params.fns[i] = new NamedExprFn(node.name, new SeqSelectorOrDefault(i, node.wrapped));
+          params.fns[i] = new NamedExprFn(node.name, new SeqSelectorOrDefault(i, node.wrapped))
       }
     }
-    return params;
+    return params
   }
 
   apply(input: any, context?:any) {
     if (FnUtil.isNone(input) && this.params.size > 0)
-      throw new Error("Input to native function " + this.name + " does not match!");
-    var paramValues = this.params.apply(input);
-    return this.body.apply(paramValues);
+      throw new FtlRuntimeError("Input to native function " + this.name + " does not match!")
+    var paramValues = this.params.apply(input)
+    return this.body.apply(paramValues)
   }
 
   toString() {
-    return this.name;
+    return this.name
   }
 }
 
@@ -772,14 +786,14 @@ export class NativeFunctionFn extends FunctionBaseFn {
 export class FunctionFn extends FunctionBaseFn {
   static FunctionBodyFn = class extends WrapperFn {
     constructor(expr: any) {
-      super(expr);
+      super(expr)
     }
 
     apply(input: string, context?: any) {
-      let res:TailFn|Tuple = super.apply(input, context)
+      let res:Fn|Tuple = super.apply(input, context)
       var i = 0
       while (res instanceof TailFn) {
-        i++;
+        i++
         if (i == 10000)
           break
         if (context == this) {
@@ -788,7 +802,9 @@ export class FunctionFn extends FunctionBaseFn {
 
         res = res.hasTail() ? res.ResolveNextTail(this) : res.apply(null, this)
       }
-      return res
+
+      // result may be wrapped into ConstFn during tail computation
+      return res instanceof ConstFn ? res.apply(null) : res
     }
   }
 
@@ -804,7 +820,7 @@ export class FunctionFn extends FunctionBaseFn {
 //   fn x || y()
 //
 // We know that in this operator || which represents logic "or", if x is true, y is not needed.
-// In oher words, y is invoked only when x is false;
+// In oher words, y is invoked only when x is false.
 //
 // Optionally, y or any operand can be noted with "$" such as "y$". This tells the system that it is a
 // tail that can be returned to the calling stack of the operator, and it can be invoked there.
@@ -815,36 +831,36 @@ export class FunctionFn extends FunctionBaseFn {
 //   params
 //   seq
 export class FunctionInterfaceFn extends Fn {
-  name: string;
-  params: any;
-  seq: number;
-  partial_input: any;
+  name: string
+  params: any
+  seq: number
+  partial_input: any
 
   // temp
 
-  isTail: any;
-  closure: any;
-  wrapped: any;
-  fn: any;
+  isTail: any
+  closure: any
+  wrapped: any
+  fn: any
   constructor(name: string, params: any, seq = 0) {
-    super();
-    this.name = name;
-    this.params = params;
-    this.seq = seq;
+    super()
+    this.name = name
+    this.params = params
+    this.seq = seq
   }
 
   native_f(input: any) {
-    return this.partial_input instanceof Tuple ? this.partial_input.getIndex(this.seq) : this.partial_input;
+    return this.partial_input instanceof Tuple ? this.partial_input.getIndex(this.seq) : this.partial_input
   }
 
   /**
    * Converts a javascript arguments into a tuple.
    */
   static js_args_to_tuple(params: any, args: any) {
-    var ret = new Tuple();
+    var ret = new Tuple()
     for (var i = 0; i < params.fns.length; i++)
-      ret.addKeyValue(params.fns[i].name, args[i]);
-    return ret;
+      ret.addKeyValue(params.fns[i].name, args[i])
+    return ret
   }
 
 
@@ -857,41 +873,41 @@ export class FunctionInterfaceFn extends Fn {
     console.log("fn_ref arguments", arg)
     console.log("fn_ref closure", this.closure)
 
-    var len = arguments.length;
+    var len = arguments.length
     if (len == 0)
-      return this.fn.apply(this.params.apply());
+      return this.fn.apply(this.params.apply())
 
-    var tpl = new Tuple();
+    var tpl = new Tuple()
 
     // has parameters
     // no named parameters
 
-    var start = 0;
+    var start = 0
     if (this.params instanceof RefFn) {
 
       // TODO
       if (this.params.name === 'raw')
-        return this.wrapped.apply(arg);
+        return this.wrapped.apply(arg)
 
       // TODO change ref type
       if (this.params.isRefType()) {
-        // TODO tpl = this.params.params.apply(FunctionInterfaceFn.js_args_to_tuple(arguments));
+        // TODO tpl = this.params.params.apply(FunctionInterfaceFn.js_args_to_tuple(arguments))
       } else
-        tpl.addKeyValue(this.params.name, arg);
-      start = 1;
+        tpl.addKeyValue(this.params.name, arg)
+      start = 1
     } else if (this.params instanceof TupleFn) {
-      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params, arguments);
-      start = this.params.fns.length;
+      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params, arguments)
+      start = this.params.size
     }
 
     // call expr where params is array of TupleFn
     else if (Array.isArray(this.params) && this.params[0] instanceof TupleFn) {
-      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params[0], arguments);
-      start = this.params[0].fns.length;
+      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params[0], arguments)
+      start = this.params[0].fns.length
     }
 
-    var res = this.fn.apply(tpl);
-    return FnUtil.unwrapMonad(res);
+    var res = this.fn.apply(tpl)
+    return FnUtil.unwrapMonad(res)
   }
 
   apply(input: any) {
@@ -902,11 +918,11 @@ export class FunctionInterfaceFn extends Fn {
     }
 
     if (this.isTail) {
-      return bindingFunctions.pass_through.bind(new TailFn(f));
+      return bindingFunctions.pass_through.bind(new TailFn(f))
     } else {
-      return this.fn_ref.bind({ fn: input instanceof Tuple ? f : input, params: this.params });
+      return this.fn_ref.bind({ fn: input instanceof Tuple ? f : input, params: this.params })
     }
-    //      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params});
+    //      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params})
   }
 }
 
@@ -914,20 +930,20 @@ export class FunctionInterfaceFn extends Fn {
  * Stateful intermediate partial function storing function and partial parameters.
  */
 class PartialFunction {
-  f: Fn;
-  partialParams: any;
+  f: Fn
+  partialParams: any
   constructor(f: any, partialParams: any) {
-    this.f = f;
-    this.partialParams = partialParams;
+    this.f = f
+    this.partialParams = partialParams
   }
 
   apply(input: any, context?:any) {
-    var tuple = new Tuple();
+    var tuple = new Tuple()
 
     // TODO can not simply append
     tuple.appendAll(this.partialParams)
     tuple.appendAll(input)
-    return this.f.apply(tuple, context);
+    return this.f.apply(tuple, context)
   }
 }
 
@@ -936,11 +952,11 @@ class PartialFunction {
  */
 export class FunctionalFn extends WrapperFn {
   constructor(expr: any) {
-    super(expr);
+    super(expr)
   }
 
   apply(input: any) {
-    return new PartialFunction(this.wrapped, input);
+    return new PartialFunction(this.wrapped, input)
   }
 }
 
@@ -954,52 +970,43 @@ export class FunctionalFn extends WrapperFn {
 export class TupleFn extends ComposedFn {
 
   // temporary
-  tuple: any;
+  tuple: any
   constructor(...fns: any[]) {
-    FnValidator.assetNoDupNames(...fns);
-    super(...fns);
+    FnValidator.assetNoDupNames(...fns)
+    super(...fns)
   }
 
   // Tells if this TupleFn contains a NamedExprFn element.
   hasName(name: string) {
-    return this.getNamedFn(name) != null;
+    return this.getNamedFn(name) != null
   }
 
   // Returns element with the name. 
   getNamedFn(name: string) {
-    return FnUtil.getFn(this.fns, (fn: any) => fn instanceof NamedExprFn && fn.name == name);
+    return FnUtil.getFn(this.fns, (fn: any) => fn instanceof NamedExprFn && fn.name == name)
   }
 
   apply(input: any, context?: any) {
-    var tuple = new Tuple();
-    var len = this.fns.length;
+    var tuple = new Tuple()
+    var len = this.size
     if (len == 0)
-      return tuple;
+      return tuple
 
     for (var i = 0; i < len; i++) {
-      var fn = this.fns[i];
+      var fn = this.fns[i]
 
-      var res = null;
-      if (fn instanceof Fn)
-        res = fn.apply(input, context);
-      else if (fn instanceof Tuple || Array.isArray(fn)) {
-        res = fn
-      } else {
-        var tp = typeof (fn);
-        if (tp == 'number' || tp == 'string' || tp == 'boolean')
-          res = fn;
-      }
+      var res = fn.apply(input, context)
 
       if (fn instanceof NamedExprFn || fn instanceof TailFn) {
 
         // if no name is resolved, return itself
         // TODO test is this needed?
         ////if (res === fn.wrapped)
-        ////  return this;
-        tuple.addKeyValue(fn.name, res);
+        ////  return this
+        tuple.addKeyValue(fn.name, res)
       }
       else
-        tuple.addValue(res);
+        tuple.addValue(res)
     }
 
     return tuple
@@ -1013,55 +1020,55 @@ export class TupleFn extends ComposedFn {
  */
 class ParamTupleFn extends TupleFn {
   constructor(...fns: any[]) {
-    super(...fns);
+    super(...fns)
   }
 
   validateInput(inputFn: any, minSize: number) {
-    var names = new Set();
-    var pos_sz = 0;
+    var names = new Set()
+    var pos_sz = 0
     for (var i = 0; i < inputFn.size; i++) {
       if (inputFn.fns[i] instanceof NamedExprFn) {
-        names.add(inputFn.fns[i].name);
+        names.add(inputFn.fns[i].name)
       } else if (names.size > 0) {
-        throw new Error("Position argument at index " + i + " after named argument!");
+        throw new FtlRuntimeError("Position argument at index " + i + " after named argument!")
       } else
-        pos_sz = i + 1;
+        pos_sz = i + 1
     }
 
     // when there are only positioned arguments and are more than minimal
     if (names.size == 0 && inputFn.fns.length >= minSize)
-      return null;
+      return null
 
-    var need_new_args = false;
-    var new_args = new Array();
+    var need_new_args = false
+    var new_args = new Array()
     /*
         for (var i = 0; i < params.size; i++) {
-          var name = params.fns[i].name;
+          var name = params.fns[i].name
           if (i < pos_sz) {
             if (names.has(name)) {
-              throw new Error("Parameter " + name + " is provided with both position and named argument!");
+              throw new FtlRuntimeError("Parameter " + name + " is provided with both position and named argument!")
             }
   
-            new_args[i] = args.fns[i];
+            new_args[i] = args.fns[i]
           }
           else if (!names.has(name)) {
-            new_args[i] = params.fns[i];
-            need_new_args = true;
+            new_args[i] = params.fns[i]
+            need_new_args = true
           }
           else if (i < args.size && args.fns[i].name == name) {
-            new_args[i] = args.fns[i];
+            new_args[i] = args.fns[i]
           }
           else {
-            new_args[i] = args.getElement(name);
-            need_new_args = true;
+            new_args[i] = args.getElement(name)
+            need_new_args = true
           }
         }
     */
-    return need_new_args && new TupleFn(...new_args) || null;
+    return need_new_args && new TupleFn(...new_args) || null
   }
 
   clone() {
-    return new ParamTupleFn(... this.fns);
+    return new ParamTupleFn(... this.fns)
   }
 }
 
@@ -1071,19 +1078,19 @@ class ParamTupleFn extends TupleFn {
  * This is always an element in a TupleFn.
  */
 export class NamedExprFn extends WrapperFn {
-  name: string;
+  name: string
   constructor(name: string, elm: any) {
-    super(elm);
-    this.name = name;
+    super(elm)
+    this.name = name
   }
 
   // TODO: check use cases
   hasRef() {
-    return this.wrapped instanceof RefFn;
+    return this.wrapped instanceof RefFn
   }
 
   get isConst() {
-    return this.wrapped instanceof ConstFn;
+    return this.wrapped instanceof ConstFn
   }
 }
 
@@ -1101,16 +1108,16 @@ export class PipeFn extends ComposedFn {
    */
   static createPipeFn(first: any, rest: any) {
     if (first instanceof PipeFn) {
-      first.appendElements(rest);
-      return first;
+      first.appendElements(rest)
+      return first
     } else if (rest instanceof PipeFn) {
-      rest.prependElements(first);
-      return rest;
+      rest.prependElements(first)
+      return rest
     } else {
-      var list: any = Array.isArray(first) ? list : [first];
+      var list: any = Array.isArray(first) ? list : [first]
       var ret = new PipeFn(Array.isArray(first) ? first : [first])
-      ret.appendElements(rest);
-      return ret;
+      ret.appendElements(rest)
+      return ret
     }
   }
 
@@ -1118,18 +1125,18 @@ export class PipeFn extends ComposedFn {
    * Appends elements.
    */
   appendElements(elms: any) {
-    var toBeAppended = Array.isArray(elms) ? elms : [elms];
-    //this.modifyElements(toBeAppended);
-    this.fns = this.fns.concat(toBeAppended);
+    var toBeAppended = Array.isArray(elms) ? elms : [elms]
+    //this.modifyElements(toBeAppended)
+    this.fns = this.fns.concat(toBeAppended)
   }
 
   /**
    * Prepends elements.
    */
   prependElements(elms: any) {
-    var toBePrepended = Array.isArray(elms) ? elms : [elms];
-    this.modifyElements(toBePrepended);
-    this.fns = toBePrepended.concat(this.fns);
+    var toBePrepended = Array.isArray(elms) ? elms : [elms]
+    this.modifyElements(toBePrepended)
+    this.fns = toBePrepended.concat(this.fns)
   }
 
   get elements() { return this.fns }
@@ -1137,17 +1144,17 @@ export class PipeFn extends ComposedFn {
   modifyElements(list: Array<any>) {
     list.forEach(elm => {
       if (elm instanceof RefFn) {
-        // TODO elm.tupleSeq = '_0';
+        // TODO elm.tupleSeq = '_0'
       }
-    });
+    })
   }
 
   apply(tuple: any, context: any) {
-    var res = this.fns[0].apply(tuple, context);
+    var res = (this.fns[0] as Fn).apply(tuple, context)
 
     // there is name unresolved
     if (res === this.fns[0])
-      return this;
+      return this
 
     for (var i = 1; i < this.fns.length; i++) {
       if (res instanceof TailFn) {
@@ -1164,7 +1171,7 @@ export class PipeFn extends ComposedFn {
       res = this.fns[i].apply(res, context)
     }
 
-    return FnUtil.unwrapMonad(res);
+    return FnUtil.unwrapMonad(res)
   }
 
   toString() {
@@ -1176,63 +1183,64 @@ export class PipeFn extends ComposedFn {
  * Function capturing any reference.
  */
 export class RefFn extends Fn {
-  name: string;
-  params: any;
+  name: string
+  params: any
   module: any
-  unresolved: boolean;
+  unresolved: boolean
   constructor(name: string, module:any) {
-    super();
+    super()
     this.name = name
     this.module = module
-    this.unresolved = false;
+    this.unresolved = false
   }
 
   // TODO 
   isRefType() {
-    return false;
+    return false
   }
+  
   // Tells if this is a tuple selector such as "_0", "_1", etc.
   isTupleSelector() {
-    return this.name.match(TupleSelectorPattern) != null;
+    return this.name.match(TupleSelectorPattern) != null
   }
 
   apply(input: any, context?: any) {
-    var e;
+    var e
 
     // find name from scoped tuple first
     if (input && input instanceof Tuple)
-      e = input.get(this.name);
+      e = input.get(this.name)
 
     if (e !== undefined) {
       if (this.params != null) {
         if (typeof (e) == 'function') {
-          var args = [];
+          var args = []
           if (this.params instanceof RefFn)
             args.push(input.get(this.params.name))
           else if (this.params instanceof Fn) {
-            args = this.params.apply(input);
-            args = args instanceof Tuple ? args.toList() : [args];
+            args = this.params.apply(input)
+            args = args instanceof Tuple ? args.toList() : [args]
           }
           else for (var i = 0; i < this.params.size; i++)
-            args.push(input.get(this.params[i].name));
+            args.push(input.get(this.params[i].name))
           return e.apply(null, args)
         }
 
         // e not a function but an Fn
         else {
-          var tpl = this.params.apply(input);
+          var tpl = this.params.apply(input)
           if (this.params instanceof RefFn)
-            tpl = Tuple.fromKeyValue(this.params.name, tpl);
+            tpl = Tuple.fromKeyValue(this.params.name, tpl)
           else if (!(tpl instanceof Tuple))
-            tpl = Tuple.fromValue(tpl);
-          return e.apply(tpl);
+            tpl = Tuple.fromValue(tpl)
+          return e.apply(tpl)
         }
       }
-      return e;
+      return e
     }
 
     if (this.name == '_0' && input && !(input instanceof Tuple))
-      return input;
+      return input
 
     // can not find ref, return itself
     var f
@@ -1244,7 +1252,7 @@ export class RefFn extends Fn {
       return f
     }
 
-    return this;
+    return this
   }
 }
 
@@ -1273,32 +1281,32 @@ export class FunctionHolder extends Fn {
  *   (1, 2, 3) -> (_2, _3) results in (2, 3)
  */
 export class TupleSelectorFn extends Fn {
-  seq: number;
+  seq: number
   constructor(seq: any) {
     if (seq == undefined || seq == null)
-      throw new FnConstructionError('seq is undefined or null!');
+      throw new FnConstructionError('seq is undefined or null!')
 
     if ('number' != typeof seq)
-      throw new FnConstructionError('seq is not number!');
+      throw new FnConstructionError('seq is not number!')
 
     if (seq < 0)
-      throw new FnConstructionError('seq is smaller than 0!');
+      throw new FnConstructionError('seq is smaller than 0!')
 
-    super();
-    this.seq = seq;
+    super()
+    this.seq = seq
   }
 
   apply(input: any) {
     if (FnUtil.isNone(input))
-      return this;
+      return this
 
     if (input instanceof Tuple)
-      return input.getIndex(this.seq);
+      return input.getIndex(this.seq)
 
     if (this.seq == 0)
-      return input;
+      return input
 
-    return null;
+    return null
   }
 }
 
@@ -1313,21 +1321,21 @@ export class SeqSelectorOrDefault extends TupleSelectorFn {
   defaultValue: any
   constructor(seq: any, defaultFn: any) {
     if (!(defaultFn instanceof Fn))
-      throw new FnConstructionError('defaultFn is not instanceof Fn!');
+      throw new FnConstructionError('defaultFn is not instanceof Fn!')
 
-    var default_val = defaultFn.apply();
+    var default_val = defaultFn.apply()
     if (default_val instanceof Fn)
-      throw new FnConstructionError('defaultFn is not a constant or constant expresion!');
+      throw new FnConstructionError('defaultFn is not a constant or constant expresion!')
 
-    super(seq);
-    this.defaultValue = default_val;
+    super(seq)
+    this.defaultValue = default_val
   }
 
   apply(input: any) {
-    var sv = super.apply(input);
+    var sv = super.apply(input)
     if (sv !== undefined && sv != null && sv != this)
-      return sv;
-    return this.defaultValue;
+      return sv
+    return this.defaultValue
   }
 }
 
@@ -1337,17 +1345,17 @@ export class SeqSelectorOrDefault extends TupleSelectorFn {
 export class ExprFn extends WrapperFn {
   paramtuples: any
   constructor(f: any, ...paramtuples: any[]) {
-    FnValidator.assertElmsTypes(paramtuples, Fn);
+    FnValidator.assertElmsTypes(paramtuples, Fn)
 
-    super(f);
-    this.paramtuples = paramtuples;
+    super(f)
+    this.paramtuples = paramtuples
   }
 
   apply(input: any, context?:any) {
-    var ret = super.apply(input);
+    var ret = super.apply(input)
     for (var i = 0; i < this.paramtuples.length; i++)
-      ret = ret.toTupleFn().apply(this.paramtuples[i].apply(input, context));
-    return ret instanceof Tuple && ret.size == 1 ? ret.get('_0') : ret;
+      ret = ret.toTupleFn().apply(this.paramtuples[i].apply(input, context))
+    return ret instanceof Tuple && ret.size == 1 ? ret.get('_0') : ret
   }
 
   toString() {
@@ -1362,25 +1370,25 @@ export class ExprFn extends WrapperFn {
  * or a lambda expression invocation with named refrences.   
  */
 export class CallExprFn extends Fn {
-  f: Fn;
-  name: string;
-  params: any;
+  f: Fn
+  name: string
+  params: any
   constructor(name: string, f: any, params: any) {
-    super();
-    this.f = f;
-    this.name = name;
-    this.params = params;
+    super()
+    this.f = f
+    this.name = name
+    this.params = params
   }
 
   apply(input: any, context?:any) {
-    var f = !this.f ? input.get(this.name) : this.f;
+    var f = !this.f ? input.get(this.name) : this.f
     if (!(f instanceof Fn))
-      throw new Error(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
+      throw new FtlRuntimeError(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)")
     if (f instanceof RefFn) {
-      f = f.apply(input);
+      f = f.apply(input)
     }
     let intermediate = FnUtil.unwrapMonad(this.params[0].apply(input))
-    let ret;
+    let ret
     if (typeof f == 'function') {
       if (intermediate instanceof Tuple) {
         ret = f(...intermediate.toList())
@@ -1388,11 +1396,11 @@ export class CallExprFn extends Fn {
         ret = f(intermediate)
       }
     } else {
-      ret = f.apply(intermediate);
+      ret = f.apply(intermediate)
     }
     for (var i = 1; i < this.params.length; i++)
-      return ret.apply(this.params[i].apply(input));
-    return ret;
+      return ret.apply(this.params[i].apply(input))
+    return ret
   }
 }
 
@@ -1417,18 +1425,18 @@ export class CallExprFn extends Fn {
  * where $(i) - > i + 2 is an explicit lambda with any identity as the functional parameter item.
  */
 export class ExprRefFn extends WrapperFn {
-  fnl: any;
+  fnl: any
 
   // temporary
-  closure: any;
+  closure: any
   params: any
 
   constructor(fnl: any, expr: any) {
     if (!(fnl instanceof FunctionInterfaceFn))
-      throw new Error("functional is not instanceof FunctionalFn");
+      throw new FtlRuntimeError("functional is not instanceof FunctionalFn")
 
-    super(expr);
-    this.fnl = fnl;
+    super(expr)
+    this.fnl = fnl
   }
 
   // This is a function passing to native javascript functions.
@@ -1440,32 +1448,32 @@ export class ExprRefFn extends WrapperFn {
     console.log("fn_ref arguments", arg)
     //console.log("fn_ref closure", this.closure)
 
-    var len = arguments.length;
+    var len = arguments.length
     if (len == 0)
       return this.wrapped.apply(this.closure)
 
-    var tpl = new Tuple();
+    var tpl = new Tuple()
 
     // has parameters
     // no named parameters
 
-    var start = 0;
+    var start = 0
 
 
-    var res = this.wrapped.apply(tpl);
-    return (res instanceof Tuple && res.size == 1) ? res.get('_0') : res;
+    var res = this.wrapped.apply(tpl)
+    return (res instanceof Tuple && res.size == 1) ? res.get('_0') : res
   }
 
   apply(input: any) {
-    return new PartialFunction(this.wrapped, input);
+    return new PartialFunction(this.wrapped, input)
   }
 
   /*
     apply(input) {
       if (this.fnl.isTail) {
-        return pass_through.bind(new TailFn(this.wrapped, input));
+        return pass_through.bind(new TailFn(this.wrapped, input))
       } else {
-        return this.fn_ref.bind({wrapped: this.wrapped, closure: input, params: this.fnl.params});
+        return this.fn_ref.bind({wrapped: this.wrapped, closure: input, params: this.fnl.params})
       }
     }
   */
@@ -1494,7 +1502,7 @@ class TailFn extends WrapperFn {
     if (fn instanceof PipeFn) {
       var first = fn.fns[0]
       if (TailFn.isTail(first)) {
-        fn.fns[0] = first.wrapped
+        fn.fns[0] = (first as TailFn).wrapped
       } else if (first instanceof TupleFn) {
         this.addTail(first)
       }
@@ -1515,7 +1523,7 @@ class TailFn extends WrapperFn {
     }
     else {
       tail.fns.filter(elm => elm instanceof TupleFn).forEach(elm => {
-        this.addTail(elm)
+        this.addTail(elm as TupleFn)
       })
     }
   }
@@ -1553,15 +1561,16 @@ class TailFn extends WrapperFn {
     for (var i = 0; i < tuple.length; i++) {
       var elm = tuple[i]
       if (TailFn.isTail(elm)) {
+        let tail:TailFn = elm as TailFn
         var next = elm.apply(null, context)
         if (TailFn.isTail(next)) {
           this.addAllTails(next)
-          tuple[i] = elm.name ? new NamedExprFn(elm.name, next.wrapped) : next.wrapped
+          tuple[i] = tail.name ? new NamedExprFn(tail.name, next.wrapped) : next.wrapped
         }
 
         // end of recursive
         else {
-          tuple[i] = elm.name ? new NamedExprFn(elm.name, next instanceof Fn ? next : new ConstFn(next)) : next
+          tuple[i] = tail.name ? new NamedExprFn(tail.name, next instanceof Fn ? next : new ConstFn(next)) : next
         }
       }
     }
@@ -1571,10 +1580,9 @@ class TailFn extends WrapperFn {
   apply(input: any, context?: any) {
     var res = this.wrapped.apply(this.closure, context)
     res = FnUtil.unwrapMonad(res)
-    if (res instanceof Tuple && res.hasTail()) {
-      return new TailFn(res.toTupleFn())
-    }
-    return res
+    if (res instanceof TailFn) return res
+    else if (res instanceof Tuple && res.hasTail()) return new TailFn(res.toTupleFn())
+    return new ConstFn(res)
   }
 }
 
@@ -1641,17 +1649,17 @@ export class ArrayInitializerWithRangeFn extends Fn {
  * @parameter index - index of element to select
  */
 export class ArrayElementSelectorFn extends Fn {
-  name: string;
-  index: Fn | number;
+  name: string
+  index: Fn | number
   constructor(name: string, index: Fn | number) {
     super()
-    this.name = name;
+    this.name = name
     this.index = index instanceof ConstFn ? index.apply(null) : index
     if (Array.isArray(this.index)) {
       if (this.index.length == 1) {
         this.index = this.index[0]
       } else {
-        throw new Error('multiple selectors not supported yet!')
+        throw new FnConstructionError('multiple selectors not supported yet!')
       }
     }
   }
@@ -1661,16 +1669,16 @@ export class ArrayElementSelectorFn extends Fn {
       input instanceof Tuple && (input.get(this.name) || null)
       || ((this.name == '_' || this.name == '_0') && input)
       || []
-    );
+    )
 
     if (list instanceof VarFn)
-      list = list.value;
+      list = list.value
 
-    let index: any = typeof this.index == 'number' ? this.index : this.index.apply(input);
+    let index: any = typeof this.index == 'number' ? this.index : this.index.apply(input)
     if (list)
-      return list[index] || null;
+      return list[index] || null
     else
-      return this;
+      return this
   }
 }
 
@@ -1742,7 +1750,7 @@ export class RaiseFunctionForArrayFn extends Fn {
     if (raised_f instanceof RefFn) {
       raised_f = this.raised_function.apply(input, context)
       if (!raised_f || raised_f == this.raised_function) {
-        throw new Error(`Function for '${this.raised_function.name}' not found`)
+        throw new FtlRuntimeError(`Function for '${this.raised_function.name}' not found`)
       }
     }
 
@@ -1773,7 +1781,7 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
     }
 
     if (!is_first_array) {
-      throw new Error('first is not array!')
+      throw new FtlRuntimeError('first is not array!')
     }
 
     if (!is_second_array) {
@@ -1803,7 +1811,7 @@ export class ExecutableFn extends WrapperFn {
   }
 
   apply() {
-    let ret = this.wrapped.apply();
+    let ret = this.wrapped.apply()
 
     // TODO tail
     while (TailFn.isTail(ret)) {
@@ -1845,7 +1853,7 @@ export class CurryExprFn extends Fn {
 }
 
 // runtime modules
-var modules = new Map<string, any>();
+var modules = new Map<string, any>()
 
 // returns module with name.
 export function getModule(name: string) {
@@ -1856,6 +1864,6 @@ export function getModule(name: string) {
 export function addModule(module: any) {
   let name = module._name
   if (modules.has(name))
-    throw new Error("Module with name '" + name + "' already exists!");
-  modules.set(name, module);
+    throw new Error("Module with name '" + name + "' already exists!")
+  modules.set(name, module)
 }
