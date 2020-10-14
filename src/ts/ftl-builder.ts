@@ -117,9 +117,8 @@ function buildImportSingleItem(details:any, module:any) {
   if (!name) {
     //if (asName != null)
     //  throw new Error("Importing * (all) can not have alias name!")
-    var fns = mod.getAllFns()
-    Object.keys(fns).forEach(key => {
-      module.addImport(key, fns[key])
+    mod.fn_names.forEach((n: string) => {
+      module.addImport(n, mod.getFn(n))
     })
   }
   else

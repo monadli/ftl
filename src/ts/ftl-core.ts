@@ -175,6 +175,13 @@ class FtlRuntimeError extends Error {
   }
 }
 
+interface ImportItem {
+  type: string
+  name: string
+  asName: string
+  path: string
+  importList: ImportItem[]
+}
 
 /**
  * A module holds a list of defined identifiers that can be seen from the outside
@@ -187,12 +194,12 @@ export class Module {
   #name: string
   #functions: Record<string, Fn>
   #imports: Record<string, Fn>
-  #executables: Fn[]
+  #executables: ExecutableFn[]
 
   /**
    * Creates a module with name, such as 'ftl.lang'
    */
-  constructor(name: string) {
+  constructor(name?: string) {
     this.#name = name || ''
     this.#functions = {}
     this.#imports = {}
@@ -207,9 +214,7 @@ export class Module {
   }
 
   /**
-   * Sets module name.
-   * 
-   * A module can not be set to a different name once it is set.
+   * Sets module name only if originally not set.
    */
   set name(name) {
     if (this.#name && name !== this.#name)
@@ -218,156 +223,114 @@ export class Module {
     this.#name = name
   }
 
-  importStatement(path: string, items: any[]) {
-    items.forEach(item => {
-      if (item.type == 'single') {
-        var name = item.name
-        var asName = item.asName
-
-        // import * operator
-        if (name == '*') {
-          var mod = getModule(path)
-          if (mod == null)
-            throw new FtlRuntimeError('Module ' + path + ' does not exist!')
-          var f = mod.getFn(name)
-          if (!f)
-            throw new FtlRuntimeError('Operator * not found in ' + path + '!')
-          this.addImport(asName || name, f)
-          return
-        }
-
-        // name starts with '.' is module relateive to path
-        let relative = name.startsWith('.')
-
-        // relative import
-        if (name.startsWith('.')) {
-          name = path + '/' + name
-        }
-
-        // absolute import
-        else {
-          name = 'lib/' + name
-        }
-
-        var dotIdx = name.lastIndexOf('.')
-        if (dotIdx < 0)
-          throw new FtlRuntimeError(name + ' is not a module!')
-
-        var id = name.substring(dotIdx + 1)
-        var moduleName = name.substring(0, dotIdx)
-        var mod = getModule(moduleName)
-        if (!mod) {
-          throw new ModuleNotLoadedError(moduleName)
-        }
-
-        // import all
-        if (id == '*') {
-          if (asName != null)
-            throw new FtlRuntimeError("Importing * (all) can not have alias name!")
-          var fns = mod.getAllFns()
-          Object.keys(fns).forEach(key => {
-            this.addImport(key, fns[key])
-          })
-        }
-        else {
-          this.addImport(asName || id, mod.getFn(id))
-        }
-      }
-
-      // import list of items
-      else {
-        var subPath = item.path
-
-        item.importList.forEach((sub: any) => {
-          this.importStatement(subPath, Array.isArray(sub) ? sub : [sub])
-        })
-      }
-    })
-  }
-
   addImport(name: string, f: Fn) {
     if (!f)
-      throw new FtlRuntimeError('Can not import null for ' + name + '!')
+      throw new FnConstructionError('Can not import null for ' + name + '!')
 
-    if (this.#imports[name]) {
+    if (this.#imports[name])
       console.log("import " + name + " exists! Overriding.")
-    }
 
     this.#imports[name] = f
   }
 
-  addFn(f: NativeFunctionFn | FunctionFn) {
-    if (this.#functions[f.name] != null) {
+  /**
+   * Add a function to module.
+   *
+   * Can add a function holder and later on replace with real function.
+   * This is useful for definition of recursive function.
+   *
+   * Cannot define two functions with same name in a module.
+   *
+   * @param f function with unique name to module
+   */
+  addFn(f: FunctionBaseFn|FunctionHolder) {
+    if (this.#functions[f.name]) {
       let nf = this.#functions[f.name]
       if (nf instanceof FunctionHolder)
         nf.wrapped = f
       else
-        throw { message: "'" + f.name + "' exists and can not be declared again!" }
+        throw new FnConstructionError(`${f.name} exists and can not be declared again!`)
     }
 
     this.#functions[f.name] = f
   }
 
-  // Returns module defined identifier. 
+  /**
+   * Returns module defined function.
+   */
   getFn(name: string) {
     return this.#functions[name]
   }
 
-  // Tells if module contains a function with name.
+  /**
+   * Tells if module contains a module defined function
+   * or imported function with name.
+   */
   hasFn(name: string) {
     return this.getAvailableFn(name) != null
   }
 
-  // Returns either module defined or imported identifier. 
+  /**
+   * Returns either module defined or imported function.
+   */
   getAvailableFn(name: string) {
     return this.#functions[name] || this.#imports[name]
   }
 
-  getAllFns() {
-    return this.#functions
-  }
-
-  addExecutable(exec: Fn) {
-    // passing empty tuple as input
+  addExecutable(exec: ExecutableFn) {
     this.#executables.push(exec)
   }
 
-  get executables(): any[] { return this.#executables }
-
-  get lastExecutable() {
-    return this.#executables[this.#executables.length - 1]
+  get fn_names() {
+    return Object.keys(this.#functions)
   }
 
-  apply() {
-    return this.executables.map(e => {
+  get executables() { 
+    return this.#executables[Symbol.iterator]()
+  }
+
+  get executable_size() { 
+    return this.#executables.length
+  }
+
+  apply(): unknown[] {
+    var ret:unknown[] = []
+    for (let exec of this.executables) {
       try {
-        let res = e.apply()
-        return res && (Array.isArray(res) && JSON.stringify(res) || res) || null
+        let res = exec.apply()
+        ret.push(res && (Array.isArray(res) && JSON.stringify(res) || res) || null)
       } catch (e) {
-        return e
+        ret.push(e)
       }
-    })
+    }
+    return ret
   }
 }
 
 /**
- * This class  is a data structure carrying computation results from one tuple to next tuple.
+ * This class is the key data structure carrying computation results
+ * from one tuple to next.
+ * 
+ * An element of the tuple can either have an explicit name or implicit
+ * name with form defined in TupleSelectorPattern.
+ * 
+ * For example:
+ *   (1, a:2, 3) implies (_0:1, a:2, _2:3) where the second element
+ * not only has explicit name "a", and also has implicit name "_1".
  */
 export class Tuple {
-  #names: Map<string, any>
-  #values: Array<any>
+
+  // map for both implicit and explicit names
+  #names: Map<string, number>
+  #values: unknown[]
 
   constructor() {
-
-    // full map of named or unnamed values
     this.#names = new Map()
     this.#values = []
   }
 
-  static fromKeyValue(key: string, value: any) {
-    var t = new Tuple()
-    t.addKeyValue(key, value)
-    return t
+  static fromKeyValue(key: string, value: unknown): Tuple {
+    return new Tuple().addKeyValue(key, value)
   }
 
   static fromValue(value: any) {
@@ -409,6 +372,8 @@ export class Tuple {
     if (key) this.#names.set(key, seq)
 
     this.#values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value)
+
+    return this
   }
 
   /**
@@ -450,8 +415,16 @@ export class Tuple {
   }
 
   // returns named element value
-  get(key: any) {
-    return this.#values[this.#names.get(key)]
+  /**
+   * Returns named element value.
+   * 
+   * If key does not exist, return undefined, not null, for different
+   * semantics.
+   * @param key 
+   */
+  get(key: string) {
+    let index = this.#names.get(key)
+    return index === undefined ? undefined : this.#values[index]
   }
 
   // returns indexed value
@@ -1205,7 +1178,7 @@ export class RefFn extends Fn {
   }
 
   apply(input: any, context?: any) {
-    var e
+    var e:unknown | Fn
 
     // find name from scoped tuple first
     if (input && input instanceof Tuple)
@@ -1233,7 +1206,7 @@ export class RefFn extends Fn {
             tpl = Tuple.fromKeyValue(this.params.name, tpl)
           else if (!(tpl instanceof Tuple))
             tpl = Tuple.fromValue(tpl)
-          return e.apply(tpl)
+          return (e as Fn).apply(tpl)
         }
       }
       return e
@@ -1785,20 +1758,20 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
     }
 
     if (!is_second_array) {
-      var ret:any[] = []
-      first.forEach((element:any) => {
+      var ret: any[] = [];
+      (first as unknown[]).forEach((element:any) => {
         ret.push(this.raised_function.apply(Tuple.fromList(element, second), context))
       })
       return ret
     }
 
-    if (first.length != second.length) {
+    if ((first as unknown[]).length != (second as unknown[]).length) {
       throw new Error('first and second array sizes are different!')
     }
 
     var ret:any[] = []
-    for (var i = 0; i < first.length; i++) {
-      ret.push(this.raised_function.apply(Tuple.fromList(first[i], second[i]), context))
+    for (var i = 0; i < (first as unknown[]).length; i++) {
+      ret.push(this.raised_function.apply(Tuple.fromList((first as unknown[])[i], (second as unknown[])[i]), context))
     }
     return ret
   }
@@ -1842,7 +1815,10 @@ export class CurryExprFn extends Fn {
 
     for (var i = 0; i < this.params.length; i++) {
       let param = this.params[i].apply(input)
-      res = FnUtil.unwrapMonad(res.apply(param))
+      if (res instanceof Fn) {
+        res = res.apply(param)
+      }
+      res = FnUtil.unwrapMonad(res)
       if (res instanceof Tuple) {
         res = res.toTupleFn()
       }
