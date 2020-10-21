@@ -23,17 +23,17 @@ if (!ftlFile.endsWith('.ftl')) {
 }
 
 ftlFile = ftlFile.substring(0, ftlFile.length - 4)
-ftl.default.setRunPath(cwd)
+//ftl.default.setRunPath(cwd)
 ftl_builder.setRunPath(cwd)
 
 ;(async function run(ftlFile:string) {
 
-  let module:ftl.Module = ftl_builder.buildModule(cwd, ftlFile)
+  let module = ftl_builder.buildModule(cwd, ftlFile)
 
   console.log(module)
-  module.executables.forEach(e => {
+  for (let exec of module!.executables) {
     try {
-      let res = e.apply()
+      let res = exec.apply()
       if (res !== undefined) {
         if (Array.isArray(res) || typeof res == 'string') {
           console.log(JSON.stringify(res));
@@ -44,7 +44,7 @@ ftl_builder.setRunPath(cwd)
     } catch (e) {
       console.error(e)
     }
-  })
+  }
 
   console.log(`\nFinished executing ${process.argv[2]}`)
 })(ftlFile)

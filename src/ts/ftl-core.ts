@@ -5,6 +5,10 @@ var version = '0.0.1'
 var TupleSelectorPattern = /_\d+$/
 var VALIDATE_BUILD = false
 
+/**
+ * Returns string presentation of any value.
+ * @param value value of any type
+ */
 function getValueString(value: any) {
   if (Array.isArray(value) || typeof value == 'string')
     return JSON.stringify(value)
@@ -28,7 +32,10 @@ class FtlValidationError extends Error {
   }
 }
 
-export class ModuleNotLoadedError extends Error {
+/**
+ * Error for module not found.
+ */
+export class ModuleNotFoundError extends Error {
   moduleName: string
 
   constructor(moduleName: string) {
@@ -38,6 +45,9 @@ export class ModuleNotLoadedError extends Error {
   }
 }
 
+/**
+ * Utility class.
+ */
 class FnUtil {
   // Test if an element is undefined or null
   static isNone(elm: any) {
@@ -80,9 +90,11 @@ class FnUtil {
     return false
   }
 
-  // unwraps the single value of tuple that contains a single value (monad) 
+  /**
+   * Unwraps the tuple that contains a single value (monad).
+   */
   static unwrapMonad(tuple: any): any {
-    return tuple instanceof Tuple && tuple.size == 1 && tuple.names.size == 1 ? tuple.getIndex(0) : tuple
+    return tuple instanceof Tuple && tuple.size == 1 && tuple.size == 1 ? tuple.getIndex(0) : tuple
   }
 
   static getFn(fns: any, predicate: any) {
@@ -157,7 +169,7 @@ export class FnValidator {
 }
 
 /**
- * Error thrown at any function construction.
+ * Error for failure of function construction.
  */
 class FnConstructionError extends Error {
   constructor(...params: any[]) {
@@ -169,12 +181,18 @@ class FnConstructionError extends Error {
   }
 }
 
+/**
+ * Error for runtime.
+ */
 class FtlRuntimeError extends Error {
   constructor(...params: any[]) {
     super(...params)
   }
 }
 
+/**
+ * Elements of import statement.
+ */
 interface ImportItem {
   type: string
   name: string
@@ -184,10 +202,12 @@ interface ImportItem {
 }
 
 /**
- * A module holds a list of defined identifiers that can be seen from the outside
- * (except the ones starting with '_' which are private to the module).
+ * A module holds a list of defined identifiers that can be seen from the outside,
+ * except the ones starting with '_' which are private to the module.
  *
- * Any imported identifies are private to the module and will not be exportable.
+ * Any imported identifies are private to the module and will not be exported again.
+ * 
+ * A module has an optional name which has to be unique to the whole runtime. 
  */
 export class Module {
 
@@ -225,10 +245,10 @@ export class Module {
 
   addImport(name: string, f: Fn) {
     if (!f)
-      throw new FnConstructionError('Can not import null for ' + name + '!')
+      throw new FnConstructionError(`Can not import null for ${name}!`)
 
     if (this.#imports[name])
-      console.log("import " + name + " exists! Overriding.")
+      console.warn(`import ${name} exists! Overriding.`)
 
     this.#imports[name] = f
   }
@@ -257,6 +277,8 @@ export class Module {
 
   /**
    * Returns module defined function.
+   * 
+   * This is used to find exportable name.
    */
   getFn(name: string) {
     return this.#functions[name]
@@ -277,22 +299,36 @@ export class Module {
     return this.#functions[name] || this.#imports[name]
   }
 
+  /**
+   * Adds an executable.
+   *
+   * @param exec
+   */
   addExecutable(exec: ExecutableFn) {
     this.#executables.push(exec)
   }
 
-  get fn_names() {
+  /**
+   * Returns all module level function names.
+   */
+  get functionNames() {
     return Object.keys(this.#functions)
   }
 
+  /**
+   * Returns all module level executables.
+   */
   get executables() { 
     return this.#executables[Symbol.iterator]()
   }
 
-  get executable_size() { 
+  get executableCount() { 
     return this.#executables.length
   }
 
+  /**
+   * Executes all executables and returns results in an array.
+   */
   apply(): unknown[] {
     var ret:unknown[] = []
     for (let exec of this.executables) {
@@ -312,10 +348,12 @@ export class Module {
  * from one tuple to next.
  * 
  * An element of the tuple can either have an explicit name or implicit
- * name with form defined in TupleSelectorPattern.
+ * name with form defined in TupleSelectorPattern. When an element has
+ * explicit name, it is accessible via either the explicit name or
+ * implicit name.
  * 
  * For example:
- *   (1, a:2, 3) implies (_0:1, a:2, _2:3) where the second element
+ *   (1, a:2, 3) implies (_0:1, _1:2, _2:3) where the second element
  * not only has explicit name "a", and also has implicit name "_1".
  */
 export class Tuple {
@@ -329,47 +367,62 @@ export class Tuple {
     this.#values = []
   }
 
-  static fromKeyValue(key: string, value: unknown): Tuple {
-    return new Tuple().addKeyValue(key, value)
+  /**
+   * Creates a tuple from key/value pair.
+   * @param name name of the value
+   * @param value value of any type
+   */
+  static fromNameValue(name: string, value: unknown) {
+    return new Tuple().addNameValue(name, value)
   }
 
+  /**
+   * Creates a tuple from a value only.
+   * 
+   * The only value is accessible with name "_0".
+   * @param key
+   * @param value
+   */
   static fromValue(value: any) {
     var t = new Tuple()
     t.addValue(value)
     return t
   }
 
-  static fromList(... list: any[]) {
+  /**
+   * Creates a tuple from a series of values.
+   * @param values
+   */
+  static fromValues(... values: any[]) {
     var t = new Tuple()
-    if (list == null)
+    if (values == null)
       return t
 
-    list.forEach(elm => t.addValue(elm))
+    values.forEach(elm => t.addValue(elm))
 
     return t
-  }
-
-  get names() {
-    return this.#names
   }
 
   get size() {
     return this.#values.length
   }
 
-  // add value without id
+  /**
+   * Add a non-named value.
+   */
   addValue(value: any) {
-    this.addKeyValue(null, value)
+    this.addNameValue(null, value)
+    return this
   }
 
-  addKeyValue(key: string|null, value: any) {
-    if (key && this.#names.has(key)) {
-      throw new FtlRuntimeError("Tuple.addKeyValue(.): key " + key + " already exists!")
+  addNameValue(name: string|null, value: any) {
+    if (name && this.#names.has(name)) {
+      throw new FtlRuntimeError("Tuple.addKeyValue(.): key " + name + " already exists!")
     }
 
     let seq = this.size
     this.#names.set(`_${seq}`, seq)
-    if (key) this.#names.set(key, seq)
+    if (name) this.#names.set(name, seq)
 
     this.#values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value)
 
@@ -388,7 +441,7 @@ export class Tuple {
   /**
    * Appends all element from another tuple. It will keep names of the elements if any. 
    */
-  appendAll(tuple: Tuple | any) {
+  appendAll(tuple: Tuple | unknown) {
     if (tuple == null)
       return
 
@@ -401,79 +454,52 @@ export class Tuple {
         if (value.startsWith('_') && !isNaN(parseInt(value.substring(1))))
           this.addValue(tuple.#values[key])
         else
-          this.addKeyValue(value, tuple.#values[key])
+          this.addNameValue(value, tuple.#values[key])
       })
     }
     else
       this.addValue(tuple)
   }
 
-  // returns list of all names
-  //
-  getNames() {
-    return []// TODO this._names.keys..filter(key => !key.startsWith("_"))
-  }
-
-  // returns named element value
   /**
    * Returns named element value.
    * 
-   * If key does not exist, return undefined, not null, for different
-   * semantics.
-   * @param key 
+   * If name does not exist, return undefined, not null, for semantics of not found.
+   * @param name
    */
-  get(key: string) {
-    let index = this.#names.get(key)
+  get(name: string) {
+    let index = this.#names.get(name)
     return index === undefined ? undefined : this.#values[index]
   }
 
-  // returns indexed value
+  /**
+   * Returns element at index.
+   * 
+   * If index is beyond size, undefined is returned.
+   */
   getIndex(index: number) {
     return this.#values[index]
   }
 
+  /**
+   * Tells this tuple contains tail function.
+   */
   hasTail(): boolean {
     return this.#values.find(elm => TailFn.isTail(elm)) !== undefined
   }
 
-  // checks if any element or nested element is a reference
-  // In essence it is equivalent to having any function
-  hasRef():boolean {
-//    return this._values.find(elm => elm instanceof RefFn || elm instanceof Tuple && elm.hasRef()) !== undefined
+  /**
+   * Checks if any element or nested element is a function.
+   */
+  hasFn():boolean {
     return this.#values.find(elm => elm instanceof Fn) !== undefined
   }
 
+  /**
+   * Returns a shallow copy of value list.
+   */
   toList() {
-    return this.#values
-  }
-
-  // Checkes equality of each value in both tuples sequentially. 
-  equals(o: any) {
-    function arrayIdentical(a:any, b:any) {
-      if (!Array.isArray(a) || !Array.isArray(b))
-        return false
-      var i = a.length
-      if (i != b.length) return false
-      while (i--) {
-          if (a[i] != b[i]) return false
-      }
-      return true
-    }
-    
-    if (!(o instanceof Tuple))
-      return false
-
-    if (o.size != this.size)
-      return false
-
-    for (var i = 0; i < this.size; i++) {
-      var ith = this.getIndex(i)
-      var oth = o.getIndex(i)
-      
-      if (ith != oth && !arrayIdentical(ith, oth) && (!(ith instanceof Tuple) || !ith.equals(oth)))
-        return false
-    }
-    return true
+    return [... this.#values]
   }
 
   // converts into a tuple fn
@@ -503,6 +529,37 @@ export class Tuple {
     })
 
     return new TupleFn(... converted)
+  }
+
+  /**
+   * Checkes equality of each value in both tuples sequentially.
+   */
+  equals(o: any) {
+    function arrayIdentical(a:any, b:any) {
+      if (!Array.isArray(a) || !Array.isArray(b))
+        return false
+      var i = a.length
+      if (i != b.length) return false
+      while (i--) {
+          if (a[i] != b[i]) return false
+      }
+      return true
+    }
+    
+    if (!(o instanceof Tuple))
+      return false
+
+    if (o.size != this.size)
+      return false
+
+    for (var i = 0; i < this.size; i++) {
+      var ith = this.getIndex(i)
+      var oth = o.getIndex(i)
+      
+      if (ith != oth && !arrayIdentical(ith, oth) && (!(ith instanceof Tuple) || !ith.equals(oth)))
+        return false
+    }
+    return true
   }
 
   toString() {
@@ -832,7 +889,7 @@ export class FunctionInterfaceFn extends Fn {
   static js_args_to_tuple(params: any, args: any) {
     var ret = new Tuple()
     for (var i = 0; i < params.fns.length; i++)
-      ret.addKeyValue(params.fns[i].name, args[i])
+      ret.addNameValue(params.fns[i].name, args[i])
     return ret
   }
 
@@ -866,7 +923,7 @@ export class FunctionInterfaceFn extends Fn {
       if (this.params.isRefType()) {
         // TODO tpl = this.params.params.apply(FunctionInterfaceFn.js_args_to_tuple(arguments))
       } else
-        tpl.addKeyValue(this.params.name, arg)
+        tpl.addNameValue(this.params.name, arg)
       start = 1
     } else if (this.params instanceof TupleFn) {
       tpl = FunctionInterfaceFn.js_args_to_tuple(this.params, arguments)
@@ -976,7 +1033,7 @@ export class TupleFn extends ComposedFn {
         // TODO test is this needed?
         ////if (res === fn.wrapped)
         ////  return this
-        tuple.addKeyValue(fn.name, res)
+        tuple.addNameValue(fn.name, res)
       }
       else
         tuple.addValue(res)
@@ -1137,7 +1194,7 @@ export class PipeFn extends ComposedFn {
       }
 
       // still has unresolved ref
-      else if (res instanceof Tuple && res.hasRef()) {
+      else if (res instanceof Tuple && res.hasFn()) {
         return new PipeFn(...[res.toTupleFn()].concat(this.fns.slice(i)))
       }
 
@@ -1203,7 +1260,7 @@ export class RefFn extends Fn {
         else {
           var tpl = this.params.apply(input)
           if (this.params instanceof RefFn)
-            tpl = Tuple.fromKeyValue(this.params.name, tpl)
+            tpl = Tuple.fromNameValue(this.params.name, tpl)
           else if (!(tpl instanceof Tuple))
             tpl = Tuple.fromValue(tpl)
           return (e as Fn).apply(tpl)
@@ -1750,7 +1807,7 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
     let is_second_array = Array.isArray(second)
     
     if (!is_first_array && !is_second_array) {
-      return this.raised_function.apply(Tuple.fromList(first, second))
+      return this.raised_function.apply(Tuple.fromValues(first, second))
     }
 
     if (!is_first_array) {
@@ -1760,7 +1817,7 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
     if (!is_second_array) {
       var ret: any[] = [];
       (first as unknown[]).forEach((element:any) => {
-        ret.push(this.raised_function.apply(Tuple.fromList(element, second), context))
+        ret.push(this.raised_function.apply(Tuple.fromValues(element, second), context))
       })
       return ret
     }
@@ -1771,7 +1828,7 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
 
     var ret:any[] = []
     for (var i = 0; i < (first as unknown[]).length; i++) {
-      ret.push(this.raised_function.apply(Tuple.fromList((first as unknown[])[i], (second as unknown[])[i]), context))
+      ret.push(this.raised_function.apply(Tuple.fromValues((first as unknown[])[i], (second as unknown[])[i]), context))
     }
     return ret
   }
@@ -1829,7 +1886,7 @@ export class CurryExprFn extends Fn {
 }
 
 // runtime modules
-var modules = new Map<string, any>()
+var modules = new Map<string, Module>()
 
 // returns module with name.
 export function getModule(name: string) {

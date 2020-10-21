@@ -11,13 +11,14 @@ let ftl_files = fs.readdirSync(ftl_test_path)
 for (let file of ftl_files) {
   if (file.endsWith('.ftl')) {
     try {
-      let module:ftl.Module = ftl_builder.buildModule(run_path, `/src/ftl/test/${file.substring(0, file.length - 4)}`)
+      let module = ftl_builder.buildModule(run_path, `/src/ftl/test/${file.substring(0, file.length - 4)}`)
 
-      console.log(`${file} (${module.executables.length})`)
+      console.log(`${file} (${module!.executableCount})`)
       var passed = 0
-      module.executables.forEach(e => {
+      for (let exec of module!.executables) {
+
         try {
-          let res = e.apply()
+          let res = exec.apply()
           if (res !== undefined) {
             if (Array.isArray(res) || typeof res == 'string') {
               console.log(JSON.stringify(res));
@@ -31,8 +32,8 @@ for (let file of ftl_files) {
         } catch (e) {
           console.error(e)
         }
-      })
-      console.log(passed == module.executables.length ? 'PASSED!\n' : 'FAILED!\n')
+      }
+      console.log(passed == module!.executableCount ? 'PASSED!\n' : 'FAILED!\n')
     } catch (e) {
       console.error(`\nFailed testing ${file} with error ${e}!\n`)
     }

@@ -29,10 +29,10 @@ export function buildModule(path:string, ftlFile:string) {
   return buildModuleWithContent(content)
 }
 
-export function buildToModule(ftl_content:string, module:any) {
+export function buildToModule(ftl_content:string, module:ftl.Module) {
   let parsed = ftl_parser.peg$parse(ftl_content)
   if (!parsed)
-    return null
+    return undefined
   buildElement(parsed, module)
   return module
 }
@@ -107,18 +107,19 @@ function buildImportSingleItem(details:any, module:any) {
   }
 
   var mod = ftl.getModule(path)
+
   if (!mod) {
     mod = buildModule(runPath, path)
     if (!mod)
-      throw new ftl.ModuleNotLoadedError(path)
+      throw new ftl.ModuleNotFoundError(path)
   }
 
   // import all
   if (!name) {
     //if (asName != null)
     //  throw new Error("Importing * (all) can not have alias name!")
-    mod.fn_names.forEach((n: string) => {
-      module.addImport(n, mod.getFn(n))
+    mod.functionNames.forEach((n: string) => {
+      module.addImport(n, mod!.getFn(n))
     })
   }
   else

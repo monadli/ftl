@@ -143,7 +143,7 @@ FunctionSignature =
   }
   
 /*
-FunctionDeclaration specifies how a function or an operator can be declared. 
+FunctionDeclaration specifies how a function or an operator can be declared.
 
 A function starts with reserved keyword "fn", followed by function name and
 parameter list in form of a tuple. Function body can be either javascript
