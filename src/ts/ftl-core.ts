@@ -584,12 +584,16 @@ export class Tuple {
  */
 export class Fn {
 
-  // returns class name.
+  /**
+   * returns name of class that represent the function.
+   */
   get typeName() {
     return this.constructor.name
   }
 
-  // Applies function with input and context.
+  /**
+   * Applies function with optional input and context.
+   */
   apply(input?: any, context?: any): Tuple | any {
     return new Tuple()
   }
@@ -601,16 +605,13 @@ export class Fn {
  * properties:
  * fns: array of child functions
  */
-class ComposedFn extends Fn {
+abstract class ComposedFn extends Fn {
 
   #fns: Fn[]
 
-  // fns: function items
   constructor(...fns: Fn[]) {
     super()
-    FnValidator.assertElmsTypes(fns, Fn)
-
-    this.#fns = fns || []
+    this.#fns = fns
   }
 
   get fns() {
@@ -627,15 +628,12 @@ class ComposedFn extends Fn {
 }
 
 /**
- * Abstract function with func functions.
+ * Abstract class wrapping a function.
  */
-export class WrapperFn extends Fn {
+export abstract class WrapperFn extends Fn {
   wrapped: Fn
 
-  // @param wrapped: any non-array Fn
   constructor(wrapped: Fn) {
-    FnValidator.assertElmType(wrapped, Fn)
-
     super()
     this.wrapped = wrapped
   }
@@ -656,27 +654,29 @@ export class WrapperFn extends Fn {
  *   non-null value
  */
 export class ConstFn extends Fn {
-  #value: any
+
+  _value: any
+
   constructor(value: Fn | any) {
     super()
     FnValidator.assertNonNull(value)
-    this.#value = value
+    this._value = value
   }
 
   get valueType() {
-    return typeof this.#value
+    return typeof this._value
   }
 
   get value() {
-    return this.#value
+    return this._value
   }
 
   apply(input: any) {
-    return Array.isArray(this.#value) ? Array.from(this.#value) : this.#value
+    return Array.isArray(this._value) ? Array.from(this._value) : this._value
   }
 
   toString() {
-    return getValueString(this.#value)
+    return getValueString(this._value)
   }
 }
 
@@ -687,11 +687,11 @@ export class ConstFn extends Fn {
  */
 class ImmutableValFn extends ConstFn {
 
-  name: string
-  // during construction, the value is computed and stored
+  _name: string
+
   constructor(name: string, value: any) {
     super(value)
-    this.name = name
+    this._name = name
   }
 }
 
@@ -700,7 +700,7 @@ class ImmutableValFn extends ConstFn {
  */
 class VarFn extends ImmutableValFn {
   _val: any
-  // during construction, the value is computed and stored
+
   constructor(name: string, value: any) {
     super(name, value)
   }
@@ -713,40 +713,48 @@ class VarFn extends ImmutableValFn {
   }
 }
 
+/**
+ * Class as base for all types of defintion of functions.
+ */
 export class FunctionBaseFn extends Fn {
+  _body: Fn
+
   name: string
   params: any
-  body: Fn
 
   constructor(name: string, params: any, body: any) {
     super()
     this.name = name
     this.params = params
-    this.body = body
+    this._body = body
   }
 
-apply(input: any, context: any) {
-    return this.body.apply(input, context)
+  apply(input: any, context: any) {
+    return this._body.apply(input, context)
   }
 }
 
 /**
- * Native javascript function.
+ * Class that wraps native javascript function in form of:
+ * 
+ * fn name(params) {
+ *   // javascript body
+ * }
  */
 export class NativeFunctionFn extends FunctionBaseFn {
+
   static NativeScriptFn = class extends Fn {
-    jsfunc: any
+    _jsfunc: Function
     constructor(jsfunc: Function) {
       super()
-      this.jsfunc = jsfunc
+      this._jsfunc = jsfunc
     }
-
+  
     apply(input: any) {
-      return this.jsfunc.apply(null, (input instanceof Tuple) && input.toList() || [input])
+      return this._jsfunc.apply(null, (input instanceof Tuple) && input.toList() || [input])
     }
   }
-
-
+  
   // name:string function name
   // params:TupleFn parameter list
   // script: javascript function with parameter declaration and body.
@@ -758,51 +766,11 @@ export class NativeFunctionFn extends FunctionBaseFn {
     super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc))
   }
 
-  // Builds parameter function
-  //
-  // @params a TupleFn
-
-  static buildParameters(params: any) {
-    if (params instanceof RefFn)
-      return new TupleFn(params)
-    var has_default = false
-    for (var i = 0; i < params.funcCount; i++) {
-      if (!has_default && params.func(i) instanceof NamedExprFn)
-        has_default = true
-      else if (has_default && params.func(i) instanceof RefFn)
-        throw new FtlRuntimeError("Non default argument " + params.func(i).name + " follows default argument.")
-      params.setfunc(i, new NamedExprFn(params.func(i).name, new RefFn("_" + i, null)))
-    }
-    return params
-  }
-
-  static buildParameters1(module: any, params: any) {
-    //if (params instanceof RefFn)
-    //  params = new TupleFn(params).build(module, new TupleFn())
-
-    //      var valid = params.isPureRefs
-    var default_count = 0
-    for (var i = 0; i < params.fns.length; i++) {
-      let node: RefFn | NamedExprFn = params.fns[i]
-
-      if (node instanceof RefFn) {
-        params.fns[i] = new NamedExprFn(node.name, new TupleSelectorFn(i))
-      } else if (node instanceof NamedExprFn) {
-        if (node.wrapped instanceof TupleSelectorFn) {
-          if ((node.wrapped as TupleSelectorFn).seq != + i)
-            throw new FtlRuntimeError("Parameter " + node.name + " has tuple selector for the wrong sequence " + node.wrapped.seq + "!")
-        } else
-          params.fns[i] = new NamedExprFn(node.name, new SeqSelectorOrDefault(i, node.wrapped))
-      }
-    }
-    return params
-  }
-
   apply(input: any, context?:any) {
     if (FnUtil.isNone(input) && this.params.size > 0)
       throw new FtlRuntimeError("Input to native function " + this.name + " does not match!")
     var paramValues = this.params.apply(input)
-    return this.body.apply(paramValues)
+    return this._body.apply(paramValues)
   }
 
   toString() {
@@ -833,7 +801,7 @@ export class FunctionFn extends FunctionBaseFn {
         res = res.hasTail() ? res.ResolveNextTail(this) : res.apply(null, this)
       }
 
-      // result may be wrapped into ConstFn during tail computation
+      // result may have been wrapped into ConstFn during tail computation
       return res instanceof ConstFn ? res.apply(null) : res
     }
   }
@@ -843,7 +811,7 @@ export class FunctionFn extends FunctionBaseFn {
   }
 }
 
-// This is used to represent functional argument in a function parameter or operand declaration.
+// This is to represent functional argument in a function parameter or operand declaration.
 // The purpose of function interface is to wrap an expression that is executed only when it is needed.
 //
 // For example, the y() below:
@@ -872,6 +840,7 @@ export class FunctionInterfaceFn extends Fn {
   closure: any
   wrapped: any
   fn: any
+
   constructor(name: string, params: any, seq = 0) {
     super()
     this.name = name
@@ -999,19 +968,21 @@ export class FunctionalFn extends WrapperFn {
  */
 export class TupleFn extends ComposedFn {
 
-  // temporary
-  tuple: any
   constructor(...fns: any[]) {
     FnValidator.assetNoDupNames(...fns)
     super(...fns)
   }
 
-  // Tells if this TupleFn contains a NamedExprFn element.
+  /**
+   * Tells if this TupleFn contains a NamedExprFn element.
+   */
   hasName(name: string) {
     return this.getNamedFn(name) != null
   }
 
-  // Returns element with the name. 
+  /**
+   * Returns element with the name.
+   */
   getNamedFn(name: string) {
     return FnUtil.getFn(this.fns, (fn: any) => fn instanceof NamedExprFn && fn.name == name)
   }
@@ -1044,65 +1015,6 @@ export class TupleFn extends ComposedFn {
 }
 
 /**
- * Parameter tuple. It satisfy all tuple requirements, and supports default values after position parameters.
- * 
- * @params fns - list of simple name, function interface, or name with default value
- */
-class ParamTupleFn extends TupleFn {
-  constructor(...fns: any[]) {
-    super(...fns)
-  }
-
-  validateInput(inputFn: any, minSize: number) {
-    var names = new Set()
-    var pos_sz = 0
-    for (var i = 0; i < inputFn.size; i++) {
-      if (inputFn.fns[i] instanceof NamedExprFn) {
-        names.add(inputFn.fns[i].name)
-      } else if (names.size > 0) {
-        throw new FtlRuntimeError("Position argument at index " + i + " after named argument!")
-      } else
-        pos_sz = i + 1
-    }
-
-    // when there are only positioned arguments and are more than minimal
-    if (names.size == 0 && inputFn.fns.length >= minSize)
-      return null
-
-    var need_new_args = false
-    var new_args = new Array()
-    /*
-        for (var i = 0; i < params.size; i++) {
-          var name = params.fns[i].name
-          if (i < pos_sz) {
-            if (names.has(name)) {
-              throw new FtlRuntimeError("Parameter " + name + " is provided with both position and named argument!")
-            }
-  
-            new_args[i] = args.fns[i]
-          }
-          else if (!names.has(name)) {
-            new_args[i] = params.fns[i]
-            need_new_args = true
-          }
-          else if (i < args.size && args.fns[i].name == name) {
-            new_args[i] = args.fns[i]
-          }
-          else {
-            new_args[i] = args.getElement(name)
-            need_new_args = true
-          }
-        }
-    */
-    return need_new_args && new TupleFn(...new_args) || null
-  }
-
-  clone() {
-    return new ParamTupleFn(... this.fns)
-  }
-}
-
-/**
  * Named expression.
  * 
  * This is always an element in a TupleFn.
@@ -1125,64 +1037,18 @@ export class NamedExprFn extends WrapperFn {
 }
 
 /**
- * This represents chains of tuple in form of:
+ * This represents chains of tuples in form of:
  * (t1) -> (t2) ... -> (tn)
  */
 export class PipeFn extends ComposedFn {
-  constructor(...elements: any[]) {
-    super(...elements)
-  }
-
-  /**
-   * Creates a PipeFn
-   */
-  static createPipeFn(first: any, rest: any) {
-    if (first instanceof PipeFn) {
-      first.appendElements(rest)
-      return first
-    } else if (rest instanceof PipeFn) {
-      rest.prependElements(first)
-      return rest
-    } else {
-      var list: any = Array.isArray(first) ? list : [first]
-      var ret = new PipeFn(Array.isArray(first) ? first : [first])
-      ret.appendElements(rest)
-      return ret
-    }
-  }
-
-  /**
-   * Appends elements.
-   */
-  appendElements(elms: any) {
-    var toBeAppended = Array.isArray(elms) ? elms : [elms]
-    //this.modifyElements(toBeAppended)
-    this.fns = this.fns.concat(toBeAppended)
-  }
-
-  /**
-   * Prepends elements.
-   */
-  prependElements(elms: any) {
-    var toBePrepended = Array.isArray(elms) ? elms : [elms]
-    this.modifyElements(toBePrepended)
-    this.fns = toBePrepended.concat(this.fns)
-  }
-
-  get elements() { return this.fns }
-
-  modifyElements(list: Array<any>) {
-    list.forEach(elm => {
-      if (elm instanceof RefFn) {
-        // TODO elm.tupleSeq = '_0'
-      }
-    })
+  constructor(... tuples: any[]) {
+    super(... tuples)
   }
 
   apply(tuple: any, context: any) {
     var res = (this.fns[0] as Fn).apply(tuple, context)
 
-    // there is name unresolved
+    // if name is unresolved
     if (res === this.fns[0])
       return this
 
@@ -1210,14 +1076,16 @@ export class PipeFn extends ComposedFn {
 }
 
 /**
- * Function capturing any reference.
+ * Fn capturing any reference, which is either a function
+ * or an element from previous tuple.
  */
 export class RefFn extends Fn {
   name: string
   params: any
   module: any
   unresolved: boolean
-  constructor(name: string, module:any) {
+
+  constructor(name: string, module: any) {
     super()
     this.name = name
     this.module = module

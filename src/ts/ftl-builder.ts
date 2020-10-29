@@ -407,7 +407,7 @@ function buildFunctionDeclaration(details:any, module:any) {
 
     // TODO arrow extract from pipe fn
     fn = new ftl.FunctionFn(f_name, params, new ftl.PipeFn(params, ... arrow))
-   }
+  }
 
   module.addFn(fn)
   return fn
