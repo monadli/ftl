@@ -1179,7 +1179,9 @@ export class FunctionHolder extends Fn {
  *   (1, 2, 3) -> (_2, _3) results in (2, 3)
  */
 export class TupleSelectorFn extends Fn {
+
   seq: number
+
   constructor(seq: any) {
     if (seq == undefined || seq == null)
       throw new FnConstructionError('seq is undefined or null!')
@@ -1216,8 +1218,10 @@ export class TupleSelectorFn extends Fn {
  *   fn foo(a, b, c:1)
  */
 export class SeqSelectorOrDefault extends TupleSelectorFn {
-  defaultValue: any
-  constructor(seq: any, defaultFn: any) {
+
+  defaultValue: unknown
+
+  constructor(seq: any, defaultFn: unknown) {
     if (!(defaultFn instanceof Fn))
       throw new FnConstructionError('defaultFn is not instanceof Fn!')
 
@@ -1241,8 +1245,9 @@ export class SeqSelectorOrDefault extends TupleSelectorFn {
 * This fn wraps an expression with calling parameters.
 */
 export class ExprFn extends WrapperFn {
-  paramtuples: any
-  constructor(f: any, ...paramtuples: any[]) {
+  paramtuples: Fn[]
+
+  constructor(f: any, ...paramtuples: Fn[]) {
     FnValidator.assertElmsTypes(paramtuples, Fn)
 
     super(f)
@@ -1270,8 +1275,9 @@ export class ExprFn extends WrapperFn {
 export class CallExprFn extends Fn {
   f: Fn
   name: string
-  params: any
-  constructor(name: string, f: any, params: any) {
+  params: Fn[]
+
+  constructor(name: string, f: any, params: Fn[]) {
     super()
     this.f = f
     this.name = name
@@ -1282,9 +1288,10 @@ export class CallExprFn extends Fn {
     var f = !this.f ? input.get(this.name) : this.f
     if (!(f instanceof Fn))
       throw new FtlRuntimeError(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)")
-    if (f instanceof RefFn) {
+
+    if (f instanceof RefFn)
       f = f.apply(input)
-    }
+
     let intermediate = FnUtil.unwrapMonad(this.params[0].apply(input))
     let ret
     if (typeof f == 'function') {
@@ -1324,10 +1331,7 @@ export class CallExprFn extends Fn {
  */
 export class ExprRefFn extends WrapperFn {
   fnl: any
-
-  // temporary
   closure: any
-  params: any
 
   constructor(fnl: any, expr: any) {
     if (!(fnl instanceof FunctionInterfaceFn))
@@ -1337,44 +1341,9 @@ export class ExprRefFn extends WrapperFn {
     this.fnl = fnl
   }
 
-  // This is a function passing to native javascript functions.
-  // The "this" here is not this class instance but a dynamic binding
-  // containg runtime info.
-  // Coincidentally this.params and this.wrapped are the same as
-  // the ones in this class, but this.closure is not.
-  fn_ref(arg: any) {
-    console.log("fn_ref arguments", arg)
-    //console.log("fn_ref closure", this.closure)
-
-    var len = arguments.length
-    if (len == 0)
-      return this.wrapped.apply(this.closure)
-
-    var tpl = new Tuple()
-
-    // has parameters
-    // no named parameters
-
-    var start = 0
-
-
-    var res = this.wrapped.apply(tpl)
-    return (res instanceof Tuple && res.size == 1) ? res.get('_0') : res
-  }
-
   apply(input: any) {
     return new PartialFunction(this.wrapped, input)
   }
-
-  /*
-    apply(input) {
-      if (this.fnl.isTail) {
-        return pass_through.bind(new TailFn(this.wrapped, input))
-      } else {
-        return this.fn_ref.bind({wrapped: this.wrapped, closure: input, params: this.fnl.params})
-      }
-    }
-  */
 }
 
 /**
@@ -1391,7 +1360,7 @@ export class ExprRefFn extends WrapperFn {
 class TailFn extends WrapperFn {
   closure: any
   _tails = new Array<TupleFn>()
-  _name:string|null = null
+  name:string|null = null
 
   constructor(fn: any, closure?: any) {
     super(fn)
@@ -1405,14 +1374,6 @@ class TailFn extends WrapperFn {
         this.addTail(first)
       }
     }
-  }
-
-  get name():string|null {
-    return this._name
-  }
-
-  set name(name:string|null) {
-    this._name = name
   }
 
   addTail(tail:TupleFn) {
@@ -1484,6 +1445,9 @@ class TailFn extends WrapperFn {
   }
 }
 
+/**
+ * This fn captures array initializer such as [1, 2, 3].
+ */
 export class ArrayInitializerFn extends Fn {
   values:any[]
 
@@ -1507,7 +1471,11 @@ export class ArrayInitializerFn extends Fn {
 }
 
 /**
- * Array initializer with values of start, end, and interval.
+ * Array initializer with values of start, end, and interval such as:
+ * 
+ *   [1:2:8]
+ * 
+ * where start = 1, end = 9, and interval = 2.
  */
 export class ArrayInitializerWithRangeFn extends Fn {
   start_val:Fn
@@ -1549,6 +1517,7 @@ export class ArrayInitializerWithRangeFn extends Fn {
 export class ArrayElementSelectorFn extends Fn {
   name: string
   index: Fn | number
+
   constructor(name: string, index: Fn | number) {
     super()
     this.name = name
@@ -1580,6 +1549,14 @@ export class ArrayElementSelectorFn extends Fn {
   }
 }
 
+/**
+ * This fn is for selecting a range of an array, such as:
+ * 
+ *   arr[1:2:8] // select from index 1 to 8th inclusive with interval 2
+ *   arr[1:2:]  // select from index 1 to the end with interval 2
+ * 
+ * where arr is an array.
+ */
 export class ArrayRangeSelectorFn extends Fn {
   name: string
   start: number
@@ -1610,7 +1587,9 @@ export class ArrayRangeSelectorFn extends Fn {
   }
 }
 
-// property accessor operator
+/**
+ * This fn is for property accessor operator.
+ */
 export class PropertyAccessorFn extends Fn {
   elm_name:RefFn
   prop_names:string[]
@@ -1636,6 +1615,19 @@ export class PropertyAccessorFn extends Fn {
   }
 }
 
+/**
+ * This fn is for raising a function for a scalar to an array.
+ * 
+ * In the end it returns an array with each element as result
+ * of the raised function to each element of the input array.
+ * 
+ * If the function is binary operator, the operands are either
+ * arrays of the same size, or one of them is a scalar.
+ * 
+ * Example:
+ *   1 .+ [2, 3, 4] => [3, 4, 5]
+ * 
+ */
 export class RaiseFunctionForArrayFn extends Fn {
   raised_function:any
   constructor(raised_function:any) {
@@ -1663,6 +1655,18 @@ export class RaiseFunctionForArrayFn extends Fn {
   }
 }
 
+/**
+ * This fn is for raising a binary operator for a scalar to an array.
+ * 
+ * The operands are either arrays of the same size, or one of them is a scalar.
+ * 
+ * In the end it returns an array of the same size of the operand(s) with each
+ * element as result of the operator to elements of each input.
+ * 
+ * Example:
+ *   1 .+ [2, 3, 4] => [3, 4, 5]
+ * 
+ */
 export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
   constructor(raised_function:any) {
     super(raised_function)
@@ -1702,27 +1706,9 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
   }
 }
 
-export class ExecutableFn extends WrapperFn {
-
-  constructor(wrapped: Fn) {
-    super(wrapped)
-  }
-
-  apply() {
-    let ret = this.wrapped.apply()
-
-    // TODO tail
-    while (TailFn.isTail(ret)) {
-      ret = ret.apply(null)
-
-    }
-    return FnUtil.unwrapMonad(ret)
-  }  
-}
-
 export class CurryExprFn extends Fn {
   expr:Fn
-  params: Fn[]
+  params:Fn[]
 
   constructor(expr:Fn, params:Fn[]) {
     super()
@@ -1751,6 +1737,33 @@ export class CurryExprFn extends Fn {
 
     return res
   }
+}
+
+/**
+ * This fn wraps an executable expression.
+ * 
+ * An executable may actual results into a tail. In that case,
+ * the tail needs to be repeatedly executed until it is not a tail anymore.
+ */
+export class ExecutableFn extends WrapperFn {
+
+  constructor(wrapped: Fn) {
+    super(wrapped)
+  }
+
+  apply() {
+    let ret = this.wrapped.apply()
+
+    // an executable may wrap a tail that needs to be executed
+    while (TailFn.isTail(ret)) {
+      ret = ret.apply(null)
+    }
+
+    if (ret instanceof Fn) {
+      ret = ret.apply()
+    }
+    return FnUtil.unwrapMonad(ret)
+  }  
 }
 
 // runtime modules
