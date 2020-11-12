@@ -211,46 +211,46 @@ interface ImportItem {
  */
 export class Module {
 
-  #name: string
-  #functions: Record<string, Fn>
-  #imports: Record<string, Fn>
-  #executables: ExecutableFn[]
+  _name: string
+  _functions: Record<string, Fn>
+  _imports: Record<string, Fn>
+  _executables: ExecutableFn[]
 
   /**
    * Creates a module with name, such as 'ftl.lang'
    */
   constructor(name?: string) {
-    this.#name = name || ''
-    this.#functions = {}
-    this.#imports = {}
-    this.#executables = []
+    this._name = name || ''
+    this._functions = {}
+    this._imports = {}
+    this._executables = []
   }
 
   /**
    * Returns module name.
    */
   get name() {
-    return this.#name
+    return this._name
   }
 
   /**
    * Sets module name only if originally not set.
    */
   set name(name) {
-    if (this.#name && name !== this.#name)
-      throw new FtlRuntimeError(`The module name already has name "${this.#name}".`)
+    if (this._name && name !== this._name)
+      throw new FtlRuntimeError(`The module name already has name "${this._name}".`)
 
-    this.#name = name
+    this._name = name
   }
 
   addImport(name: string, f: Fn) {
     if (!f)
       throw new FnConstructionError(`Can not import null for ${name}!`)
 
-    if (this.#imports[name])
+    if (this._imports[name])
       console.warn(`import ${name} exists! Overriding.`)
 
-    this.#imports[name] = f
+    this._imports[name] = f
   }
 
   /**
@@ -264,15 +264,15 @@ export class Module {
    * @param f function with unique name to module
    */
   addFn(f: FunctionBaseFn|FunctionHolder) {
-    if (this.#functions[f.name]) {
-      let nf = this.#functions[f.name]
+    if (this._functions[f.name]) {
+      let nf = this._functions[f.name]
       if (nf instanceof FunctionHolder)
         nf.wrapped = f
       else
         throw new FnConstructionError(`${f.name} exists and can not be declared again!`)
     }
 
-    this.#functions[f.name] = f
+    this._functions[f.name] = f
   }
 
   /**
@@ -281,7 +281,7 @@ export class Module {
    * This is used to find exportable name.
    */
   getFn(name: string) {
-    return this.#functions[name]
+    return this._functions[name]
   }
 
   /**
@@ -296,7 +296,7 @@ export class Module {
    * Returns either module defined or imported function.
    */
   getAvailableFn(name: string) {
-    return this.#functions[name] || this.#imports[name]
+    return this._functions[name] || this._imports[name]
   }
 
   /**
@@ -305,25 +305,25 @@ export class Module {
    * @param exec
    */
   addExecutable(exec: ExecutableFn) {
-    this.#executables.push(exec)
+    this._executables.push(exec)
   }
 
   /**
    * Returns all module level function names.
    */
   get functionNames() {
-    return Object.keys(this.#functions)
+    return Object.keys(this._functions)
   }
 
   /**
    * Returns all module level executables.
    */
   get executables() { 
-    return this.#executables[Symbol.iterator]()
+    return this._executables[Symbol.iterator]()
   }
 
   get executableCount() { 
-    return this.#executables.length
+    return this._executables.length
   }
 
   /**
@@ -359,12 +359,12 @@ export class Module {
 export class Tuple {
 
   // map for both implicit and explicit names
-  #names: Map<string, number>
-  #values: unknown[]
+  _names: Map<string, number>
+  _values: unknown[]
 
   constructor() {
-    this.#names = new Map()
-    this.#values = []
+    this._names = new Map()
+    this._values = []
   }
 
   /**
@@ -404,7 +404,7 @@ export class Tuple {
   }
 
   get size() {
-    return this.#values.length
+    return this._values.length
   }
 
   /**
@@ -416,15 +416,15 @@ export class Tuple {
   }
 
   addNameValue(name: string|null, value: any) {
-    if (name && this.#names.has(name)) {
+    if (name && this._names.has(name)) {
       throw new FtlRuntimeError("Tuple.addKeyValue(.): key " + name + " already exists!")
     }
 
     let seq = this.size
-    this.#names.set(`_${seq}`, seq)
-    if (name) this.#names.set(name, seq)
+    this._names.set(`_${seq}`, seq)
+    if (name) this._names.set(name, seq)
 
-    this.#values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value)
+    this._values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value)
 
     return this
   }
@@ -433,8 +433,8 @@ export class Tuple {
    * Invokes callback(key, value) for each pair of (key, value) in this tuple.
    */
   forEach(callback: Function) {
-    this.#names.forEach((value, key, map) => {
-      callback(key, this.#values[value])
+    this._names.forEach((value, key, map) => {
+      callback(key, this._values[value])
     })
   }
 
@@ -447,14 +447,14 @@ export class Tuple {
 
     if (tuple instanceof Tuple) {
       let value_map = new Map<number, string>()
-      tuple.#names.forEach((value, key, map) => {
+      tuple._names.forEach((value, key, map) => {
         value_map.set(value, key)
       })
       value_map.forEach((value, key) => {
         if (value.startsWith('_') && !isNaN(parseInt(value.substring(1))))
-          this.addValue(tuple.#values[key])
+          this.addValue(tuple._values[key])
         else
-          this.addNameValue(value, tuple.#values[key])
+          this.addNameValue(value, tuple._values[key])
       })
     }
     else
@@ -468,8 +468,8 @@ export class Tuple {
    * @param name
    */
   get(name: string) {
-    let index = this.#names.get(name)
-    return index === undefined ? undefined : this.#values[index]
+    let index = this._names.get(name)
+    return index === undefined ? undefined : this._values[index]
   }
 
   /**
@@ -478,28 +478,28 @@ export class Tuple {
    * If index is beyond size, undefined is returned.
    */
   getIndex(index: number) {
-    return this.#values[index]
+    return this._values[index]
   }
 
   /**
    * Tells this tuple contains tail function.
    */
   hasTail(): boolean {
-    return this.#values.find(elm => TailFn.isTail(elm)) !== undefined
+    return this._values.find(elm => TailFn.isTail(elm)) !== undefined
   }
 
   /**
    * Checks if any element or nested element is a function.
    */
   hasFn():boolean {
-    return this.#values.find(elm => elm instanceof Fn) !== undefined
+    return this._values.find(elm => elm instanceof Fn) !== undefined
   }
 
   /**
    * Returns a shallow copy of value list.
    */
   toList() {
-    return [... this.#values]
+    return [... this._values]
   }
 
   // converts into a tuple fn
@@ -507,11 +507,11 @@ export class Tuple {
   toTupleFn():Fn {
     var converted:any[] = []
     let value_map = new Map<number, string>()
-    this.#names.forEach((value, key, map) => {
+    this._names.forEach((value, key, map) => {
       value_map.set(value, key)
     })
     value_map.forEach((value, key) => {
-      var val = this.#values[key]
+      var val = this._values[key]
       if (val instanceof Tuple) {
         val = val.toTupleFn()
       } else if (!(val instanceof Fn)) {
@@ -563,12 +563,12 @@ export class Tuple {
   }
 
   toString() {
-    if (this.#values.length == 0)
+    if (this._values.length == 0)
       return "()"
 
     var buf: any[] = []
-    this.#names.forEach((value, key, map) => {
-      var value_str = getValueString(this.#values[value])
+    this._names.forEach((value, key, map) => {
+      var value_str = getValueString(this._values[value])
       if (!key.startsWith('_'))
         buf.push(key + ':' + value_str)
       else
@@ -607,23 +607,15 @@ export class Fn {
  */
 abstract class ComposedFn extends Fn {
 
-  #fns: Fn[]
+  fns: Fn[]
 
   constructor(...fns: Fn[]) {
     super()
-    this.#fns = fns
-  }
-
-  get fns() {
-    return this.#fns
-  }
-
-  set fns(fns: Fn[]) {
-    this.#fns = fns
+    this.fns = fns
   }
 
   get size() {
-    return this.#fns.length
+    return this.fns.length
   }
 }
 
@@ -947,19 +939,6 @@ class PartialFunction {
 }
 
 /**
- * This is functional, or higher order function that returns a partial function when being invoked.
- */
-export class FunctionalFn extends WrapperFn {
-  constructor(expr: any) {
-    super(expr)
-  }
-
-  apply(input: any) {
-    return new PartialFunction(this.wrapped, input)
-  }
-}
-
-/**
  * Tuple function contains a list of named or non-named fns.
  * 
  * Any tail element or any tuple containng tail element will be wrapped into another tail
@@ -1147,7 +1126,7 @@ export class RefFn extends Fn {
     }
 
     if (f) {
-      return f
+      return f.apply(input, context)
     }
 
     return this
@@ -1335,7 +1314,7 @@ export class ExprRefFn extends WrapperFn {
 
   constructor(fnl: any, expr: any) {
     if (!(fnl instanceof FunctionInterfaceFn))
-      throw new FtlRuntimeError("functional is not instanceof FunctionalFn")
+      throw new FtlRuntimeError("functional is not instanceof FunctionInterfaceFn")
 
     super(expr)
     this.fnl = fnl
