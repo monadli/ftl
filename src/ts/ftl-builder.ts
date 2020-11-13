@@ -237,7 +237,19 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
   for (let i = 0; i < details.operands.length; i++) {
     let operand = details.operands[i]
     try {
-      operands.push(buildElement(operand, module, input))
+      let operand_build = buildElement(operand, module, input)
+      if (operand_build instanceof ftl.RefFn && module
+        && (!input
+          || (input instanceof ftl.NamedExprFn && input.name != operand_build.name)
+          || (input instanceof ftl.TupleFn && !input.hasName(operand_build.name)))
+      ) {
+        let f = module.getFn(operand_build.name)
+        if (f) {
+          operands.push(f)
+          continue
+        }
+      }
+      operands.push(operand_build)
     } catch (e) {
 
       if (!(e instanceof PrefixOperatorNotFoundError)) {
