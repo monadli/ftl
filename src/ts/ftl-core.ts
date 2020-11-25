@@ -1721,7 +1721,7 @@ export class CurryExprFn extends Fn {
 /**
  * This fn wraps an executable expression.
  * 
- * An executable may actual results into a tail. In that case,
+ * An executable may have actual result as a tail. In that case,
  * the tail needs to be repeatedly executed until it is not a tail anymore.
  */
 export class ExecutableFn extends WrapperFn {
