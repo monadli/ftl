@@ -25,5 +25,7 @@ fn x => b(y) -> b(x + 1)
 // argument for such function parameter as:
 3 => y + 1 == 5
 (a:3) => y + 1 == 5
+
+// for the pipe, the previous tuple is passed as closure:
 (a:3, b:2) -> a => y + b == 6
 
