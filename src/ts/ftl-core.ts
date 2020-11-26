@@ -918,21 +918,23 @@ export class FunctionInterfaceFn extends Fn {
 }
 
 /**
- * Stateful intermediate partial function storing function and partial parameters.
+ * Stateful intermediate function storing function and parameters as closure.
  */
-class PartialFunction {
+class ClosureFunction {
   f: Fn
-  partialParams: any
-  constructor(f: any, partialParams: any) {
+  closureParams: any
+  constructor(f: any, closureParams: any) {
     this.f = f
-    this.partialParams = partialParams
+    this.closureParams = closureParams
   }
 
   apply(input: any, context?:any) {
     var tuple = new Tuple()
 
-    // TODO can not simply append
-    tuple.appendAll(this.partialParams)
+    // append partial parameters first as closure
+    // for correctly resolve positional reference
+    // such as _0, _1, etc.
+    tuple.appendAll(this.closureParams)
     tuple.appendAll(input)
     return this.f.apply(tuple, context)
   }
@@ -1321,7 +1323,7 @@ export class ExprRefFn extends WrapperFn {
   }
 
   apply(input: any) {
-    return new PartialFunction(this.wrapped, input)
+    return new ClosureFunction(this.wrapped, input)
   }
 }
 

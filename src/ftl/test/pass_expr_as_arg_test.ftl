@@ -28,4 +28,21 @@ fn x => b(y) -> b(x + 1)
 
 // for the pipe, the previous tuple is passed as closure:
 (a:3, b:2) -> a => y + b == 6
+(a:3, b:2) -> a => (b + y) == 6
+(a:3, b:2) -> a => (_1 + y) == 6
+
+// Notice that
+//   (a:3, b:2) -> a => y + b
+// is eqivalent to
+//   (a:3, b:2) -> ((a => y) + b)
+// according to operators being left associative.
+
+// For the same reason,
+//   (a:3, b:2) -> a => b + y
+// is eqivalent to
+//   (a:3, b:2) -> ((a => b) + y)
+// with which result is undefined because y is not in the right context.
+
+// This is why above second expression has y + b enclosed in prantheses
+// to put them in the right context.
 
