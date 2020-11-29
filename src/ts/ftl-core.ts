@@ -1251,7 +1251,7 @@ export class ExprFn extends WrapperFn {
  * CallExprFn captures call expressions such as sin(3.14).
  * 
  * A call expression may represent a full or partial function call,
- * or a lambda expression invocation with named refrences.   
+ * or a lambda expression invocation with named references.   
  */
 export class CallExprFn extends Fn {
   f: Fn

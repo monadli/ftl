@@ -46,3 +46,5 @@ fn x => b(y) -> b(x + 1)
 // This is why above second expression has y + b enclosed in prantheses
 // to put them in the right context.
 
+// More examples:
+4 -> (a:3, b:_0 * 2) -> a => (b + y) == 12

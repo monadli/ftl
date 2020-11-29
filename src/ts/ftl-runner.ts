@@ -1,8 +1,5 @@
 import fs from 'fs'
 import util from 'util'
-import path from 'path'
-import * as ftl from './ftl-core'
-import * as ftl_parser from './ftl-parser'
 import * as ftl_builder from './ftl-builder'
 
 let readFile = util.promisify(fs.readFile)
@@ -23,13 +20,11 @@ if (!ftlFile.endsWith('.ftl')) {
 }
 
 ftlFile = ftlFile.substring(0, ftlFile.length - 4)
-//ftl.default.setRunPath(cwd)
-ftl_builder.setRunPath(cwd)
 
-;(async function run(ftlFile:string) {
+ftl_builder.setRunPath(cwd);
 
+(async function run(ftlFile: string) {
   let module = ftl_builder.buildModule(cwd, ftlFile)
-
   console.log(module)
   for (let exec of module!.executables) {
     try {
