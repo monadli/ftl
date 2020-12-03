@@ -1,4 +1,4 @@
-import ftl/lang[==, <, '?? ::']
+import ftl/lang[<, '?? ::']
 
 // This is an example explaining why in ExecutableFn,
 // return value needs to be checked against

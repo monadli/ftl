@@ -14,19 +14,32 @@ const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u
 
 type BuildInfo = ftl_parser.BuildInfo
 
+/**
+ * Error for module not found.
+ */
+export class ModuleNotFoundError extends Error {
+  moduleName: string
+
+  constructor(moduleName: string) {
+    super()
+    this.moduleName = moduleName
+    this.message = 'Module not exist!'
+  }
+}
+
 function buildingFor(context:string) {
   let stack = new Error().stack
   return stack?.includes(`at build${context} (`)
 }
 
-export function buildModuleWithContent(content:string) {
-  let module = new ftl.Module('')
+export function buildModuleWithContent(path:string, content:string) {
+  let module = new ftl.Module(path)
   return buildToModule(content, module)
 }
 
 export function buildModule(path:string, ftlFile:string) {
   let content = fs.readFileSync(`${runPath}/${ftlFile}.ftl`, 'utf-8')
-  return buildModuleWithContent(content)
+  return buildModuleWithContent(ftlFile, content)
 }
 
 export function buildToModule(ftl_content:string, module:ftl.Module) {
@@ -85,12 +98,19 @@ function buildImportMultiItems(details:any, module:any, prev:any) {
   })
 }
 
-function buildImportSingleItem(details:any, module:any) {
-  let path:string = details.path
+function buildImportSingleItem(details: any, module: any) {
+  function getModulePath() {
+    let last_slash = module._name.lastIndexOf('/')
+    return last_slash == -1 ? '' : module._name.substring(0, last_slash)
+  }
+
+  let path: string = details.path
   if (path.endsWith('.')) path = path.substring(0, path.length - 1)
 
   let name_elm = buildElement(details.name, module)
   var name:string|null = name_elm.name || name_elm
+
+  let asName = buildElement(details.item, module)?.name
 
   if (path.endsWith('/')) {
     path += name
@@ -98,7 +118,7 @@ function buildImportSingleItem(details:any, module:any) {
   }
 
   if (path.startsWith('.')) {
-    name = path + '/' + name
+    path = getModulePath() + path.substring(1)
   }
 
   // absolute import
@@ -111,19 +131,22 @@ function buildImportSingleItem(details:any, module:any) {
   if (!mod) {
     mod = buildModule(runPath, path)
     if (!mod)
-      throw new ftl.ModuleNotFoundError(path)
+      throw new ModuleNotFoundError(path)
+
+    ftl.addModule(mod)
   }
 
   // import all
   if (!name) {
-    //if (asName != null)
-    //  throw new Error("Importing * (all) can not have alias name!")
+    if (asName != null)
+      throw new Error("Importing * (all) can not have alias name!")
+
     mod.functionNames.forEach((n: string) => {
-      module.addImport(n, mod!.getFn(n))
+      module.addImport(n, mod!.getExportableFn(n))
     })
   }
   else
-    module.addImport(/*asName ||*/ name, mod.getFn(name))
+    module.addImport(asName || name, mod.getExportableFn(name))
 }
 
 function buildExecutable(details:any, module:any) {
@@ -232,7 +255,7 @@ function buildOperatorExpression(details:any, module:any, input?:any) {
  * @param module 
  * @param input 
  */
-function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
+function buildN_aryOperatorExpression(details:any, module:ftl.Module, input:any=null) {
   let operands = []
   for (let i = 0; i < details.operands.length; i++) {
     let operand = details.operands[i]
@@ -243,7 +266,7 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
           || (input instanceof ftl.NamedExprFn && input.name != operand_build.name)
           || (input instanceof ftl.TupleFn && !input.hasName(operand_build.name)))
       ) {
-        let f = module.getFn(operand_build.name)
+        let f = module.getAvailableFn(operand_build.name)
         if (f) {
           operands.push(f)
           continue
@@ -283,7 +306,7 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
 
     // This is used to parse operators and operands recursively.
     // It is called from index = length of operators down to 1.
-    function parse_operators(module:any, inputFn:any, ops:string[], operands:any[], index:number, full:boolean, extra:any): any {
+    function parse_operators(module:ftl.Module, inputFn:any, ops:string[], operands:any[], index:number, full:boolean, extra:any): any {
 
       // operand at index 1 is for operator at 
       var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
@@ -318,8 +341,8 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
         }
       }
 
-      for (var i = 0; i < f.params.fns.length; i++) {
-        var fn = f.params.fns[i]
+      for (var i = 0; i < f.params.size; i++) {
+        var fn = f.params.getFnAt(i)
         if (fn instanceof ftl.NamedExprFn && fn.wrapped instanceof ftl.FunctionInterfaceFn) {
           //fnode.wrapped.isNative = f instanceof ftl.NativeFunctionFn
           console.debug(inputFn)
@@ -331,7 +354,7 @@ function buildN_aryOperatorExpression(details:any, module:any, input:any=null) {
       }
 
       extra.current_index += index
-      var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.fns.length))
+      var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.size))
 
       return new ftl.PipeFn(operands_tuple, raise ? new ftl.RaiseBinaryOperatorForArrayFn(f) : f)
     }
@@ -393,13 +416,13 @@ function buildFunctionDeclaration(details:any, module:any) {
   let signature = buildElement(details.signature, module, null)
 
   let f_name
-  let params:any
+  let params:ftl.TupleFn
 
   // prefix operator or infix operator
   if (signature.operator || signature.operators) {
     params = signature.operand && build_function_parameters(new ftl.TupleFn(signature.operand))
             || build_function_parameters(new ftl.TupleFn(... signature.operands))
-    f_name = signature.postfix ? ` ${signature.operator}` : signature.operators || (params.fns.length == 1 ? `${signature.operator} ` : signature.operator)
+    f_name = signature.postfix ? ` ${signature.operator}` : signature.operators || (params.size == 1 ? `${signature.operator} ` : signature.operator)
   } else {
     f_name = signature.name
     params = signature.params
@@ -407,7 +430,7 @@ function buildFunctionDeclaration(details:any, module:any) {
 
   let body = details.body
 
-  let param_list = params.fns.map((p:any) => p.name)
+  let param_list = params.map((p:any) => p.name)
   let fn
   if (body.script) {
     let script = eval("(function(" + param_list.join(',') + ")" + body.script + ")")
@@ -433,8 +456,8 @@ function buildPrefixOperatorExpression(details:any, module:any) {
       throw new PrefixOperatorNotFoundError(`Prefix operator "${op}" not found!`, op, expr)
     }
 
-    if (expr instanceof ftl.TupleFn && expr.fns.length == 1) {
-      return new ftl.PipeFn(expr.fns[0], f)
+    if (expr instanceof ftl.TupleFn && expr.size == 1) {
+      return new ftl.PipeFn(expr.first, f)
     } else {
       return new ftl.PipeFn(expr, f)
     }
@@ -462,12 +485,12 @@ function buildPostfixOperatorDeclaration(details:any, module:any, prev:any) {
 function buildCallExpression(details:any, module:any, prev:any) {
   let name = buildElement(details.name, module).name
 
-  let params = details.params.map((p:any) => buildElement(p, module, prev))
+  let call_args:ftl.TupleFn[] = details.params.map((p:any) => buildElement(p, module, prev))
 
   // lambda calculus
   if (name == '$') {
-    if (params.length == 1) {
-      return build_function_parameters(params[0])
+    if (call_args.length == 1) {
+      return build_function_parameters(call_args[0])
     }
     else {
       throw new FtlBuildError('Lambda calculus not supporting curry yet')
@@ -482,17 +505,17 @@ function buildCallExpression(details:any, module:any, prev:any) {
         throw new Error(`${name} not found!`)
       }
 
-      return new ftl.FunctionInterfaceFn(name, params)
+      return new ftl.FunctionInterfaceFn(name, call_args)
     }
   }
 
-  if (f instanceof ftl.FunctionBaseFn && f.params.fns.length == 0) {
-    if (params.length > 1) {
+  if (f instanceof ftl.FunctionBaseFn && f.params.size == 0) {
+    if (call_args.length > 1) {
       throw new FtlBuildError(`${name} has no parameters and more than one calls is found!`)
     }
 
-    if (params[0].size > 0) {
-      throw new FtlBuildError(`${name} has no parameters and ${params[0].size} arguments are provided!`)
+    if (call_args[0].size > 0) {
+      throw new FtlBuildError(`${name} has no parameters and ${call_args[0].size} arguments are provided!`)
     }
 
     return new ftl.CallExprFn(name, f, [new ftl.TupleFn()])
@@ -506,12 +529,12 @@ function buildCallExpression(details:any, module:any, prev:any) {
     var named_args = new Set<string>()
     var unproced_named_args = new Map<string, any>()
 
-    if (params[0].size == 0 && f.params.fns[0].wrapped instanceof ftl.TupleSelectorFn) {
+    if (call_args[0].size == 0 && (f.params.first! as any).wrapped instanceof ftl.TupleSelectorFn) {
       throw new FtlBuildError(`At least 1 argument is needed to call ${f.name}`)
     }
 
-    for (var n = 0; n < params.length; n++) {
-      if (n > 0 && params[n].fns.length == 0) {
+    for (var n = 0; n < call_args.length; n++) {
+      if (n > 0 && call_args[n].size == 0) {
         throw new Error('Currying with no arguments!')
       }
 
@@ -524,12 +547,12 @@ function buildCallExpression(details:any, module:any, prev:any) {
       for (var i = 0; i < new_params.length; i++) {
         if (!(new_params[i] instanceof ftl.NamedExprFn)) continue
 
-        if (index == params[n].fns.length) {
+        if (index == call_args[n].size) {
           break
         }
 
         let param = new_params[i]
-        let arg = params[n].fns[index]
+        let arg = call_args[n].getFnAt(index)
        
         // named arg
         // excluding simple RefFn wrapped as NamedExprFn which share the smae name
@@ -584,18 +607,18 @@ function buildCallExpression(details:any, module:any, prev:any) {
   // assume the calling is correct
   // TODO passing parameters to check
   else if (f instanceof ftl.FunctionHolder) {
-    new_params = params
+    new_params = call_args
   }
   else {
     // function is passing from prev
     let f_def = prev.getNamedFn(name).wrapped
-    if (f_def instanceof ftl.FunctionInterfaceFn && params.length < f_def.params.length) {
+    if (f_def instanceof ftl.FunctionInterfaceFn && call_args.length < f_def.paramSize) {
       throw new Error(`Reference for ${name} is not a fucntional interface!`)
     }
-    if (params.length < f_def.params.length) {
+    if (call_args.length < f_def.params.length) {
       throw new Error(`Parameter counts for ${name} is less than expected!`)
     }
-    new_params = params
+    new_params = call_args
   }
 
   // re-sequence unresolved parameters
@@ -670,12 +693,13 @@ function buildArrayElementSelector(details:any, module:any) {
   if (index instanceof ftl.ArrayInitializerFn) {
 
     // TODO allow ArrayElementSelectorFn takes multiple values
-    if (index.values.length != 1) {
+    if (index.size != 1) {
       throw new Error('ArrayElementSelectorFn not supporting multiple values yet!')
     }
-    let index_info = index.values[0]
+
+    let index_info = index.first
     if (index_info instanceof ftl.ArrayInitializerWithRangeFn) {
-      return new ftl.ArrayRangeSelectorFn(name, index_info.start_val.apply(), index_info.end_val.apply(), index_info.interval.apply())
+      return new ftl.ArrayRangeSelectorFn(name, index_info.startValue.apply(), index_info.endValue.apply(), index_info.interval.apply())
     }
     return new ftl.ArrayElementSelectorFn(name, index_info)
   }
@@ -730,7 +754,7 @@ function buildExpressionCurry(details:any, module:any, prev?:any) {
       throw new FtlBuildError('At least one argument for expression currying has to be provided!')
     }
 
-    if (params.fns.filter(param => param instanceof ftl.NamedExprFn).length != params.size) {
+    if (params.filter(param => param instanceof ftl.NamedExprFn).length != params.size) {
       throw new FtlBuildError('All arguments for expression currying have to be named!')
     }
   })
@@ -740,15 +764,14 @@ function buildExpressionCurry(details:any, module:any, prev?:any) {
 
 // builds function parameter
 function build_function_parameters(params:ftl.TupleFn) {
-  let fns = params.fns.map((p:any, i:number) => {
+  let fns = params.map((p:any, i:number) => {
     if (p instanceof ftl.RefFn) {
       return new ftl.NamedExprFn(p.name, new ftl.TupleSelectorFn(i))
     }
     else if (p instanceof ftl.NamedExprFn) {
-      p.wrapped = p.wrapped instanceof ftl.RefFn
+      return new ftl.NamedExprFn(p.name, p.wrapped instanceof ftl.RefFn
         ? new ftl.TupleSelectorFn(i)
-        : new ftl.SeqSelectorOrDefault(i, p.wrapped)
-      return p
+        : new ftl.SeqSelectorOrDefault(i, p.wrapped))
     }
     else if (p instanceof ftl.FunctionInterfaceFn)
       return new ftl.NamedExprFn(p.name, p)
