@@ -402,7 +402,7 @@ function buildOperandFunctionDeclaration(details:any, module:any, prevElm:any=nu
   // functional interface
   // its sequence is detemined in buildInfixOperatorDeclaration(...)
   var fn = new ftl.FunctionInterfaceFn(name, params)
-  fn.isTail = is_tail
+  if (is_tail) fn.setAsTail()
   return fn
 }
 
@@ -437,7 +437,7 @@ function buildFunctionDeclaration(details:any, module:any) {
     fn = new ftl.NativeFunctionFn(f_name, params, script)
   }
   else {
-    module.addFn(new ftl.FunctionHolder(f_name))
+    module.addFn(new ftl.FunctionHolder(f_name, params))
     let arrow = body.map((arrow:any) => buildElement(arrow, module, params))
 
     // TODO arrow extract from pipe fn

@@ -15,12 +15,6 @@ function getValueString(value: any) {
     return value.toString()
 }
 
-let bindingFunctions = {
-  pass_through() {
-    return this
-  }
-}
-
 /**
  * Utility class.
  */
@@ -469,6 +463,17 @@ export abstract class Fn {
   }
 }
 
+abstract class NamedFn extends Fn {
+  private _name: string
+
+  constructor(name: string) {
+    super()
+    this._name = name
+  }
+
+  get name() { return this._name }
+}
+
 /**
  * This abstract class is used to define a function composed of child functions.
  * 
@@ -598,17 +603,18 @@ class VarFn extends ImmutableValFn {
 /**
  * Class as base for all types of defintion of functions.
  */
-export class FunctionBaseFn extends Fn {
+export abstract class FunctionBaseFn extends NamedFn {
   protected _body: Fn
-
-  name: string
-  params: TupleFn
+  protected _params: TupleFn
 
   constructor(name: string, params: TupleFn, body: any) {
-    super()
-    this.name = name
-    this.params = params
+    super(name)
+    this._params = params
     this._body = body
+  }
+
+  get params() {
+    return this._params
   }
 
   apply(input: any, context: any) {
@@ -631,7 +637,7 @@ export class NativeFunctionFn extends FunctionBaseFn {
       super()
       this._jsfunc = jsfunc
     }
-  
+
     apply(input: any) {
       return this._jsfunc.apply(null, (input instanceof Tuple) && input.toList() || [input])
     }
@@ -709,103 +715,49 @@ export class FunctionFn extends FunctionBaseFn {
  *   params
  *   seq
  */
-export class FunctionInterfaceFn extends Fn {
-  private _name: string
+export class FunctionInterfaceFn extends NamedFn {
   private params: any
-  seq: number
-  private partial_input: any
 
-  // temp
-
-  isTail: any
-  closure: any
-  wrapped: any
-  fn: any
+  private _seq: number
+  _tail = false
 
   constructor(name: string, params: any[], seq = 0) {
-    super()
-    this._name = name
+    super(name)
     this.params = params
-    this.seq = seq
+    this._seq = seq
   }
 
-  get name() { return this._name }
+  get seq() { return this._seq }
+  set seq(val: number) { this._seq = val }
+
+  isTail() { return this._tail }
+
+  setAsTail() { this._tail = true }
+
   get paramSize() { return this.params.length }
-
-  native_f(input: any) {
-    return this.partial_input instanceof Tuple ? this.partial_input.getIndex(this.seq) : this.partial_input
-  }
-
-  /**
-   * Converts a javascript arguments into a tuple.
-   */
-  static js_args_to_tuple(params: TupleFn, args: any) {
-    var ret = new Tuple()
-    for (var i = 0; i < params.size; i++)
-      ret.addNameValue((params.getFnAt(i) as any).name, args[i])
-    return ret
-  }
-
-
-  // This is a function passing to native javascript functions.
-  // The "this" here is not this class instance but a dynamic binding
-  // containg runtime info.
-  // Coincidentally this.params and this.wrapped are the same as
-  // the ones in this class, but this.closure is not.
-  fn_ref(arg: any) {
-    console.log("fn_ref arguments", arg)
-    console.log("fn_ref closure", this.closure)
-
-    var len = arguments.length
-    if (len == 0)
-      return this.fn.apply(this.params.apply())
-
-    var tpl = new Tuple()
-
-    // has parameters
-    // no named parameters
-
-    var start = 0
-    if (this.params instanceof RefFn) {
-
-      // TODO
-      if (this.params.name === 'raw')
-        return this.wrapped.apply(arg)
-
-      // TODO change ref type
-      if (this.params.isRefType()) {
-        // TODO tpl = this.params.params.apply(FunctionInterfaceFn.js_args_to_tuple(arguments))
-      } else
-        tpl.addNameValue(this.params.name, arg)
-      start = 1
-    } else if (this.params instanceof TupleFn) {
-      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params, arguments)
-      start = this.params.size
-    }
-
-    // call expr where params is array of TupleFn
-    else if (Array.isArray(this.params) && this.params[0] instanceof TupleFn) {
-      tpl = FunctionInterfaceFn.js_args_to_tuple(this.params[0], arguments)
-      start = this.params[0].size
-    }
-
-    var res = this.fn.apply(tpl)
-    return FnUtil.unwrapMonad(res)
-  }
 
   apply(input: any) {
 
-    let f = input.getIndex(this.seq)
-    if (typeof f == 'function' && (f.name == 'bound fn_ref' || f.name == 'bound pass_through')) {
+    let f = input.getIndex(this._seq)
+    if (typeof f == 'function' && (f.name == 'bound applyInNativeContext' || f.name == 'bound tailWrapper')) {
       return f
     }
 
-    if (this.isTail) {
-      return bindingFunctions.pass_through.bind(new TailFn(f))
-    } else {
-      return this.fn_ref.bind({ fn: input instanceof Tuple ? f : input, params: this.params })
+    // For tail, simply return a TailFn wrapping the action function f
+    // for delayed computation, specifically delay the computation
+    // when returned to calling stack to reduce stack depth.
+    if (this.isTail()) {
+      let tail = new TailFn(f)
+      return tail.tailWrapper.bind(tail)
     }
-    //      return this.native_f.bind({seq: this.seq, partial_input: input, params: this.params})
+
+    // Otherwise, bind as a regular javascript function which can be either called
+    // in a native function wrapped in NativeFunctionFn or ftl function wrapped in
+    // FunctionFn
+    else {
+      let closure = new ClosureFunction(input instanceof Tuple ? f : input, this.params)
+      return closure.applyInNativeContext.bind(closure)
+    }
   }
 }
 
@@ -815,12 +767,70 @@ export class FunctionInterfaceFn extends Fn {
 class ClosureFunction {
   f: Fn
   closureParams: any
+
   constructor(f: any, closureParams: any) {
     this.f = f
     this.closureParams = closureParams
   }
 
-  apply(input: any, context?:any) {
+  /**
+   * Converts arguments, whcih applies to a javascript function that wraps an ftl function,
+   * into a TupleFn, thus it can be applied to the wrapped ftl function.
+   *
+   * @param params ftl function parameters
+   * @param args arguments to the wrapper js function
+   * @returns a Tuple that can be applied to the ftl function
+   */
+  jsArgsToTuple(params: TupleFn, args: any) {
+    var ret = new Tuple()
+    for (var i = 0; i < params.size; i++)
+      ret.addNameValue((params.getFnAt(i) as any).name, args[i])
+    return ret
+  }
+
+  /**
+   * This is a function which is wrapped into native javascript context
+   * and exexuted there.
+   */
+  applyInNativeContext(input: any) {
+    var len = arguments.length
+    if (len == 0)
+      return this.f.apply(this.closureParams.apply())
+
+    var tpl = new Tuple()
+
+    // has parameters
+    // no named parameters
+
+    var start = 0
+    if (this.closureParams instanceof RefFn) {
+
+      // TODO
+      //if (this.closureParams.name === 'raw')
+      //  return this.wrapped.apply(input)
+
+      // TODO change ref type
+      if (this.closureParams.isRefType()) {
+        // TODO tpl = this.params.params.apply(FunctionInterfaceFn.js_args_to_tuple(arguments))
+      } else
+        tpl.addNameValue(this.closureParams.name, input)
+      start = 1
+    } else if (this.closureParams instanceof TupleFn) {
+      tpl = this.jsArgsToTuple(this.closureParams, arguments)
+      start = this.closureParams.size
+    }
+
+    // call expr where params is array of TupleFn
+    else if (Array.isArray(this.closureParams) && this.closureParams[0] instanceof TupleFn) {
+      tpl = this.jsArgsToTuple(this.closureParams[0], arguments)
+      start = this.closureParams[0].size
+    }
+
+    var res = this.f.apply(tpl)
+    return FnUtil.unwrapMonad(res)
+  }
+
+  apply(input: any, context?: any) {
     var tuple = new Tuple()
 
     // append partial parameters first as closure
@@ -1044,23 +1054,18 @@ export class RefFn extends Fn {
  * 
  * It is transient. Once construction is fnished, it will be defererenced.
  */
-export class FunctionHolder extends Fn {
-  private _f:any
-  private _name:string
+export class FunctionHolder extends FunctionBaseFn {
 
-  constructor(name:string) {
-    super()
-    this._name = name
+  constructor(name:string, params: any) {
+    super(name, params, null)
   }
 
-  get name() { return this._name }
-
-  set wrapped(f: any) {
-    this._f = f
+  set wrapped(f: FunctionBaseFn) {
+    this._body = f
   }
 
   apply(input: any, context?: any) {
-    return this._f.apply(input, context)
+    return this._body.apply(input, context)
   }
 }
 
@@ -1260,6 +1265,16 @@ class TailFn extends WrapperFn {
     }
   }
 
+  /**
+   * This function is used in native javascript that return the tail function
+   * into calling stack frame. In other words, the actual computation does not
+   * happen at the place it should be, but will happen in higher stack frame
+   * for the purpose of reducing stack depth.
+   */
+  tailWrapper() {
+    return this
+  }
+
   addTail(tail:TupleFn) {
     if (tail.find(elm => TailFn.isTail(elm)) !== undefined) {
       this._tails.unshift(tail)
@@ -1405,13 +1420,11 @@ export class ArrayInitializerWithRangeFn extends Fn {
  * @parameter name - name of a list
  * @parameter index - index of element to select
  */
-export class ArrayElementSelectorFn extends Fn {
-  private _name: string
+export class ArrayElementSelectorFn extends NamedFn {
   private _index: Fn | number
 
   constructor(name: string, index: Fn | number) {
-    super()
-    this._name = name
+    super(name)
     this._index = index instanceof ConstFn ? index.apply(null) : index
     if (Array.isArray(this._index)) {
       if (this._index.length == 1) {
@@ -1422,13 +1435,12 @@ export class ArrayElementSelectorFn extends Fn {
     }
   }
 
-  get name() { return this._name }
   get index() { return this._index }
 
   apply(input: any) {
     let list = input && (
-      input instanceof Tuple && (input.get(this._name) || null)
-      || ((this._name == '_' || this._name == '_0') && input)
+      input instanceof Tuple && (input.get(this.name) || null)
+      || ((this.name == '_' || this.name == '_0') && input)
       || []
     )
 

@@ -1,7 +1,7 @@
 import ftl/lang[+, ==, '?? ::']
 
 fn len(list) {
-  return list.length;
+  return list.length
 }
 
 fn _reduce(list, accu, index, reducer(accu, item)) -> index == len(list) ?? accu :: _reduce(list, reducer(accu, list[index]), index + 1, reducer)
