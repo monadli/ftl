@@ -2,7 +2,12 @@ import fs from 'fs'
 import * as ftl from './ftl-core'
 import * as  ftl_parser from './ftl-parser'
 
+const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283'
+
+type BuildInfo = ftl_parser.BuildInfo
+
 var runPath: string
+var optimization = false
 
 Error.stackTraceLimit = Infinity
 
@@ -10,9 +15,9 @@ export function setRunPath(path: string) {
   runPath = path
 }
 
-const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283'
-
-type BuildInfo = ftl_parser.BuildInfo
+export function setOptimization(val:boolean) {
+  optimization = val
+}
 
 /**
  * Error for module not found.
@@ -759,7 +764,21 @@ function buildExpressionCurry(details:any, module:any, prev?:any) {
     }
   })
 
-  return new ftl.CurryExprFn(expr, params_list)
+  let ret = expr
+  if (optimization) {
+    params_list.forEach((params: ftl.TupleFn) => {
+      ret = ftl.FnUtil.unwrapMonad(ret.apply(params.apply(null)))
+      if (ret instanceof ftl.Tuple) {
+        ret = ret.toTupleFn()
+      }
+    })
+  }
+
+  else {
+    ret = new ftl.CurryExprFn(expr, params_list)
+  }
+
+  return ret instanceof ftl.Fn ? ret : new ftl.ConstFn(ret)
 }
 
 // builds function parameter

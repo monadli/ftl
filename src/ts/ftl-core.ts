@@ -1,14 +1,42 @@
 // ftl core functions and classes.
 
-var version = '0.0.1'
-var TupleSelectorPattern = /_\d+$/
+const version = '0.0.1'
+const TupleSelectorPattern = /_\d+$/
+
+/**
+ * All runtime modules in one ftl runtime.
+ */
+let modules = new Map<string, Module>()
+
+/**
+ * Returns the module with name.
+ *
+ * @param name module name
+ */
+export function getModule(name: string) {
+  return modules.get(name)
+}
+
+/**
+ * Adds a module into ftl runtime.
+ * 
+ * If a module with the same name is already there, will replace.
+ * 
+ * Since the module name is file path + name relative to startup program,
+ * modules with the same name are mostly the same.
+ *
+ * @param module module to be added
+ */
+export function addModule(module: Module) {
+  modules.set(module.name, module)
+}
 
 /**
  * Internal function that returns string presentation of any value.
  * 
  * @param value value of any type including tuple
  */
-function getValueString(value: any) {
+function toString(value: any) {
   if (Array.isArray(value) || typeof value == 'string')
     return JSON.stringify(value)
   else
@@ -18,7 +46,7 @@ function getValueString(value: any) {
 /**
  * Utility class.
  */
-class FnUtil {
+export class FnUtil {
 
   /**
    * Test if an element is undefined or null.
@@ -28,26 +56,10 @@ class FnUtil {
   }
 
   /**
-   * Unwraps the tuple that contains a single value (monad).
+   * Unwraps the tuple that contains a single value.
    */
   static unwrapMonad(tuple: any): any {
-    return tuple instanceof Tuple && tuple.size == 1 && tuple.size == 1 ? tuple.getIndex(0) : tuple
-  }
-
-  /**
-   * Returns the first fn that satisfies predicate.
-   *
-   * @param fns array of fns
-   * @param predicate for testing fns
-   */
-  static find(fns: any[], predicate: (fn: any) => boolean) {
-    for (var i = 0; i < fns.length; i++) {
-      var fn = fns[i]
-      if (predicate(fn))
-        return fn
-    }
-
-    return null
+    return tuple instanceof Tuple && tuple.size == 1 ? tuple.getIndex(0) : tuple
   }
 }
 
@@ -68,6 +80,12 @@ class FnConstructionError extends Error {
  * Error for runtime.
  */
 class FtlRuntimeError extends Error {
+  constructor(...params: any[]) {
+    super(...params)
+  }
+}
+
+class FunctionParameterDeficiencyError extends FtlRuntimeError {
   constructor(...params: any[]) {
     super(...params)
   }
@@ -207,10 +225,10 @@ export class Module {
 
 /**
  * This class is the key data structure carrying computation results
- * from one tuple to next.
- * 
+ * from one tuple function to next via -> operator.
+ *
  * The elements are with fixed sequence. They can be accessed as an array.
- * 
+ *
  * An element of the tuple can either have an explicit name or implicit
  * name with form defined in TupleSelectorPattern. When an element has
  * explicit name, it is accessible via either the explicit name or
@@ -383,15 +401,15 @@ export class Tuple {
       } else if (!(val instanceof Fn)) {
         val = new ConstFn(val)
       }
-      if (name.startsWith('_') && !isNaN(parseInt(name.substring(1))))
-        converted.push(val)
-      else if (val instanceof TailFn) {
-        // TODO test in what situation there is TailFn
-        val.name = name
-        converted.push(val)
+
+      // if name is significant
+      if (!name.startsWith('_') || isNaN(parseInt(name.substring(1)))) {
+        if (val instanceof TailFn)
+          val.name = name
+        else
+          val = new NamedExprFn(name, val)
       }
-      else
-        converted.push(new NamedExprFn(name, val))
+      converted.push(val)
     })
 
     return new TupleFn(... converted)
@@ -428,13 +446,16 @@ export class Tuple {
     return true
   }
 
+  /**
+   * Returns string presentation of a tuple.
+   */
   toString() {
     if (this._values.length == 0)
       return "()"
 
     var buf: any[] = []
     this._names.forEach((value, key, map) => {
-      var value_str = getValueString(this._values[value])
+      var value_str = toString(this._values[value])
       if (!key.startsWith('_'))
         buf.push(key + ':' + value_str)
       else
@@ -463,6 +484,9 @@ export abstract class Fn {
   }
 }
 
+/**
+ * Any function type that has an immutable name.
+ */
 abstract class NamedFn extends Fn {
   private _name: string
 
@@ -541,7 +565,10 @@ export abstract class WrapperFn extends Fn {
 }
 
 /**
- * Constant function, which wraps a constant and returns it for any input.
+ * Constant function, which wraps a value as constant and returns it for any input.
+ * 
+ * Note that the value can be a function as well, but will not be computed
+ * in the context of this class.
  * 
  * Properties:
  *   non-null value
@@ -550,7 +577,7 @@ export class ConstFn extends Fn {
 
   _value: any
 
-  constructor(value: Fn | any) {
+  constructor(value:unknown) {
     super()
     this._value = value
   }
@@ -563,7 +590,7 @@ export class ConstFn extends Fn {
   }
 
   toString() {
-    return getValueString(this._value)
+    return toString(this._value)
   }
 }
 
@@ -652,7 +679,7 @@ export class NativeFunctionFn extends FunctionBaseFn {
 
   apply(input: any, context?:any) {
     if (FnUtil.isNone(input) && this.params.size > 0)
-      throw new FtlRuntimeError("Input to native function " + this.name + " does not match!")
+      throw new FunctionParameterDeficiencyError("Input to native function " + this.name + " does not match!")
     var paramValues = this.params.apply(input)
     return this._body.apply(paramValues)
   }
@@ -845,7 +872,7 @@ class ClosureFunction {
 /**
  * Named expression.
  * 
- * This is always an element in a TupleFn.
+ * This is used to represent an element in a TupleFn.
  */
 export class NamedExprFn extends WrapperFn {
   private _name: string
@@ -901,7 +928,7 @@ export class TupleFn extends ComposedFn {
    * Returns element with the name.
    */
   getNamedFn(name: string) {
-    return FnUtil.find(this._fns, (fn: any) => fn instanceof NamedExprFn && fn.name == name)
+    return this.find((fn: any) => fn instanceof NamedExprFn && fn.name == name)
   }
 
   apply(input: any, context?: any) {
@@ -914,7 +941,6 @@ export class TupleFn extends ComposedFn {
       var fn = this._fns[i]
 
       var res = fn.apply(input, context)
-
       if (fn instanceof NamedExprFn || fn instanceof TailFn) {
 
         // if no name is resolved, return itself
@@ -992,7 +1018,9 @@ export class RefFn extends Fn {
     return false
   }
   
-  // Tells if this is a tuple selector such as "_0", "_1", etc.
+  /**
+   * Tells if this reference is a tuple selector such as '_0', '_1', etc.
+   */
   isTupleSelector() {
     return this.name.match(TupleSelectorPattern) != null
   }
@@ -1062,10 +1090,6 @@ export class FunctionHolder extends FunctionBaseFn {
 
   set wrapped(f: FunctionBaseFn) {
     this._body = f
-  }
-
-  apply(input: any, context?: any) {
-    return this._body.apply(input, context)
   }
 }
 
@@ -1613,6 +1637,29 @@ export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
   }
 }
 
+/**
+ * This is for capturing form of partial or full expression with an expression
+ * invoked by passing arguments as:
+ * 
+ *   (x + y)(x:1, y:2)
+ *
+ * A expression can be invoked with currying having arguments passed
+ * one by one, such as:
+ * 
+ *   (x + y)(x:1)(y:2)
+ *
+ * The arguments has to be constants with names matching the ones in the expression.
+ * Sequence of arguments does not matter. The following is equivalent as
+ * above:
+ * 
+ *   (x + y)(y:2)(x:1)
+ *
+ * If partial arguments are passed in the currying form, it will form a partial
+ * expression with provided arguments passed in, and then input is applied to
+ * the partial expression to derive the complete result, such as:
+ *
+ *  (x:1) -> (x + y)(y:2)
+ */
 export class CurryExprFn extends Fn {
   expr:Fn
   params:Fn[]
@@ -1623,26 +1670,15 @@ export class CurryExprFn extends Fn {
     this.params = params
   }
 
-  apply(input:any, module:any) {
-    let expr_res = FnUtil.unwrapMonad(this.expr.apply(input, module))
-    if (expr_res instanceof Tuple) {
-      expr_res = expr_res.toTupleFn()
-    }
-
-    let res = expr_res
-
-    for (var i = 0; i < this.params.length; i++) {
-      let param = this.params[i].apply(input)
-      if (res instanceof Fn) {
-        res = res.apply(param)
-      }
-      res = FnUtil.unwrapMonad(res)
+  apply(input: any, module: any) {
+    let res = this.expr
+    this.params.forEach(p => {
+      res = FnUtil.unwrapMonad(res.apply(p.apply()))
       if (res instanceof Tuple) {
         res = res.toTupleFn()
       }
-    }
-
-    return res
+    })
+    return res instanceof Fn ? FnUtil.unwrapMonad(res.apply(input, module)) : res
   }
 }
 
@@ -1671,30 +1707,4 @@ export class ExecutableFn extends WrapperFn {
     }
     return FnUtil.unwrapMonad(ret)
   }  
-}
-
-// all runtime modules in one ftl runtime
-let modules = new Map<string, Module>()
-
-/**
- * Returns the module with name.
- *
- * @param name module name
- */
-export function getModule(name: string) {
-  return modules.get(name)
-}
-
-/**
- * Adds a module into ftl runtime.
- * 
- * If a module with the same name is already there, will replace.
- * 
- * Since the module name is file path + name relative to startup program,
- * modules with the same name are mostly the same.
- *
- * @param module module to be added
- */
-export function addModule(module: Module) {
-  modules.set(module.name, module)
 }

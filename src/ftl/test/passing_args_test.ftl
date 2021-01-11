@@ -36,7 +36,7 @@ contains(sub:'test', str:'this is a test')
 'test' -> contains('this is a test')
 'test' -> contains(str:'this is a test')
 
-// currying
+// currying form is also supported as:
 contains('this is a test')('test')
 contains(str:'this is a test')(sub:'test')
 contains(sub:'test')(str:'this is a test')
