@@ -1,0 +1,28 @@
+{
+  "name": "ftl",
+  "version": "1.0.0",
+  "description": "functional tuple language",
+  "main": "index.js",
+  "scripts": {
+    "build": "cd src/ts && tsc",
+    "ftl-unit-test": "npm run build && node out/ftl-unit-tests.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monadli/ftl.git"
+  },
+  "keywords": [
+    "ftl"
+  ],
+  "author": "Jian Li",
+  "license": "MIT License",
+  "bugs": {
+    "url": "https://github.com/monadli/ftl/issues"
+  },
+  "homepage": "https://github.com/monadli/ftl#readme",
+  "devDependencies": {
+    "@types/assert": "^1.4.3",
+    "@types/node": "^12.7.3",
+    "assert": "^2.0.0"
+  }
+}
