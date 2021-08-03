@@ -1,24 +1,34 @@
-## FTL Application Structure
+# FTL Application Structure
 
-An ftl program can be defined in a ftl file. If the program becomes large, split them into multiple files either in the same directory, or in sub-directories.
+## Example
+The `app.ftl` is the main program and some functions are defined in `sub/comp.ftl`. This example is used to illustrate the following content.
 
-An ftl file is composed of imports, function definitions and application statements.
+## '.ftl' Files
+An `FTL` program can be defined in a text file with extension `.ftl`. If the program becomes large, split them into multiple files either in the same directory, or in sub-directories.
 
-Statements of all these sections starts each line without space, and it it continues, the continued lines have to start with any space or tab. Otherwise it will be treated as a new statement.
+## Sections in '.ftl'
+An `FTL` file is composed of `imports`, `function definitions` and `application statements`.
 
-Two types of comments are supported, either block comments wrapped with `/*` and `*/` and line comments starts with `//`. They are quite similar to the ones in the other languages.
+## Line Indentation
+Statements of all these sections start from a new line without any leading space, and it may span across many lines with each continuation line at least one leading space or tab. In other words, any line starting without leading space or tab will be treated as a new statement. 
 
-### Example
-The `app.ftl` is the main program and some functions are defined in `sub/comp.ftl`.
+## Comments
+Two types of comments are supported, either block comments wrapped between `/*` and `*/` and line comments starts with `//`. They are quite similar to the ones in the other languages.
 
-### Import section
+## Import Section
 
-#### Import functions from standard modules
-Standard modules are defined in `lib\ftl` directory. When importing any module from there, use the following form:
+### Import Functions from Standard Modules
+Standard modules are defined in `lib/ftl` directory. When importing any module from there, use the following form:
+```
+import ftl/lang
+```
+This form will import all functions from `lang.ftl`.
+
+If one prefers to import selected functions, use `[...]` such as:
 ```
 import ftl/lang[+, -, ':: ??', '- ']
 ```
-where the operators `+`, `-`, '`:: ??`', '`- `' are imported from `lang.ftl`. Any unary or n-ary operator needs to be quoted as in the example.
+where the operators `+`, `-`, '`:: ??`', '`- `' are imported from `lang.ftl`. Any unary or n-ary operator needs to be quoted as in the example. Specifically, prefix operator needs to have a space appended, and postfix operator needs to have a space prefixed.
 
 Individual functions or binary operators can be separately imported as well:
 ```
@@ -28,50 +38,33 @@ import ftl/lang.':: ??'
 import ftl/lang.'- '
 ```
 
-If all functions need to be imported, simply use wildcard *:
-```
-import ftl/lang.*
-```
-
-This also means that if you want to import an operator named as `*`, you may have to import it as:
-```
-import ftl/lang[*]
-```
-
-### Import functions from sub modules
+### Import Functions from Sub-Modules
 The difference of importing a local module from importing a standard module is the relative path.
 
-For exampe, in app.ftl, import `add` funtion from `comp.ftl` is as follows:
+For exampe, in `app.ftl`, import `add` funtion from `comp.ftl` is as follows:
 ```
 import ./sub/comp.add
 ```
 
-where `./` is prefixed to the path indicating the path relative to the `ftl` file.
+where `./` is prefixed to the path indicating the path relative to the `.ftl` file.
 
-If multiple functions need to be imported, do it as follows:
-```
-import ./sub/comp[add, subtract]
-```
+Otherwise, there is no difference from importing standard modules.
 
-Or
-```
-import ./sub/comp.*
-```
-
-### Function/operator definitions
+## Function/Operator Definitions
 
 Definition of functions/operators starts with keyword `fn`.
  
-#### Function
-A function is declared with name followed by parameter list with parameter names separated with comma and wrapped with brackets.
-
-For example:
+### Function
+A function is declared with name followed by parameter list in a pair of brackets delimited with comma as follows:
 ```
 fn test(p1, p2)
 ```
 
+### Application
+Applciation statements are just tuples piped with mapping operator `->` in between.
 
-### Run your program
+## Write and Run Your Own Program
+You can write your own program following `app.ftl` and place anywhere and run as follows:
 ```
 node [ftl directory]/ftl-runner.js [your app directory]/app.ftl
 ```

@@ -38,7 +38,7 @@ fn x >= y { return x >= y }
 
 // logical operator '||' and '&&' with second parameter as tail
 fn x || y$() { return x || y() }
-//fn x && y$() { return x && y() }
+fn x && y$() { return x && y() }
 
 // ternary operator
 fn condition ? if_true() : otherwise() { return condition ? if_true() : otherwise() }
@@ -56,7 +56,7 @@ fn condition$() ?< loop$() {
   let [loop_f, res] = loop().wrapped.unwrap()
   let [condition_f] = condition().wrapped.unwrap()
 
-  while (condition_f.apply(res)) {
+  while (condition_f.applyAndResolve(res)) {
     res = loop_f.apply(res)
   }
 
@@ -73,7 +73,7 @@ fn loop$() <? condition$() {
 
   do {
     res = loop_f.apply(res)
-  } while (condition_f.apply(res))
+  } while (condition_f.applyAndResolve(res))
 
   return res
 }

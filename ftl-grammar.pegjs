@@ -593,16 +593,16 @@ AsciiLetter =
   / LowerLetter
 
 UpperLetter =
-  [\u0041-\u005A]
+  [A-ZΓΔΘΞΦΨΩ]
 
 LowerLetter =
-  [\u0061-\u007A]
+  [a-zα-ω]
 
 DecimalDigit =
   [0-9]
 
 OperatorSymbol =
-  [!%&*+\-./:;<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]
+  [!%&*+\-./:;<=>?^|×÷∏∑∕²³⁴√∛∜∗∙∧∨∩∪∼≤≥⊂⊃¬∀]
 
 ReservedWord =
   VarToken
