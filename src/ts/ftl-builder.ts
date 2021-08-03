@@ -3,7 +3,7 @@ import fpath from 'path'
 import * as ftl from './ftl-core'
 import * as  ftl_parser from './ftl-parser'
 
-const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283'
+const OPERATOR_SYMBOLS = '!%&*+\-./:;<=>?^|×÷∏∑∕²³⁴√∛∜∗∙∧∨∩∪∼≤≥⊂⊃¬∀'
 
 type BuildInfo = ftl_parser.BuildInfo
 
@@ -118,14 +118,20 @@ function buildImportSingleItem(details: any, module: any) {
     let last_slash = module._name.lastIndexOf('/')
     let mod_path = last_slash == -1 ? '' : module._name.substring(0, last_slash + 1)
     return mod_path == './' ? '' : mod_path
-
   }
-
-  let path: string = details.path
-  if (path.endsWith('.')) path = path.substring(0, path.length - 1)
 
   let name_elm = buildElement(details.name, module)
   var name:string|null = name_elm.name || name_elm
+
+  let path: string = details.path
+  if (path.endsWith('.')) {
+    path = path.substring(0, path.length - 1)
+
+    // wildcard, not * operator
+    if (name == '*') {
+      name = null
+    }
+  }
 
   let asName = buildElement(details.item, module)?.name
 
@@ -152,6 +158,7 @@ function buildImportSingleItem(details: any, module: any) {
     try {
       mod = buildModule(runPath, path)
     } catch (e) {
+      currentBuildModules.delete(path)
       if (!path.startsWith('./')) {
         mod = buildModule(libPath, path)
       } else {

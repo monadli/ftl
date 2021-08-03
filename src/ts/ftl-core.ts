@@ -122,7 +122,7 @@ export class Module {
    */
   addImport(name: string, f: FunctionBaseFn) {
     if (!f)
-      throw new FnConstructionError(`Can not import null for ${name}!`)
+      throw new FnConstructionError(`Function/operator ${name} cannot be found!`)
 
     if (this._imports[name])
       console.warn(`import ${name} exists! Overriding.`)
@@ -448,18 +448,23 @@ export class Tuple {
    */
   toString() {
     if (this._values.length == 0)
-      return "()"
+      return '<>'
 
     var buf: any[] = []
+    var curr_idx = 0
+    var curr:string|null = null
     this._names.forEach((value, key, map) => {
-      var value_str = toString(this._values[value])
-      if (!key.startsWith('_'))
-        buf.push(key + ':' + value_str)
-      else
-        buf.push(value_str)
-    })
+      if (value != curr_idx) {
+        buf.push(curr)
+        curr_idx = value
+      }
 
-    return '(' + buf.join(', ') + ')'
+      curr = toString(this._values[value])
+      if (!key.startsWith('_'))
+        curr = `${key}:${curr}`
+    })
+    buf.push(curr)
+    return `<${buf.join(', ')}>`
   }
 }
 
@@ -478,6 +483,20 @@ export abstract class Fn {
    */
   apply(input?: any, context?: any): Tuple | any {
     return new Tuple()
+  }
+
+  applyAndResolve(input?: any, context?: any) {
+    let ret = this.apply(input, context)
+
+    // an executable may wrap a tail that needs to be executed
+    while (TailFn.isTail(ret)) {
+      ret = ret.apply(null)
+    }
+
+    if (ret instanceof Fn) {
+      ret = ret.apply(input, context)
+    }
+    return ret
   }
 }
 
@@ -795,6 +814,14 @@ class ClosureFunction {
   constructor(f: any, closureParams: any) {
     this.f = f
     this.closureParams = closureParams
+  }
+
+  /**
+   * Unwraps f and closureParams into array.
+   * @returns array with f and closureParams
+   */
+   unwrap() {
+    return [this.f, this.closureParams]
   }
 
   /**
@@ -1419,7 +1446,7 @@ export class ArrayInitializerWithRangeFn extends Fn {
     let start = this._startValue.apply(input, context)
     let interval = this._interval.apply(input, context)
     let end = this._endValue.apply(input, context)
-    let len = Math.ceil((end + 1 - start) / interval)
+    let len = Math.floor((end + interval - start) / interval)
     var array = new Array(len)
     var val = start
     for (var i = 0; i < len; i++) {
@@ -1689,16 +1716,6 @@ export class ExecutableFn extends WrapperFn {
   }
 
   apply() {
-    let ret = this._wrapped.apply()
-
-    // an executable may wrap a tail that needs to be executed
-    while (TailFn.isTail(ret)) {
-      ret = ret.apply(null)
-    }
-
-    if (ret instanceof Fn) {
-      ret = ret.apply()
-    }
-    return ret
+    return this._wrapped.applyAndResolve()
   }  
 }

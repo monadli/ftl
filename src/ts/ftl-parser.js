@@ -407,15 +407,15 @@ export function peg$parse(input, options) {
         peg$literalExpectation("var", false),
         "const",
         peg$literalExpectation("const", false),
-        /^[A-Z]/,
-        peg$classExpectation([["A", "Z"]], false, false),
-        /^[a-z]/,
-        peg$classExpectation([["a", "z"]], false, false),
+        /^[A-Z\u0393\u0394\u0398\u039E\u03A6\u03A8\u03A9]/,
+        peg$classExpectation([["A", "Z"], "\u0393", "\u0394", "\u0398", "\u039E", "\u03A6", "\u03A8", "\u03A9"], false, false),
+        /^[a-z\u03B1-\u03C9]/,
+        peg$classExpectation([["a", "z"], ["\u03B1", "\u03C9"]], false, false),
         /^[0-9]/,
         peg$classExpectation([["0", "9"]], false, false),
-        /^[!%&*+\-.\/:;<=>?\^|\xD7\xF7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283]/,
-        peg$classExpectation(["!", "%", "&", "*", "+", "-", ".", "/", ":", ";", "<", "=", ">", "?", "^", "|", "\xD7", "\xF7", "\u220F", "\u2211", "\u2215", "\u2217", "\u2219", "\u221A", "\u221B", "\u221C", "\u2227", "\u2228", "\u2229", "\u222A", "\u223C", "\u2264", "\u2265", "\u2282", "\u2283"], false, false),
-        function() {
+        /^[!%&*+\-.\/:;<=>?\^|\xD7\xF7\u220F\u2211\u2215\xB2\xB3\u2074\u221A\u221B\u221C\u2217\u2219\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283\xAC\u2200]/,
+        peg$classExpectation(["!", "%", "&", "*", "+", "-", ".", "/", ":", ";", "<", "=", ">", "?", "^", "|", "\xD7", "\xF7", "\u220F", "\u2211", "\u2215", "\xB2", "\xB3", "\u2074", "\u221A", "\u221B", "\u221C", "\u2217", "\u2219", "\u2227", "\u2228", "\u2229", "\u222A", "\u223C", "\u2264", "\u2265", "\u2282", "\u2283", "\xAC", "\u2200"], false, false),
+      function() {
             return buildElement('NullToken', { value: null })
           },
         function() {
