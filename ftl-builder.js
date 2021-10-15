@@ -23,7 +23,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildToModule = exports.buildModule = exports.buildModuleWithContent = exports.ModuleNotFoundError = exports.setOptimization = exports.setLibPath = exports.setRunPath = void 0;
-	const OPERATOR_SYMBOLS = '!%&*+\-./:<=>?^|\u00D7\u00F7\u220F\u2211\u2215\u2217\u2219\u221A\u221B\u221C\u2227\u2228\u2229\u222A\u223C\u2264\u2265\u2282\u2283';
+const OPERATOR_SYMBOLS = '!%&*+\-./:;<=>?^|×÷∏∑∕²³⁴√∛∜∗∙∧∨∩∪∼≤≥⊂⊃¬∀';
 var libPath;
 var runPath;
 var optimization = false;
@@ -163,6 +163,7 @@ function buildImportSingleItem(details, module) {
             mod = buildModule(runPath, path);
         }
         catch (e) {
+            currentBuildModules.delete(path);
             if (!path.startsWith('./')) {
                 mod = buildModule(libPath, path);
             }

@@ -35,4 +35,4 @@ null == null
 // A tuple with no-named elements are comparable to a tuple with named elements, or names are not part of equality.
 (1, 2, 3.14159, 'hello') == (a:1, b:2, 3.14159, 'hello')
 
-// Click Run botton below will result in true for all above expressions.
+// Run this program will result in true for all above expressions.

@@ -1,3 +1,5 @@
+import ftl/lang[*, /]
+
 //
 // basic math operators
 //
@@ -13,13 +15,13 @@ fn x < y <= z { return x < y && y <= z }
 //
 
 fn abs(x) { return Math.abs(x) }
-fn acos(x) { Math.acos(x) }
-fn acosh(x) { Math.acosh(x) }
-fn asin(x) { Math.asin(x) }
-fn asinh(x) { Math.asinh(x) }
-fn atan(x) { Math.atan(x) }
-fn atan2(x) { Math.atan2(x) }
-fn atanh(x) { Math.atanh(x) }
+fn acos(x) { return Math.acos(x) }
+fn acosh(x) { return Math.acosh(x) }
+fn asin(x) { return Math.asin(x) }
+fn asinh(x) { return Math.asinh(x) }
+fn atan(x) { return Math.atan(x) }
+fn atan2(x) { return Math.atan2(x) }
+fn atanh(x) { return Math.atanh(x) }
 fn cbrt(x) { return Math.cbrt(x) }
 fn ceil(x) { return Math.ceil(x) }
 fn clz32(x) { return Math.clz32(x) }
@@ -49,3 +51,17 @@ fn tanh(x) { return Math.tanh(x) }
 fn trunc(x) { return Math.trunc(x) }
 
 fn PI() { return Math.PI }
+
+fn x² -> x * x
+fn x³ -> x² * x
+fn x⁴ -> x³ * x
+
+fn √x { return Math.sqrt(x) }
+fn ∛x { return Math.cbrt(x) }
+fn ∜x -> √(√x)
+
+fn x × y { return x * y }
+fn x ÷ y { return x / y }
+
+fn x ∨ y -> max(x, y)
+fn x ∧ y -> min(x, y)

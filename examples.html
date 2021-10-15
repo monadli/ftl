@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="unicode" />
 <style>
 code {
   background-color: white;
@@ -11,6 +12,11 @@ code {
 }
 .header {
 margin-top: 10px
+}
+footer {
+  width: 100%;
+  bottom: 0;
+  position: fixed;
 }
 </style>
 <script>
@@ -131,10 +137,17 @@ var ftl_builder = exports
 ftl_builder.setRunPath('')
 </script>
 </head>
-<body style='font-family:arial'>
+<body style='font-family:arial;font-size: 14pt;'>
 <h2>FTL Examples</h2>
 <p>This page contains FTL library, basics of FTL in individual examples, and some actual examples.</p>
-<p>Lastly there is try it yourself panel where you can either copy from example or write your own FTL program.</p>
+<p>Lastly there is <b>write your own program</b> panel where you can either copy from example or write your own FTL program.</p>
+
+<p>Here is the character set for operator definition. You can define any operator using
+either a single character or mltiple ones from this set,
+except "->", which is preserved. Simply copy from below when you need to define your own operator:
+<div style="color: rgb(0, 0, 255);">!%&*+\-./:;<=>?^|×÷∏∑∕²³⁴√∛∜∗∙∧∨∩∪∼≤≥⊂⊃¬∀</div>
+
+</p>
 <div style='display: flex'>
 <nav style='width:256px'>
 <div class='header'>library</div>
@@ -171,17 +184,17 @@ ftl_builder.setRunPath('')
 </nav>
 <div style='flex: 1;padding-left: 10px'>
 <div id='lib-area' style='width:100%;height:400px'>
-<textarea id='code_content' style='width:100%;height:100%'></textarea>
+<textarea id='code_content' style='width:100%;height:100%;font-size:14pt'></textarea>
 </div>
 <div id='code-name' style='height:20px;margin-top:6px'></div>
 <div style='width:100%;height:240px'>
 <button id='run-button' style='margin-top: 20px; margin-bottom: 10px' onclick='run_ftl()'>Run</button>
 <div style='width:100%;height:400px'>
-<textarea id='result' readonly='true' style='width:100%;height:200px;'></textarea>
+<textarea id='result' readonly='true' style='width:100%;height:200px;;font-size:14pt'></textarea>
 </div>
 </div>
 </div>
 </div>
-<div>!%&*+\-./:<=>?^| &#x00D7;&#x00F7;&#x220F;&#x2211;&#x2215;&#x2217;&#x2219&#x221A&#x221B&#x221C&#x2227&#x2228&#x2229&#x222A&#x223C&#x2264&#x2265&#x2282&#x2283</div>
+<footer>ver 0.0.1</footer>
 </body>
 </html>

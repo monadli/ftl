@@ -1,8 +1,7 @@
-/* All types are currently implicit. Specifically for this implimentation based on javascript, it directly uses types from javascript.
+/* All types are currently implicit. Specifically for this implimentation based on
+ * javascript, it directly uses types from javascript.
  * Explicit type declaration may be introduced in future release.
  */
-
-// Block comments or inline comments are supported as shows above and this line with either combination of slash and star or double slashes.
 
 // 1. A number is any real number.
 0
@@ -21,14 +20,13 @@ false
 []
 [1, 2, 3]
 
-// 5. A tuple may be empty, containg one or more of above typed constants.
-//    Result of a tuple is shown with computed elements in angle brackets <>.
+// 5. A tuple may be empty, containg one or more of above typed constants,
+//    or functions or expressions.
+//    Result of a tuple is shown with computed elements in angle brackets <>
+//    representing value tuples.
 ()
 ('test')
 (1, 2, 3.14159, 'hello')
 
 // An element of a tuple may have a name:
 (a: "Hallo", b:'ftl!')
-
-// Click Run botton below will execute each of the above expressions and since they are all constants, same constants will return a results shown in the result panel at bottom.
-

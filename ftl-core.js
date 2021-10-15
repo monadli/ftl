@@ -426,6 +426,17 @@ class Fn {
     apply(input, context) {
         return new Tuple();
     }
+    applyAndResolve(input, context) {
+        let ret = this.apply(input, context);
+        // an executable may wrap a tail that needs to be executed
+        while (TailFn.isTail(ret)) {
+            ret = ret.apply(null);
+        }
+        if (ret instanceof Fn) {
+            ret = ret.apply(input, context);
+        }
+        return ret;
+    }
 }
 exports.Fn = Fn;
 /**
@@ -1215,7 +1226,7 @@ class ArrayInitializerWithRangeFn extends Fn {
         let start = this._startValue.apply(input, context);
         let interval = this._interval.apply(input, context);
         let end = this._endValue.apply(input, context);
-        let len = Math.ceil((end + 1 - start) / interval);
+        let len = Math.floor((end + interval - start) / interval);
         var array = new Array(len);
         var val = start;
         for (var i = 0; i < len; i++) {
@@ -1450,15 +1461,7 @@ class ExecutableFn extends WrapperFn {
         super(wrapped);
     }
     apply() {
-        let ret = this._wrapped.apply();
-        // an executable may wrap a tail that needs to be executed
-        while (TailFn.isTail(ret)) {
-            ret = ret.apply(null);
-        }
-        if (ret instanceof Fn) {
-            ret = ret.apply();
-        }
-        return ret;
+        return this._wrapped.applyAndResolve();
     }
 }
 exports.ExecutableFn = ExecutableFn;

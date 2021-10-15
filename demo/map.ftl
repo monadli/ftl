@@ -10,8 +10,16 @@ import ftl/list[len, +=]
  * @output a list containing mapped items.
  */
 fn list => mapper(item)
+  // initialization tuple with list and mapper as is,
+  // and "mapped" and "i" with initial values 
   -> (list, mapper, mapped: [], i: 0)
-  -> i < len(list) ?< ((list, mapper, mapped: mapped += mapper(list[i]), i) -> (list, mapper, mapped, i: i + 1))
+
+  // loop with the tuple after  operator "?<" computed,
+  // and result value tuple is fed back into the same tuple
+  // until condition before operatpr "?<" is satisfied
+  -> i < len(list) ?< (list, mapper, mapped: mapped += mapper(list[i]), i:i + 1)
+
+  // finally, mapped contains final result
   -> mapped
 
 // an array containing number that are mapped into another number with 2 added.

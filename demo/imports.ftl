@@ -12,18 +12,19 @@
 // Any standalone modules can be added into lib.
 
 // When importing anything from library module, just refer to the module path and name as:
-import ftl/list.*
+import ftl/list
 
-// The wildcard "*" means importing all.
+// The above imports all functions from list.
 
 // Functions can be individually imported as well:
-import ftl/lang[*]
+import ftl/lang
 
-// The "*" above is actually multiplication operator which can be explicitly imported as above.
+// The above imports just the multiplication operator "*" from lang.
 
-// Import different functions from the same module can be done in multiple import statements.
+// Importing multiple functions/operators from the same module can be done in multiple import statements
+// with each just importing one of them.
 
-// When importing multiple binary operator or functions, use comma to separete them:
+// Importing multiple functions/operators can alo be done with ome import as follows:
 import ftl/lang[+, -, /, >]
 import ftl/math[sin, cos]
 

@@ -5,13 +5,17 @@ import ftl/list.len
 /**
  * This function takes a list and reducer function/expression taking "accu" and "item" to perform reduce.
  *
+ * The computation involves in loop with operator "?<".
+ * Please see the comments for operator "=>" defined in map how the for loop
+ * operator is used.
+ *
  * @input list - a list of elements that will be reduced
  * @input reducer - a function/expression that passes accumulation and each item and reduces to a single item
  * @output - a single reduced item
  */
 fn list =|> reducer(accu, item)
   -> (list, reducer, i: 1, accu: list[0])
-  -> (i < len(list)) ?< ((list, reducer, i: i + 1, accu: reducer(accu, list[i])) -> (list, reducer, i, accu))
+  -> (i < len(list)) ?< (list, reducer, i: i + 1, accu: reducer(accu, list[i]))
   -> accu
 
 // accumulation with a lambda expression

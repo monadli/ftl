@@ -24,11 +24,13 @@ fn add(x, y) {
 // expression in one line
 2 + 3 -> sin -> cos
 
-
 // expression in three lines
 3 * 4 -> sin
  -> _0 + 1
  -> _0 * 2
 
+// invoke operator '+ -' defined above
 1 + 2 - 3
+
+// invoke add function defined above
 add(1, 2)
