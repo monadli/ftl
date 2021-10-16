@@ -4,15 +4,11 @@
 @import "{{ site.theme }}";
 
 pre {
-    padding: 8px 15px;
     background: #e2e2e2;
-    overflow: auto;
-    overflow-y: hidden
 }
 
 code {
-    font-family: 'Lucida Sans', Monaco, Bitstream Vera Sans Mono, Lucida Console, Terminal;
-    font-size: 13px;
     color: #2f2f2f;
+    text-shadow: none;
     background: #e2e2e2;
 }
