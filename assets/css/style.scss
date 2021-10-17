@@ -3,6 +3,11 @@
 
 @import "{{ site.theme }}";
 
+nav {
+    position: absolute;
+    top: 0px;
+}
+
 pre {
     background: #e2e2e2;
 }
