@@ -1,7 +1,12 @@
 // ftl core functions and classes.
 
 const version = '0.0.1'
+
+// tuple element selector patter, such as _0, _1, etc.
 const TupleSelectorPattern = /_\d+$/
+
+// special selector for the whole input
+const InputSelectorPattern = '_'
 
 /**
  * All runtime modules in one ftl runtime.
@@ -302,9 +307,25 @@ export class Tuple {
 
     let seq = this.size
     this._names.set(`_${seq}`, seq)
-    if (name) this._names.set(name, seq)
+    if (name) {
+      this._names.set(name, seq)
+      this._values.push(value instanceof Tuple && value.size == 1 && !value.hasNames() ? value.getIndex(0) : value)
+    }
 
-    this._values.push(value instanceof Tuple && value.size == 1 ? value.getIndex(0) : value)
+    // flat single element tuple
+    else if (value instanceof Tuple && value.size == 1) {
+      if (value._names.size == 1) {
+        this.addValue(value._values[0])
+      } else {
+        var k = value._names.keys()
+        k.next()
+        this.addNameValue(k.next().value, value._values[0])
+      }
+    }
+
+    else if (value != null) {
+      this._values.push(value)
+    }
 
     return this
   }
@@ -322,9 +343,6 @@ export class Tuple {
    * Appends all element from another tuple. It will keep names of the elements if any. 
    */
   appendAll(tuple: Tuple | unknown) {
-    if (tuple == null)
-      return
-
     if (tuple instanceof Tuple) {
       let value_map = new Map<number, string>()
       tuple._names.forEach((value, key, map) => {
@@ -337,8 +355,10 @@ export class Tuple {
           this.addNameValue(value, tuple._values[key])
       })
     }
-    else
+    else if (tuple != null)
       this.addValue(tuple)
+
+    return this
   }
 
   /**
@@ -682,10 +702,11 @@ export class NativeFunctionFn extends FunctionBaseFn {
     }
 
     apply(input: any) {
-      return this._jsfunc.apply(null, (input instanceof Tuple) && input.toList() || [input])
+      let args = (input instanceof Tuple) && input.toList() || [input]
+      return this._jsfunc.apply(null, args)
     }
   }
-  
+
   // name:string function name
   // params:TupleFn parameter list
   // script: javascript function with parameter declaration and body.
@@ -1048,8 +1069,16 @@ export class RefFn extends Fn {
     return this.name.match(TupleSelectorPattern) != null
   }
 
+  static isInputSelector(name: string) {
+    return name.match(TupleSelectorPattern) || InputSelectorPattern == name
+  }
+
   apply(input: any, context?: any) {
     var e:unknown | Fn
+
+    if (this.name == InputSelectorPattern) {
+      return input
+    }
 
     // find name from scoped tuple first
     if (input && input instanceof Tuple)
@@ -1718,4 +1747,65 @@ export class ExecutableFn extends WrapperFn {
   apply() {
     return this._wrapped.applyAndResolve()
   }  
+}
+
+/**
+ * A sideffect (short for side-effect) is is a function used with prefix "@".
+ *
+ * A sideffect acts on input to provide I/O side effects, such as writing
+ * to a file, console, canvas, etc. It should not change the input for
+ * computation. In other words, an expression with sideffect should produce
+ * the same computation result as the one without sideffect.
+ *
+ * To achieve this, a copy of the input is passed to a sideffect and its
+ * returned value is discarded to prevent possible data change.
+ * 
+ * As result of build, it is part of the pipe preeeding the expression
+ * but can be completely ignored when reasoning. That is why this class
+ * is almost the same as CallExprFn but does not carry the signature.
+ */
+export class SideffectFn extends Fn {
+  f: FunctionBaseFn
+  name: string
+  params: TupleFn
+
+  constructor(name: string, f: FunctionBaseFn, params: TupleFn) {
+    if (!f) {
+      throw new FtlRuntimeError('f not provided in SideffectFn!')
+    }
+    if (!(f instanceof Fn))
+      throw new FtlRuntimeError(name + " is not a function!")
+    super()
+    this.f = f
+    this.name = name
+    this.params = params
+  }
+
+  apply(input: any, context?: any) {
+    let args = input
+    if (input instanceof Tuple) {
+      args = new Tuple()
+      args.appendAll(input)
+    }
+    this.f.apply(this.params.apply(args), context)
+    return input
+  }
+}
+
+export class SideffectedFn extends WrapperFn {
+  sideffects: SideffectFn[]
+  constructor(fn: Fn, sideffects: SideffectFn[]) {
+    super(fn)
+    this.sideffects = sideffects
+  }
+
+  get name() {
+    return this._wrapped instanceof RefFn && this._wrapped.name || undefined
+  }
+
+  apply(input: any, context?: any): Tuple | any {
+    for (let d of this.sideffects)
+      d.apply(input, context)
+    return super.apply(input, context)
+  }
 }

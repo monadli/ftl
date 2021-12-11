@@ -1,4 +1,4 @@
-import ftl/lang[+, *, /, <, ==, ?<]
+import ftl/lang[+, *, /, <, ==, ?<, '? :']
 
 // creates an list with n elements
 fn list(n) { return new Array(n) }
@@ -31,7 +31,7 @@ fn list += item {
  */
 fn list => mapper(item)
   -> (list, mapper, mapped: [], i: 0)
-  -> i < len(list) ?< ((list, mapper, mapped: mapped += mapper(list[i]), i) -> (list, mapper, mapped, i: i + 1))
+  -> i < len(list) ?< (list, mapper, mapped: mapped += mapper(list[i]), i: i + 1)
   -> mapped
 
 
@@ -50,6 +50,16 @@ fn list |> reducer(accu, item)
   -> (list, reducer, i: 1, accu: list[0])
   -> (i < len(list)) ?< (list, reducer, i: i + 1, accu: reducer(accu, list[i]))
   -> accu
+
+/**
+ * This is a filter operator which takes a list and passes each element
+ * through the predicate and in the end return a list containing all
+ * passed elements.
+ */
+fn list >| predicate(item)
+  -> (list, predicate, filtered: [], i: 0)
+  -> i < len(list) ?< (list, predicate, filtered: predicate(list[i]) ? (filtered += list[i]) : filtered, i: i + 1)
+  -> filtered
 
 fn ∑ list -> list |> (accu + item)
 

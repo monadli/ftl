@@ -10,7 +10,7 @@ fn fib2(n) ->
   n <= 1
   ?? n
   :: (i:2, a:0, b:1, n)
-    -> (i <= n) ?< ((i, a:b, b:a + b, n) -> (i:i + 1, a, b, n))
+    -> (i <= n) ?< (i: i + 1, a: b, b: a + b, n)
     -> b
 
 fib(9)

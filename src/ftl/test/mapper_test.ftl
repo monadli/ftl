@@ -1,13 +1,7 @@
 import ftl/lang[+, ==, '?? ::']
+import ftl/list[+=, len]
 
-fn len(list) {
-  return list.length;
-}
-
-fn list += item {
-  list.push(item)
-  return list
-}
+// This test contains another map implementation.
 
 fn _map(src, mapped, index, mapper(item)) -> index == len(src) ?? mapped :: _map(src, mapped += mapper(src[index]), index + 1, mapper)
 

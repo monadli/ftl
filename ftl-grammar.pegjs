@@ -52,15 +52,9 @@ function buildFirstRest(first, rest) {
 
 // start
 Start =
-  ___ ModuleDeclaration? ___ application:Declarations? ___
+  (EOL / Comment)* application:Declarations? ___
   {
       return application
-  }
-
-ModuleDeclaration =
-  ModuleToken _ module_name:(ModulePath NamespaceIdentifier)
-  {
-    return buildElement('ModuleDeclaration', { name: module_name.text() })
   }
 
 ModulePath =
@@ -209,11 +203,11 @@ Tuple =
     return buildElement('Tuple', {elements: optionalList(elms)})
   }
 
-ExpressionCurry =
+TupleCurrying =
   expr:Tuple params:(_ Tuple)+
   {
     return buildElement(
-      'ExpressionCurry',
+      'TupleCurrying',
       {
         expr:expr,
         list: extractList(params, 1)
@@ -313,11 +307,12 @@ Annotation =
 PrimaryExpression =
   Literal
   / ArrayElementSelector
+  / FunctionCurrying
   / CallExpression
   / MemberExpression
   / Identifier
   / ArrayLiteral
-  / ExpressionCurry
+  / TupleCurrying
   / Tuple
   / TupleSelector
   / PrefixOperatorExpression
@@ -440,7 +435,8 @@ PostfixOperatorExpression =
 N_aryOperandExpression =
   operand:(PrimaryExpression / "(" _ PostfixOperatorExpression _ ")")
 
-// N-ary operator expression supports any number of n operands and n - 1 operators, binary, ternary, etc.
+// N-ary (variadic) operator expression supports any number of n operands and n - 1 operators,
+// binary (dyadic), ternary (triadic), etc.
 //
 // Any operand as expression with postfix operator has to be wrapped with parantheses,
 // except when it apprear as last element. Otherwise there is no way to distinguish
@@ -505,19 +501,25 @@ ListLiteralElement =
 MemberExpression =
   Identifier _ "[" _ ( TupleElementList)+ _ "]"
 
+// CallExpression is an expression calling a function
+// with parameters enclosed in one pair of paranthesis.
 CallExpression =
-  id: Identifier params:(_ Tuple)+
+  id: Identifier params:(_ Tuple)
   {
-    var extracted_params = extractList(params, 1)
-
     // lambda declaration
     if (id.name == '$') {
-      if (extracted_params.length > 1)
-        throw new Error("FTL0001: lambda's arguments followed by calling arguments!")
-      return buildElement('ParamTupleBuilder', { params: extracted_params[0] })
+      return buildElement('ParamTupleBuilder', { params: params[1] })
     }
 
-    return buildElement('CallExpression', { name: id, params: extracted_params })
+    return buildElement('CallExpression', { name: id, params: params[1] })
+  }
+
+// FunctionCurrying is an expression calling a function
+// with parameters enclosed in more than one pair of paranthesis.
+FunctionCurrying =
+  call: CallExpression extra_params:(_ Tuple)+
+  {
+    return buildElement('FunctionCurrying', { call: call, extra_params: extractList(extra_params, 1) })
   }
 
 // Native javascript block wrapped with "{" and "}"
@@ -593,7 +595,7 @@ AsciiLetter =
   / LowerLetter
 
 UpperLetter =
-  [A-ZΓΔΘΞΦΨΩ]
+  [A-ZΑ-Ω]
 
 LowerLetter =
   [a-zα-ω]

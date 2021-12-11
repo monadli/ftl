@@ -44,6 +44,23 @@ function buildingFor(context:string) {
   return stack?.includes(`at build${context} (`)
 }
 
+/**
+ * Wraps an expression into NamedExprFn if name is not a selector.
+ *
+ * @param name expression name
+ * @param expr expression
+ * @returns NamedExprFn or expr itself
+ */
+function createNamedExpr(name: string, expr: ftl.Fn): ftl.NamedExprFn | ftl.Fn {
+  if (ftl.RefFn.isInputSelector(name)) {
+    if (expr instanceof ftl.RefFn)
+      return expr
+    throw new FtlBuildError(`${name} is researved key word and cannot be used as name.`)
+  }
+
+  return new ftl.NamedExprFn(name, expr)
+}
+
 export function buildModuleWithContent(path:string, content:string) {
   let module = new ftl.Module(path)
   return buildToModule(content, module)
@@ -95,20 +112,13 @@ function buildImportDeclaration(details:any, module:any) {
 }
 
 function buildImportList(details:any, module:any) {
-  //let list = 
   buildElement(details.list, module, details)
-  //list.forEach((item:any) => {
-  //  item.path = details.path
-  //  buildElement(item, module)
-  //})
 }
 
 function buildImportMultiItems(details:any, module:any, prev:any) {
-  //return 
   details.items.map((item:any) => {
     if (!item.details.path)
       item.details.path = details.path || (prev && prev.path)
-    //return
     buildElement(item, module)
   })
 }
@@ -198,8 +208,10 @@ function buildMapExpression(details:any, module:any, input?:any) {
 
 function buildMapOperand(details:any, module:any, prev:any=null) {
   var built
+  var sideffect
   var raise = false
   try {
+    sideffect = buildElement(details.annotations, module, prev)
     built = buildElement(details.expr, module, prev)
   } catch (e) {
     if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
@@ -217,17 +229,61 @@ function buildMapOperand(details:any, module:any, prev:any=null) {
     }
   }
  
+  let sideffects = sideffect.map((d:ftl.Fn) => {
+    if (d instanceof ftl.RefFn) {
+      let f = module.getAvailableFn(d.name)
+      if (!f) {
+        throw new FtlBuildError(`Sideffect function ${d.name} not found!`)
+      }
+      return new ftl.SideffectFn(d.name, f, new ftl.TupleFn())
+    } else if (d instanceof ftl.CallExprFn) {
+      if (d.params.length > 1) {
+        throw new Error('Curry not supported in sideffect!')
+      }
+      if (!(d.f instanceof ftl.FunctionBaseFn)) {
+        throw new FtlBuildError('Sideffect has to be a function!')
+      }
+      return new ftl.SideffectFn(d.name, d.f, d.params[0] as ftl.TupleFn)
+    } else {
+      throw new Error('Not supported sideffect definition!')
+    }
+  })
+
   if (built instanceof ftl.RefFn) {
     let name = built.name
-    if (name.startsWith('_') || prev instanceof ftl.TupleFn && prev.hasName(name))
-      return built
-
-    if (!buildingFor('FunctionSignature')) {
+    if (!name.startsWith('_') && (!(prev instanceof ftl.TupleFn) || !prev.hasName(name)) && !buildingFor('FunctionSignature')) {
       built = module.getAvailableFn(name) || built
     }
   }
 
-  return raise ? new ftl.RaiseFunctionForArrayFn(built) : built
+  if (raise) {
+    built = new ftl.RaiseFunctionForArrayFn(built)
+  }
+
+  if (sideffect.length > 0) {
+    let sideffects = sideffect.map((d:ftl.Fn) => {
+      if (d instanceof ftl.RefFn) {
+        let f = module.getAvailableFn(d.name)
+        if (!f) {
+          throw new FtlBuildError(`Sideffect function ${d.name} not found!`)
+        }
+        return new ftl.SideffectFn(d.name, f, new ftl.TupleFn())
+      } else if (d instanceof ftl.CallExprFn) {
+        if (d.params.length > 1) {
+          throw new Error('Curry not supported in sideffect!')
+        }
+        if (!(d.f instanceof ftl.FunctionBaseFn)) {
+          throw new FtlBuildError('Sideffect has to be a function!')
+        }
+        return new ftl.SideffectFn(d.name, d.f, d.params[0] as ftl.TupleFn)
+      } else {
+        throw new Error('Not supported sideffect definition!')
+      }
+    })
+    return new ftl.SideffectedFn(built, sideffects)
+  } else {
+    return built
+  }
 }
 
 function buildOperatorExpression(details:any, module:any, input?:any) {
@@ -238,6 +294,9 @@ function buildOperatorExpression(details:any, module:any, input?:any) {
     // array initializer
     if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
       let start = e.operands[0]
+      if (start instanceof ftl.RefFn) {
+        throw new FtlBuildError(`It seems a sideffect is in front of tuple element name '${start.name}'`)
+      }
       let interval = e.op == ':' ? new ftl.ConstFn(1) : e.operands[1]
       let end = e.op == ':' ? e.operands[1] : e.operands[2]
       if (end == undefined) {
@@ -463,8 +522,16 @@ function buildFunctionDeclaration(details:any, module:any) {
   let param_list = params.map((p:any) => p.name)
   let fn
   if (body.script) {
-    let script = eval("(function(" + param_list.join(',') + ")" + body.script + ")")
-    fn = new ftl.NativeFunctionFn(f_name, params, script)
+    try {
+      let script = eval("(function(" + param_list.join(',') + ")" + body.script + ")")
+      fn = new ftl.NativeFunctionFn(f_name, params, script)
+    } catch (e:any) {
+      if (e.message.startsWith('Unexpected token')) {
+        throw new Error(e.message + '. Most likely a javascript reserved key word is used as an identifier!')
+      }
+      else
+        throw e
+    }
   }
   else {
     module.addFn(new ftl.FunctionHolder(f_name, params))
@@ -515,7 +582,11 @@ function buildPostfixOperatorDeclaration(details:any, module:any, prev:any) {
 function buildCallExpression(details:any, module:any, prev:any) {
   let name = buildElement(details.name, module).name
 
-  let call_args:ftl.TupleFn[] = details.params.map((p:any) => buildElement(p, module, prev))
+  if (!Array.isArray(details.params)) {
+    details.params = [details.params]
+  }
+
+  let call_args: ftl.TupleFn[] = details.params.map((p: any) => buildElement(p, module, prev))
 
   // lambda calculus
   if (name == '$') {
@@ -657,14 +728,21 @@ function buildCallExpression(details:any, module:any, prev:any) {
     let param = new_params[i]
     if (param instanceof ftl.NamedExprFn && param.wrapped instanceof ftl.TupleSelectorFn) {
       if (param.wrapped instanceof ftl.SeqSelectorOrDefault) {
-        new_params[i] = new ftl.NamedExprFn(param.name, new ftl.SeqSelectorOrDefault(newSeq++, new ftl.ConstFn(param.wrapped.defaultValue)))
+        new_params[i] = createNamedExpr(param.name, new ftl.SeqSelectorOrDefault(newSeq++, new ftl.ConstFn(param.wrapped.defaultValue)))
       } else {
-        new_params[i] = new ftl.NamedExprFn(param.name, new ftl.TupleSelectorFn(newSeq++))
+        new_params[i] = createNamedExpr(param.name, new ftl.TupleSelectorFn(newSeq++))
       }
     }
   }
 
   return new ftl.CallExprFn(name, f, [new ftl.TupleFn(... new_params)])
+}
+
+function buildFunctionCurrying(details:any, module:any, prev?:any) {
+  return buildCallExpression({
+    name: details.call.details.name,
+    params: [details.call.details.params, ... details.extra_params]
+  }, module, prev)
 }
 
 function buildArrayLiteral(details:any, module:any) {
@@ -759,8 +837,9 @@ function buildTuple(details:any, module:any, prev?:any) {
 
   for (var i = 0; i < all_elms.length; i++) {
     let elm = all_elms[i]
-    if (elm instanceof ftl.RefFn && !all_names.has(elm.name)) {
-      all_elms[i] = new ftl.NamedExprFn(elm.name, elm)
+    if (elm instanceof ftl.RefFn && !all_names.has(elm.name)
+        || elm instanceof ftl.SideffectedFn && elm.wrapped instanceof ftl.RefFn && !all_names.has(elm.wrapped.name)) {
+      all_elms[i] = createNamedExpr(elm.name!, elm)
     } else if (elm instanceof ftl.FunctionInterfaceFn) {
       elm.seq = i
     }
@@ -772,14 +851,14 @@ function buildTuple(details:any, module:any, prev?:any) {
 function buildTupleElement(details:any, module:any, prev?:any) {
   let name = buildElement(details.name, module)
   let expr = buildElement(details.expr, module, prev)
-  return name && new ftl.NamedExprFn(name.name, expr) || expr
+  return name && createNamedExpr(name.name, expr) || expr
 }
 
 function buildIdentifier(details:any, module:any) {
   return new ftl.RefFn(details.name, module)
 }
 
-function buildExpressionCurry(details:any, module:any, prev?:any) {
+function buildTupleCurrying(details:any, module:any, prev?:any) {
   let expr = buildElement(details.expr, module, prev)
   let params_list = buildElement(details.list, module)
 
@@ -814,15 +893,15 @@ function buildExpressionCurry(details:any, module:any, prev?:any) {
 function build_function_parameters(params:ftl.TupleFn) {
   let fns = params.map((p:any, i:number) => {
     if (p instanceof ftl.RefFn) {
-      return new ftl.NamedExprFn(p.name, new ftl.TupleSelectorFn(i))
+      return createNamedExpr(p.name, new ftl.TupleSelectorFn(i))
     }
     else if (p instanceof ftl.NamedExprFn) {
-      return new ftl.NamedExprFn(p.name, p.wrapped instanceof ftl.RefFn
+      return createNamedExpr(p.name, p.wrapped instanceof ftl.RefFn
         ? new ftl.TupleSelectorFn(i)
         : new ftl.SeqSelectorOrDefault(i, p.wrapped))
     }
     else if (p instanceof ftl.FunctionInterfaceFn)
-      return new ftl.NamedExprFn(p.name, p)
+      return createNamedExpr(p.name, p)
     else
       return p
   })

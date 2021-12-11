@@ -2,9 +2,11 @@
 
 `Functional Tuple Language` is a language based on a basic structure `functional tuple` (`tuple` for short) and a basic mapping operator `->` between tuples that maps output of one tuple, which we call `value tuple`, to next tuple.
 
-An application can be writen in one expession composed of a chain of tuples with mapping operators in between. Such form is essentially an algebraic expression representing topology of domain mapping with defined mapping rules. With such topology, an application can be represented in a graph.
+An application can be written in one expession composed of a chain of tuples with mapping operators in between. Such form is essentially an algebraic expression representing topology of domain mapping with defined mapping rules. With such topology, an application can be represented in a graph.
 
 For more information about FTL, see [Functional Tuple Language](https://monadli.github.io/ftl/).
+
+A web page for examples can be found at [here](https://monadli.github.io/ftl/examples.html).
 
 ## Grammar
 Grammar is defined in parsing expression grammar, specifically with [pegjs syntax](https://pegjs.org).
