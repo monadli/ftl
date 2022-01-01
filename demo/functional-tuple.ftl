@@ -9,10 +9,9 @@ import ftl/math.*
 ()
 
 // 1. A tuple can be with just one element:
-
-// 2. Tuple with one element
 (3.14159)
 
+// 2. Tuple with one element
 // is equivalent to the element alone:
 (3.14159) == 3.14159
 
