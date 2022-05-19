@@ -72,3 +72,64 @@ fn ∨ list -> list |> max(accu, item)
 
 // min of list
 fn ∧ list -> list |> min(accu, item)
+
+/**
+ * Apply each element of the list to f, which can be a function or an
+ * expression.
+ *
+ * This has the same effect as operator =>, except the list item passing
+ * to f does not have an explicit name, instead it has implicit tuple selector _0.
+ *
+ * For example:
+ *   [3.14, 6.28] .-> sin            // to a function, where _0 not need to be referred
+ *   [3.14, 6.28] .-> (sin, cos)     // to a tuple of functions, where _0 not need to be referred
+ *   [3.14, 6.28] .-> (1 + sin(_0))  // to an expression, where _0 has to be used
+ */
+fn list .->-> f {
+  if (Array.isArray(list)) {
+    if (f instanceof ftl.TupleFn) {
+      let ret = new ftl.Tuple()
+      for (let elm of f.fns) {
+        let val = list.map(e => elm.apply(e))
+        if (elm instanceof ftl.NamedExprFn)
+          ret.addNameValue(elm.name, val)
+        else
+          ret.addValue(val)
+      }
+      return ret
+    }
+    else
+      return list.map(e => f.apply(e))
+  } else
+    return f.apply(list)
+}
+
+/**
+ * Operator prefix for array on any binary operators.
+ *
+ * For example:
+ *   [1, 2] .+ [3, 4] == [4, 6]
+ *   [1, 2] .* 3 == [3, 6]
+ *
+ * @parameters
+ *   a - scalar or list operand
+ *   op binary operator to be raised
+ *   b - scalar or list operand
+ */
+fn a .<op> b {
+  let b_is_arr = Array.isArray(b)
+  if (Array.isArray(a)) {
+    let ret = []
+    a.forEach((elm, i) => {
+      ret.push(op.apply(ftl.Tuple.fromValues(elm, b_is_arr ? b[i] : b)))
+    })
+    return ret
+  } else if (b_is_arr) {
+    let ret = []
+    b.forEach(elm => {
+      ret.push(op.apply(ftl.Tuple.fromValues(a, elm)))
+    })
+    return ret
+  } else
+      return op.apply(ftl.Tuple.fromValues(a, b))
+}

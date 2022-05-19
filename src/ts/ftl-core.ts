@@ -154,7 +154,6 @@ export class Module {
         throw new FnConstructionError(`${f.name} exists and can not be declared again!`)
     }
 
-    // TODO check f as FunctionHolder
     this._functions[f.name] = f as FunctionBaseFn
   }
 
@@ -323,7 +322,7 @@ export class Tuple {
       }
     }
 
-    else if (value != null) {
+    else {
       this._values.push(value)
     }
 
@@ -669,15 +668,26 @@ class VarFn extends ImmutableValFn {
 export abstract class FunctionBaseFn extends NamedFn {
   protected _body: Fn
   protected _params: TupleFn
+  protected _isPipeOp: boolean
 
   constructor(name: string, params: TupleFn, body: any) {
+    let is_pipe_op = false
+    if (name.endsWith('->')) {
+      name = name.substring(0, name.length - 2)
+      is_pipe_op = true
+    }
     super(name)
     this._params = params
     this._body = body
+    this._isPipeOp = is_pipe_op
   }
 
   get params() {
     return this._params
+  }
+
+  get isPipeOp() {
+    return this._isPipeOp
   }
 
   apply(input: any, context: any) {
@@ -707,9 +717,13 @@ export class NativeFunctionFn extends FunctionBaseFn {
     }
   }
 
-  // name:string function name
-  // params:TupleFn parameter list
-  // script: javascript function with parameter declaration and body.
+  /**
+   * Constructs a function implemented in native javascript.
+   * 
+   * @param name - string function name
+   * @param params - parameter list in TupleFn
+   * @param jsfunc - javascript function with parameter declaration and body.
+   */
   constructor(name: string, params: TupleFn, jsfunc: Function) {
     super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc))
   }
@@ -717,8 +731,7 @@ export class NativeFunctionFn extends FunctionBaseFn {
   apply(input: any, context?:any) {
     if (FnUtil.isNone(input) && this.params.size > 0)
       throw new FunctionParameterDeficiencyError("Input to native function " + this.name + " does not match!")
-    var paramValues = this.params.apply(input)
-    return this._body.apply(paramValues)
+    return this._body.apply(this.params.apply(input))
   }
 
   toString() {
@@ -876,14 +889,7 @@ class ClosureFunction {
 
     var start = 0
     if (this.closureParams instanceof RefFn) {
-
-      // TODO
-      //if (this.closureParams.name === 'raw')
-      //  return this.wrapped.apply(input)
-
-      // TODO change ref type
       if (this.closureParams.isRefType()) {
-        // TODO tpl = this.params.params.apply(FunctionInterfaceFn.js_args_to_tuple(arguments))
       } else
         tpl.addNameValue(this.closureParams.name, input)
       start = 1
@@ -928,7 +934,6 @@ export class NamedExprFn extends WrapperFn {
 
   get name() { return this._name }
 
-  // TODO: check use cases
   hasRef() {
     return this._wrapped instanceof RefFn
   }
@@ -986,11 +991,6 @@ export class TupleFn extends ComposedFn {
 
       var res = fn.apply(input, context)
       if (fn instanceof NamedExprFn || fn instanceof TailFn) {
-
-        // if no name is resolved, return itself
-        // TODO test is this needed?
-        ////if (res === fn.wrapped)
-        ////  return this
         tuple.addNameValue(fn.name, res)
       }
       else
@@ -1018,21 +1018,93 @@ export class PipeFn extends ComposedFn {
       return this
 
     for (var i = 1; i < this._fns.length; i++) {
-      if (res instanceof TailFn) {
+      if (res instanceof TailFn)
         return new TailFn(new PipeFn(res, ... this._fns.slice(i)))
-      } else if (res instanceof Tuple && res.hasTail()) {
+      else if (res instanceof Tuple && res.hasTail())
         return new TailFn(new PipeFn(res.toTupleFn(), ... this._fns.slice(i)))
-      }
 
       // still has unresolved ref
-      else if (res instanceof Tuple && res.hasFn()) {
+      else if (res instanceof Tuple && res.hasFn() && !OpPipeFn.isOpPipe(this._fns[i]))
         return new PipeFn(...[res.toTupleFn()].concat(this._fns.slice(i)))
-      }
 
       res = this._fns[i].apply(res, context)
     }
 
     return res
+  }
+
+  toString() {
+    return 'lambda expression'
+  }
+}
+
+export class OpPipeFn extends ComposedFn {
+  constructor(... tuples: any[]) {
+    super(... tuples)
+    if (tuples.length != 2) {
+      throw new FtlRuntimeError(`OpPipeFn has ${tuples.length} elements!`)
+    }
+  }
+
+  static isOpPipe(fn: Fn): boolean {
+    if (fn instanceof OpPipeFn)
+      return true
+    else if (fn instanceof PipeFn || fn instanceof TupleFn)
+      return OpPipeFn.isOpPipe((fn as any)._fns[0])
+    else
+      return false
+  }
+
+  apply(input: any, context: any) {
+
+    function resolve_refs(input: any, first_tuple_elm: any, op2: any): Fn | undefined {
+      if (!input)
+        return op2
+      if (op2 instanceof RefFn) {
+        if (op2.isTupleSelector() || !(input instanceof Tuple) || first_tuple_elm instanceof TupleFn && first_tuple_elm.hasName(op2.name))
+          return op2
+        else {
+          let r = op2.apply(input)
+          return FnUtil.isNone(r) && op2 || (r instanceof Fn && r || new ConstFn(r))
+        }
+      } else if (op2 instanceof TupleFn) {
+        (op2 as any)._fns.forEach((f: Fn, i: number, array: any[]) => {
+          var converted = resolve_refs(input, first_tuple_elm, f)
+          if (converted != f) {
+            array[i] = converted
+          }
+        })
+        return op2
+      } else if (op2 instanceof PipeFn) { 
+        resolve_refs(input, first_tuple_elm, (op2 as any)._fns[0])
+        return op2
+      } else
+        return op2
+    }
+
+    let first_tuple_elm = (this._fns[0] as TupleFn).getFnAt(0)
+    var res = first_tuple_elm.apply(input, context)
+
+    // if name is unresolved
+    if (res === first_tuple_elm)
+      return this
+
+    if (res instanceof TailFn) {
+      return new TailFn(new PipeFn(res, this._fns[1]))
+    } else if (res instanceof Tuple && res.hasTail()) {
+      return new TailFn(new PipeFn(res.toTupleFn(), this._fns[1]))
+    }
+
+    // still has unresolved ref
+    else if (res instanceof Tuple && res.getIndex(0) instanceof Fn) {
+      return new PipeFn(...[res.toTupleFn()].concat(this._fns[1]))
+    }
+
+    let combined = new Tuple()
+    combined.addValue(res)
+    let op2 = resolve_refs(input, first_tuple_elm, (this._fns[0] as TupleFn).getFnAt(1))
+    combined.addValue(op2)
+    return this._fns[1].apply(combined, context)
   }
 
   toString() {
@@ -1057,7 +1129,6 @@ export class RefFn extends Fn {
     this.unresolved = false
   }
 
-  // TODO 
   isRefType() {
     return false
   }
@@ -1567,125 +1638,26 @@ export class ArrayRangeSelectorFn extends Fn {
   }
 }
 
-/**
- * This fn is for property accessor operator.
- */
-export class PropertyAccessorFn extends Fn {
-  elm_name:RefFn
-  prop_names:string[]
-  constructor(elm_name:RefFn, ... prop_names:string[]) {
+export class BinaryOperatorWithPrefixFn extends Fn {
+  operand1: Fn
+  operand2: Fn
+  f: Fn
+  prefix: Fn
+  constructor(operand1 : Fn, operand2: Fn, f: Fn, prefix: Fn) {
     super()
-    this.elm_name = elm_name
-    this.prop_names = prop_names
+    this.operand1 = operand1
+    this.operand2 = operand2
+    this.f = f
+    this.prefix = prefix
   }
 
-  apply(input:any, context:any) {
-    var resolve = (elm:any, prop:string) => {
-      return elm ? elm instanceof Tuple ? elm.get(prop) : elm.prop : null
-    }
-
-    var elm = this.elm_name.apply(input, context)
-    for (var i = 0; i < this.prop_names.length; i++) {
-      elm = resolve(elm, this.prop_names[i])
-      if (!elm) {
-        return null
-      }
-    }
-    return elm
+  apply(input: any, context: any) {
+    let r1 = this.operand1.apply(input, context)
+    let r2 = this.operand2.apply(input, context)
+    return this.prefix.apply(Tuple.fromValues(r1, this.f, r2), context)
   }
 }
 
-/**
- * This fn is for raising a function for a scalar to an array.
- * 
- * In the end it returns an array with each element as result
- * of the raised function to each element of the input array.
- * 
- * If the function is binary operator, the operands are either
- * arrays of the same size, or one of them is a scalar.
- * 
- * Example:
- *   1 .+ [2, 3, 4] => [3, 4, 5]
- * 
- */
-export class RaiseFunctionForArrayFn extends Fn {
-  protected _raised:FunctionBaseFn
-
-  constructor(raisedFn: FunctionBaseFn) {
-    super()
-    this._raised = raisedFn
-  }
-
-  apply(input:any, context:any) {
-    var raised_f = this._raised
-    if (raised_f instanceof RefFn) {
-      raised_f = this._raised.apply(input, context)
-      if (!raised_f || raised_f == this._raised) {
-        throw new FtlRuntimeError(`Function for '${this._raised.name}' not found`)
-      }
-    }
-
-    if (!Array.isArray(input)) {
-      input = [input]
-    }
-    var ret:any[] = []
-    input.forEach((element:any) => {
-      ret.push(raised_f.apply(element, context))
-    })
-    return ret
-  }
-}
-
-/**
- * This fn is for raising a binary operator for a scalar to an array.
- * 
- * The operands are either arrays of the same size, or one of them is a scalar.
- * 
- * In the end it returns an array of the same size of the operand(s) with each
- * element as result of the operator to elements of each input.
- * 
- * Example:
- *   1 .+ [2, 3, 4] => [3, 4, 5]
- * 
- */
-export class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
-  constructor(raised_function:any) {
-    super(raised_function)
-  }
-
-  apply(input:Tuple, context:any) {
-    var first = input.getIndex(0)
-    var second = input.getIndex(1)
-    let is_first_array = Array.isArray(first)
-    let is_second_array = Array.isArray(second)
-    
-    if (!is_first_array && !is_second_array) {
-      return this._raised.apply(Tuple.fromValues(first, second), context)
-    }
-
-    if (!is_first_array) {
-      throw new FtlRuntimeError('first is not array!')
-    }
-
-    if (!is_second_array) {
-      var ret: any[] = [];
-      (first as unknown[]).forEach((element:any) => {
-        ret.push(this._raised.apply(Tuple.fromValues(element, second), context))
-      })
-      return ret
-    }
-
-    if ((first as unknown[]).length != (second as unknown[]).length) {
-      throw new Error('first and second array sizes are different!')
-    }
-
-    var ret:any[] = []
-    for (var i = 0; i < (first as unknown[]).length; i++) {
-      ret.push(this._raised.apply(Tuple.fromValues((first as unknown[])[i], (second as unknown[])[i]), context))
-    }
-    return ret
-  }
-}
 
 /**
  * This is for capturing form of partial or full expression with an expression

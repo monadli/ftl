@@ -7,6 +7,7 @@ console.log(ftl_test_path)
 ftl_builder.setRunPath(run_path)
 
 let ftl_files = fs.readdirSync(ftl_test_path)
+let failed_files = []
 for (let file of ftl_files) {
   if (file.endsWith('.ftl')) {
     try {
@@ -32,9 +33,22 @@ for (let file of ftl_files) {
           console.error(e)
         }
       }
-      console.log(passed == module!.executableCount ? 'PASSED!\n' : 'FAILED!\n')
+      if (passed == module!.executableCount)
+        console.log('PASSED!\n')
+      else {
+        console.log('FAILED!\n')
+        failed_files.push(file)
+      }
     } catch (e) {
       console.error(`\nFailed testing ${file} with error ${e}!\n`)
+      failed_files.push(file)
     }
   }
+}
+
+if (failed_files.length == 0) {
+  console.log('All tests Passed!')
+} else {
+  console.log('The following tests failed:')
+  failed_files.forEach(f => console.log(f))
 }

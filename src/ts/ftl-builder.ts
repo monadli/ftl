@@ -207,57 +207,14 @@ function buildMapExpression(details:any, module:any, input?:any) {
 }
 
 function buildMapOperand(details:any, module:any, prev:any=null) {
-  var built
-  var sideffect
-  var raise = false
-  try {
-    sideffect = buildElement(details.annotations, module, prev)
-    built = buildElement(details.expr, module, prev)
-  } catch (e) {
-    if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
-      return new ftl.PropertyAccessorFn(e.operands[0], ... e.operands.slice(1).map(o => o.name))
-    }
-
-    // raise operator
-    else if (e instanceof PrefixOperatorNotFoundError && e.op == '. ') {
-      raise = true
-      built = e.operand
-    }
-    
-    else {
-      throw e
-    }
-  }
+  let sideffect = buildElement(details.annotations, module, prev)
+  let built = buildElement(details.expr, module, prev)
  
-  let sideffects = sideffect.map((d:ftl.Fn) => {
-    if (d instanceof ftl.RefFn) {
-      let f = module.getAvailableFn(d.name)
-      if (!f) {
-        throw new FtlBuildError(`Sideffect function ${d.name} not found!`)
-      }
-      return new ftl.SideffectFn(d.name, f, new ftl.TupleFn())
-    } else if (d instanceof ftl.CallExprFn) {
-      if (d.params.length > 1) {
-        throw new Error('Curry not supported in sideffect!')
-      }
-      if (!(d.f instanceof ftl.FunctionBaseFn)) {
-        throw new FtlBuildError('Sideffect has to be a function!')
-      }
-      return new ftl.SideffectFn(d.name, d.f, d.params[0] as ftl.TupleFn)
-    } else {
-      throw new Error('Not supported sideffect definition!')
-    }
-  })
-
   if (built instanceof ftl.RefFn) {
     let name = built.name
     if (!name.startsWith('_') && (!(prev instanceof ftl.TupleFn) || !prev.hasName(name)) && !buildingFor('FunctionSignature')) {
       built = module.getAvailableFn(name) || built
     }
-  }
-
-  if (raise) {
-    built = new ftl.RaiseFunctionForArrayFn(built)
   }
 
   if (sideffect.length > 0) {
@@ -312,16 +269,9 @@ function buildOperatorExpression(details:any, module:any, input?:any) {
       let end = new ftl.ConstFn(-1)
       return new ftl.ArrayInitializerWithRangeFn(start, end, interval)
     }
-
-    // tuple element selector
-    else if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
-      return new ftl.PropertyAccessorFn(e.operands[0], ... e.operands.slice(1).map(o => o.name))
-    }
-
     else {
       throw e
     }
-
   }
 }
 
@@ -345,7 +295,24 @@ function buildOperatorExpression(details:any, module:any, input?:any) {
  * @param module 
  * @param input 
  */
-function buildN_aryOperatorExpression(details:any, module:ftl.Module, input:any=null) {
+function buildN_aryOperatorExpression(details: any, module: ftl.Module, input: any = null) {
+  function lookForBinaryOperatorPrefix(op: string, operands: any[]) {
+    var i = 1
+    let prefix_f
+    let f
+    while (i < op.length) {
+      let prefix = op.substring(0, i)
+      prefix_f = module.getAvailableFn(`${prefix}$`)
+      if (prefix_f) {
+        f = module.getAvailableFn(op.substring(i))
+        if (f)
+          return new ftl.BinaryOperatorWithPrefixFn(operands[0], operands[1], f, prefix_f)
+      }
+      i++
+    }
+    return undefined
+}
+
   let operands = []
   for (let i = 0; i < details.operands.length; i++) {
     let operand = details.operands[i]
@@ -401,20 +368,18 @@ function buildN_aryOperatorExpression(details:any, module:ftl.Module, input:any=
       // operand at index 1 is for operator at 
       var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ')
       var f = module.getAvailableFn(op)
-      var raise = false
-      // no corresponding function found for single op
- 
-      if (!f && index == 1 && op.length > 1 && op.startsWith('.')) {
-        op = op.substring(1)
-        raise = true
-        f = module.getAvailableFn(op)
-      }
 
       if (!f) {
         if (index == 1) {
+          // look for binary operator prefix
+          let prefixed_binary_expr = lookForBinaryOperatorPrefix(op, operands)
+          if (prefixed_binary_expr) {
+            extra.current_index += index
+            return prefixed_binary_expr
+          }
           throw new N_aryOperatorBuildError(`N-ary operator ${ops} not found!`, op, operands)
         }
-        
+
         index--
 
         try {
@@ -445,7 +410,11 @@ function buildN_aryOperatorExpression(details:any, module:ftl.Module, input:any=
       extra.current_index += index
       var operands_tuple = new ftl.TupleFn(... operands.slice(0, f.params.size))
 
-      return new ftl.PipeFn(operands_tuple, raise ? new ftl.RaiseBinaryOperatorForArrayFn(f) : f)
+      // op.endsWith('->')
+      if (f.isPipeOp)
+        return new ftl.OpPipeFn(operands_tuple, f)
+      else
+        return new ftl.PipeFn(operands_tuple, f)
     }
   )(module, input, details.ops, operands, details.ops.length, true, {current_index:0, stop_index:details.ops.length})
 }
@@ -515,6 +484,15 @@ function buildFunctionDeclaration(details:any, module:any) {
   } else {
     f_name = signature.name
     params = signature.params
+  }
+
+  // Prefix for binary operator in form of '[op]$'.
+  // For example:
+  //    fn a .<op> b {...}
+  // will generate function with name '.$' which can
+  // be individually imported.
+  if (params.size == 3 && f_name.endsWith('< >')) {
+    f_name = `${f_name.substring(0, f_name.length - 3)}$`
   }
 
   let body = details.body
@@ -598,9 +576,9 @@ function buildCallExpression(details:any, module:any, prev:any) {
     }
   }
 
-  let f:ftl.FunctionBaseFn|ftl.RefFn = module.getAvailableFn(name)
+  let f:ftl.FunctionBaseFn|ftl.RefFn|null = module.getAvailableFn(name)
   if (!f) {
-    f = prev && prev.hasName(name) && new ftl.RefFn(name, module)
+    f = prev && (prev instanceof ftl.TupleFn) && prev.hasName(name) && new ftl.RefFn(name, module) || null
     if (!f) {
       if (!buildingFor('FunctionDeclaration')) {
         throw new Error(`${name} not found!`)
@@ -845,6 +823,9 @@ function buildTuple(details:any, module:any, prev?:any) {
     }
   }
 
+  if (all_elms.length == 1 && all_elms[0] instanceof ftl.TupleFn) { 
+    console.log('strange')
+  }
   return new ftl.TupleFn(... all_elms)
 }
 
