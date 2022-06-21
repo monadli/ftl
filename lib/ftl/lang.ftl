@@ -77,3 +77,37 @@ fn loop$() <? condition$() {
 
   return res
 }
+
+// Element accessor, a short cut to get specific tuple elements
+// which is normally achieved with pipe.
+//
+// If element does not exist, it returns an empty tuple.
+//
+// For example:
+//   (1, 2)._1    // analogous to (1, 2) -> _1
+//   (a:1, b:2).a // analogous to (a:1, b:2) -> a
+//
+// @parameters:
+//   a: a tuple
+//   b: a name in form of RefFn
+// @return tuple element or empty tuple
+fn a .-> b {
+  if (!b instanceof ftl.RefFn) {
+    throw new Error('b has to be a name of a tuple element or _0, _1, etc.')
+  }
+  return a.get(b.name)
+}
+
+// Conditional element accessor, similar to element acecssor,
+// but returns empty tuple if element does not exist, thus
+// the same operator can be chained wtihout throwing error.
+//
+// For example:
+//   (a:(b:a, c:(d:1, 2)), b:1) -> a?.f?.e
+// returns an empty tuple.
+//
+// @parameters:
+//   a: a tuple
+//   b: a name in form of RefFn
+//
+fn a ?.-> b -> a.b || ()

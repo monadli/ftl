@@ -1,11 +1,15 @@
 # Functional Tuple Language (FTL)
 
 ## Introduction
-`FTL` is a very simple programming language in algebraic form that is primarily composed of `functional tuple` in form of (t<sub>0</sub>, t<sub>1</sub>, ...) and tuple mapping operator `->` .
+`FTL` is a very simple programming language in algebraic form that is primarily composed of `functional tuples` in the form of (t<sub>0</sub>, t<sub>1</sub>, ...) and tuple mapping operator `->` .
 
-Tuple as a data structure is well known and used in many programming languages. We make it functional by extending each element into a function, hence `functional tuple`. We also introduce a topology for mapping operator `->` between two `functional tuples`. Such topology defines rules between functional elements of tuples when connected by `->`. We call this `tupology` (tu-ple + to-pology).
+The tuple is usually used as data structurein many programming languages. We make it functional by extending each element into a function, hence `functional tuple`. We also introduce a mapping topology between elements of two consecutive `functional tuples` with a operator `->`. Rules and special tuple element selectors are defines for the mapping topology. We call this `tupology` (**tu**-ple + to-**pology**)</mark>.
 
-In `FTL`, there is no any intrinsic operator defined at language level except mapping operator `->` . There is also no intrinsic control statements such as `for ...` or `while ...` loops, etc. However, all these missing parts can be defined as external functions using the basic building blocks provided by `FTL` as follows:
+In `FTL`, the only intrisic operator defined at language level is the mapping operator `->`. However, a set of symbol characters are provided to define any operators with one or more such characters. Examples are arithmetic operators `+`, `-`, `*`, and `/`
+
+There are no intrinsic control statements such as `for` or `while` loops, as well. This is because such control statements in the other languages can be expressed as functions are they actually defined as external functions.
+
+All these make `FTL` very simple with just the following elements:
 
 1. Functional tuple in form of (t<sub>0</sub>, t<sub>1</sub>, ...) with `0` based index;
 2. Mapping operator `->` between tuples;
@@ -13,7 +17,7 @@ In `FTL`, there is no any intrinsic operator defined at language level except ma
 4. Import statements with keyword `import` allowing grouping and importing functions across modules;
 5. Application statements for performing computations composed of all above.
 
-For example, you will find that `if ... else` is defined as ternary operator `? :` in `ftl/lang` module, as well as `for ...` loop as `?<` and `while ...` as `<?` in the same module. All basic operators such as `+`, `-`, etc., are defined as functions outside of the language as well.
+For example, `if ... else` is defined as ternary operator `? :` in `ftl/lang` module, as well as `for ...` loop as `?<` and `while` loop as `<?` in the same module.
 
 ## Modules
 Functions and operators can be grouped into a module and imported into other modules. A module is represented as a file with extension "`.ftl`".
@@ -426,8 +430,9 @@ For example:
 [3.14, 6.28] .-> sin
 ```
 
+Please note that such new operator extending `->` will have precedence the same as regular binary operator, not the one that `->` has.
 #### Binary Operator Prefix
-Besides defining different kinds of operators, one can define a binary operator prefix that can be applied to any binary operator.
+Besides defining different kinds of operators, one can define a binary operator prefix (not prefix operator) that can be applied to any binary operator.
 
 A binary operator prefix can be declared as:
 ```
@@ -494,14 +499,14 @@ Any function/operator defined for non-array can be raised for array with `.->` p
 
 For example:
 ```
-[1, 2] -> .cos
+[1, 2] .-> cos
 ```
 is equivalent to:
 ```
 [cos(1), cos(2)]
 ```
 
-Arithmetic operators can be raised by prefixing with `.`.
+Arithmetic operators can be raised by prefixing with binary operator prefix "`.`".
 
 For example:
 `[1, 2] .* 2` will result in `[2, 4]`.

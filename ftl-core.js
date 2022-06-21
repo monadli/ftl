@@ -1,7 +1,7 @@
 // copy from main branch compiled ftl-core.js with comments removed
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SideffectedFn = exports.SideffectFn = exports.ExecutableFn = exports.CurryExprFn = exports.RaiseBinaryOperatorForArrayFn = exports.RaiseFunctionForArrayFn = exports.PropertyAccessorFn = exports.ArrayRangeSelectorFn = exports.ArrayElementSelectorFn = exports.ArrayInitializerWithRangeFn = exports.ArrayInitializerFn = exports.ExprRefFn = exports.CallExprFn = exports.ExprFn = exports.SeqSelectorOrDefault = exports.TupleSelectorFn = exports.FunctionHolder = exports.RefFn = exports.PipeFn = exports.TupleFn = exports.NamedExprFn = exports.FunctionInterfaceFn = exports.FunctionFn = exports.NativeFunctionFn = exports.FunctionBaseFn = exports.ConstFn = exports.WrapperFn = exports.Fn = exports.Tuple = exports.Module = exports.FnUtil = exports.addModule = exports.getModule = void 0;
+exports.SideffectedFn = exports.SideffectFn = exports.ExecutableFn = exports.CurryExprFn = exports.BinaryOperatorWithPrefixFn = exports.ArrayRangeSelectorFn = exports.ArrayElementSelectorFn = exports.ArrayInitializerWithRangeFn = exports.ArrayInitializerFn = exports.ExprRefFn = exports.CallExprFn = exports.ExprFn = exports.SeqSelectorOrDefault = exports.TupleSelectorFn = exports.FunctionHolder = exports.RefFn = exports.OpPipeFn = exports.PipeFn = exports.TupleFn = exports.NamedExprFn = exports.FunctionInterfaceFn = exports.FunctionFn = exports.NativeFunctionFn = exports.FunctionBaseFn = exports.ConstFn = exports.WrapperFn = exports.Fn = exports.Tuple = exports.Module = exports.FnUtil = exports.addModule = exports.getModule = void 0;
 const version = '0.0.1';
 const TupleSelectorPattern = /_\d+$/;
 const InputSelectorPattern = '_';
@@ -138,7 +138,6 @@ class Tuple {
             this._names.set(name, seq);
             this._values.push(value instanceof Tuple && value.size == 1 && !value.hasNames() ? value.getIndex(0) : value);
         }
-        // flat single element tuple
         else if (value instanceof Tuple && value.size == 1) {
             if (value._names.size == 1) {
                 this.addValue(value._values[0]);
@@ -149,7 +148,7 @@ class Tuple {
                 this.addNameValue(k.next().value, value._values[0]);
             }
         }
-        else if (value != null) {
+        else {
             this._values.push(value);
         }
         return this;
@@ -357,12 +356,21 @@ class VarFn extends ImmutableValFn {
 }
 class FunctionBaseFn extends NamedFn {
     constructor(name, params, body) {
+        let is_pipe_op = false;
+        if (name.endsWith('->')) {
+            name = name.substring(0, name.length - 2);
+            is_pipe_op = true;
+        }
         super(name);
         this._params = params;
         this._body = body;
+        this._isPipeOp = is_pipe_op;
     }
     get params() {
         return this._params;
+    }
+    get isPipeOp() {
+        return this._isPipeOp;
     }
     apply(input, context) {
         return this._body.apply(input, context);
@@ -370,15 +378,13 @@ class FunctionBaseFn extends NamedFn {
 }
 exports.FunctionBaseFn = FunctionBaseFn;
 class NativeFunctionFn extends FunctionBaseFn {
-    // params:TupleFn parameter list
     constructor(name, params, jsfunc) {
         super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc));
     }
     apply(input, context) {
         if (FnUtil.isNone(input) && this.params.size > 0)
             throw new FunctionParameterDeficiencyError("Input to native function " + this.name + " does not match!");
-        var paramValues = this.params.apply(input);
-        return this._body.apply(paramValues);
+        return this._body.apply(this.params.apply(input));
     }
     toString() {
         return this.name;
@@ -391,7 +397,8 @@ NativeFunctionFn.NativeScriptFn = class extends Fn {
         this._jsfunc = jsfunc;
     }
     apply(input) {
-        return this._jsfunc.apply(null, (input instanceof Tuple) && input.toList() || [input]);
+        let args = (input instanceof Tuple) && input.toList() || [input];
+        return this._jsfunc.apply(null, args);
     }
 };
 class FunctionFn extends FunctionBaseFn {
@@ -471,8 +478,6 @@ class ClosureFunction {
         // no named parameters
         var start = 0;
         if (this.closureParams instanceof RefFn) {
-            //if (this.closureParams.name === 'raw')
-            // TODO change ref type
             if (this.closureParams.isRefType()) {
             }
             else
@@ -527,8 +532,6 @@ class TupleFn extends ComposedFn {
             var fn = this._fns[i];
             var res = fn.apply(input, context);
             if (fn instanceof NamedExprFn || fn instanceof TailFn) {
-                // TODO test is this needed?
-                ////  return this
                 tuple.addNameValue(fn.name, res);
             }
             else
@@ -547,15 +550,12 @@ class PipeFn extends ComposedFn {
         if (res === this._fns[0])
             return this;
         for (var i = 1; i < this._fns.length; i++) {
-            if (res instanceof TailFn) {
+            if (res instanceof TailFn)
                 return new TailFn(new PipeFn(res, ...this._fns.slice(i)));
-            }
-            else if (res instanceof Tuple && res.hasTail()) {
+            else if (res instanceof Tuple && res.hasTail())
                 return new TailFn(new PipeFn(res.toTupleFn(), ...this._fns.slice(i)));
-            }
-            else if (res instanceof Tuple && res.hasFn()) {
+            else if (res instanceof Tuple && res.hasFn() && !OpPipeFn.isOpPipe(this._fns[i]))
                 return new PipeFn(...[res.toTupleFn()].concat(this._fns.slice(i)));
-            }
             res = this._fns[i].apply(res, context);
         }
         return res;
@@ -565,6 +565,73 @@ class PipeFn extends ComposedFn {
     }
 }
 exports.PipeFn = PipeFn;
+class OpPipeFn extends ComposedFn {
+    constructor(... tuples) {
+        super(... tuples);
+        if (tuples.length != 2) {
+            throw new FtlRuntimeError(`OpPipeFn has ${tuples.length} elements!`);
+        }
+    }
+    static isOpPipe(fn) {
+        if (fn instanceof OpPipeFn)
+            return true;
+        else if (fn instanceof PipeFn || fn instanceof TupleFn)
+            return OpPipeFn.isOpPipe(fn._fns[0]);
+        else
+            return false;
+    }
+    apply(input, context) {
+        function resolve_refs(input, first_tuple_elm, op2) {
+            if (!input)
+                return op2;
+            if (op2 instanceof RefFn) {
+                if (op2.isTupleSelector() || !(input instanceof Tuple) || first_tuple_elm instanceof TupleFn && first_tuple_elm.hasName(op2.name))
+                    return op2;
+                else {
+                    let r = op2.apply(input);
+                    return FnUtil.isNone(r) && op2 || (r instanceof Fn && r || new ConstFn(r));
+                }
+            }
+            else if (op2 instanceof TupleFn) {
+                op2._fns.forEach((f, i, array) => {
+                    var converted = resolve_refs(input, first_tuple_elm, f);
+                    if (converted != f) {
+                        array[i] = converted;
+                    }
+                });
+                return op2;
+            }
+            else if (op2 instanceof PipeFn) {
+                resolve_refs(input, first_tuple_elm, op2._fns[0]);
+                return op2;
+            }
+            else
+                return op2;
+        }
+        let first_tuple_elm = this._fns[0].getFnAt(0);
+        var res = first_tuple_elm.apply(input, context);
+        if (res === first_tuple_elm)
+            return this;
+        if (res instanceof TailFn) {
+            return new TailFn(new PipeFn(res, this._fns[1]));
+        }
+        else if (res instanceof Tuple && res.hasTail()) {
+            return new TailFn(new PipeFn(res.toTupleFn(), this._fns[1]));
+        }
+        else if (res instanceof Tuple && res.getIndex(0) instanceof Fn) {
+            return new PipeFn(...[res.toTupleFn()].concat(this._fns[1]));
+        }
+        let combined = new Tuple();
+        combined.addValue(res);
+        let op2 = resolve_refs(input, first_tuple_elm, this._fns[0].getFnAt(1));
+        combined.addValue(op2);
+        return this._fns[1].apply(combined, context);
+    }
+    toString() {
+        return 'lambda expression';
+    }
+}
+exports.OpPipeFn = OpPipeFn;
 class RefFn extends Fn {
     constructor(name, module) {
         super();
@@ -903,84 +970,21 @@ class ArrayRangeSelectorFn extends Fn {
     }
 }
 exports.ArrayRangeSelectorFn = ArrayRangeSelectorFn;
-class PropertyAccessorFn extends Fn {
-    constructor(elm_name, ...prop_names) {
+class BinaryOperatorWithPrefixFn extends Fn {
+    constructor(operand1, operand2, f, prefix) {
         super();
-        this.elm_name = elm_name;
-        this.prop_names = prop_names;
+        this.operand1 = operand1;
+        this.operand2 = operand2;
+        this.f = f;
+        this.prefix = prefix;
     }
     apply(input, context) {
-        var resolve = (elm, prop) => {
-            return elm ? elm instanceof Tuple ? elm.get(prop) : elm.prop : null;
-        };
-        var elm = this.elm_name.apply(input, context);
-        for (var i = 0; i < this.prop_names.length; i++) {
-            elm = resolve(elm, this.prop_names[i]);
-            if (!elm) {
-                return null;
-            }
-        }
-        return elm;
+        let r1 = this.operand1.apply(input, context);
+        let r2 = this.operand2.apply(input, context);
+        return this.prefix.apply(Tuple.fromValues(r1, this.f, r2), context);
     }
 }
-exports.PropertyAccessorFn = PropertyAccessorFn;
-class RaiseFunctionForArrayFn extends Fn {
-    constructor(raisedFn) {
-        super();
-        this._raised = raisedFn;
-    }
-    apply(input, context) {
-        var raised_f = this._raised;
-        if (raised_f instanceof RefFn) {
-            raised_f = this._raised.apply(input, context);
-            if (!raised_f || raised_f == this._raised) {
-                throw new FtlRuntimeError(`Function for '${this._raised.name}' not found`);
-            }
-        }
-        if (!Array.isArray(input)) {
-            input = [input];
-        }
-        var ret = [];
-        input.forEach((element) => {
-            ret.push(raised_f.apply(element, context));
-        });
-        return ret;
-    }
-}
-exports.RaiseFunctionForArrayFn = RaiseFunctionForArrayFn;
-class RaiseBinaryOperatorForArrayFn extends RaiseFunctionForArrayFn {
-    constructor(raised_function) {
-        super(raised_function);
-    }
-    apply(input, context) {
-        var first = input.getIndex(0);
-        var second = input.getIndex(1);
-        let is_first_array = Array.isArray(first);
-        let is_second_array = Array.isArray(second);
-        if (!is_first_array && !is_second_array) {
-            return this._raised.apply(Tuple.fromValues(first, second), context);
-        }
-        if (!is_first_array) {
-            throw new FtlRuntimeError('first is not array!');
-        }
-        if (!is_second_array) {
-            var ret = [];
-            first.forEach((element) => {
-                ret.push(this._raised.apply(Tuple.fromValues(element, second), context));
-            });
-            return ret;
-        }
-        if (first.length != second.length) {
-            throw new Error('first and second array sizes are different!');
-        }
-        var ret = [];
-        for (var i = 0; i < first.length; i++) {
-            ret.push(this._raised.apply(Tuple.fromValues(first[i], second[i]), context));
-        }
-        return ret;
-    }
-}
-exports.RaiseBinaryOperatorForArrayFn = RaiseBinaryOperatorForArrayFn;
+exports.BinaryOperatorWithPrefixFn = BinaryOperatorWithPrefixFn;
 class CurryExprFn extends Fn {
     constructor(expr, params) {
         super();

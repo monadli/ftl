@@ -1,4 +1,5 @@
 // copy from main branch compiled ftl-builder.js with all __importDefault removed
+// and addition of init()
 "use strict";
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -71,7 +72,7 @@ function buildingFor(context) {
  * @param expr expression
  * @returns NamedExprFn or expr itself
  */
- function createNamedExpr(name, expr) {
+function createNamedExpr(name, expr) {
     if (ftl.RefFn.isInputSelector(name)) {
         if (expr instanceof ftl.RefFn)
             return expr;
@@ -207,55 +208,13 @@ function buildMapExpression(details, module, input) {
     return map_expr.length == 1 ? map_expr[0] : new ftl.PipeFn(...map_expr);
 }
 function buildMapOperand(details, module, prev = null) {
-    var built;
-    var sideffect;
-    var raise = false;
-    try {
-        sideffect = buildElement(details.annotations, module, prev);
-        built = buildElement(details.expr, module, prev);
-    }
-    catch (e) {
-        if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
-            return new ftl.PropertyAccessorFn(e.operands[0], ...e.operands.slice(1).map(o => o.name));
-        }
-        // raise operator
-        else if (e instanceof PrefixOperatorNotFoundError && e.op == '. ') {
-            raise = true;
-            built = e.operand;
-        }
-        else {
-            throw e;
-        }
-    }
-    let sideffects = sideffect.map((d) => {
-        if (d instanceof ftl.RefFn) {
-            let f = module.getAvailableFn(d.name);
-            if (!f) {
-                throw new FtlBuildError(`Sideffect function ${d.name} not found!`);
-            }
-            return new ftl.SideffectFn(d.name, f, new ftl.TupleFn());
-        }
-        else if (d instanceof ftl.CallExprFn) {
-            if (d.params.length > 1) {
-                throw new Error('Curry not supported in sideffect!');
-            }
-            if (!(d.f instanceof ftl.FunctionBaseFn)) {
-                throw new FtlBuildError('Sideffect has to be a function!');
-            }
-            return new ftl.SideffectFn(d.name, d.f, d.params[0]);
-        }
-        else {
-            throw new Error('Not supported sideffect definition!');
-        }
-    });
+    let sideffect = buildElement(details.annotations, module, prev);
+    let built = buildElement(details.expr, module, prev);
     if (built instanceof ftl.RefFn) {
         let name = built.name;
         if (!name.startsWith('_') && (!(prev instanceof ftl.TupleFn) || !prev.hasName(name)) && !buildingFor('FunctionSignature')) {
             built = module.getAvailableFn(name) || built;
         }
-    }
-    if (raise) {
-        built = new ftl.RaiseFunctionForArrayFn(built);
     }
     if (sideffect.length > 0) {
         let sideffects = sideffect.map((d) => {
@@ -310,10 +269,6 @@ function buildOperatorExpression(details, module, input) {
             let end = new ftl.ConstFn(-1);
             return new ftl.ArrayInitializerWithRangeFn(start, end, interval);
         }
-        // tuple element selector
-        else if (e instanceof N_aryOperatorBuildError && (e.op == '.' || e.op == '. .')) {
-            return new ftl.PropertyAccessorFn(e.operands[0], ...e.operands.slice(1).map(o => o.name));
-        }
         else {
             throw e;
         }
@@ -340,6 +295,22 @@ function buildOperatorExpression(details, module, input) {
  * @param input
  */
 function buildN_aryOperatorExpression(details, module, input = null) {
+    function lookForBinaryOperatorPrefix(op, operands) {
+        var i = 1;
+        let prefix_f;
+        let f;
+        while (i < op.length) {
+            let prefix = op.substring(0, i);
+            prefix_f = module.getAvailableFn(`${prefix}$`);
+            if (prefix_f) {
+                f = module.getAvailableFn(op.substring(i));
+                if (f)
+                    return new ftl.BinaryOperatorWithPrefixFn(operands[0], operands[1], f, prefix_f);
+            }
+            i++;
+        }
+        return undefined;
+    }
     let operands = [];
     for (let i = 0; i < details.operands.length; i++) {
         let operand = details.operands[i];
@@ -385,15 +356,14 @@ function buildN_aryOperatorExpression(details, module, input = null) {
         // operand at index 1 is for operator at 
         var op = index == 1 ? ops[0] : ops.slice(0, index).join(' ');
         var f = module.getAvailableFn(op);
-        var raise = false;
-        // no corresponding function found for single op
-        if (!f && index == 1 && op.length > 1 && op.startsWith('.')) {
-            op = op.substring(1);
-            raise = true;
-            f = module.getAvailableFn(op);
-        }
         if (!f) {
             if (index == 1) {
+                // look for binary operator prefix
+                let prefixed_binary_expr = lookForBinaryOperatorPrefix(op, operands);
+                if (prefixed_binary_expr) {
+                    extra.current_index += index;
+                    return prefixed_binary_expr;
+                }
                 throw new N_aryOperatorBuildError(`N-ary operator ${ops} not found!`, op, operands);
             }
             index--;
@@ -420,7 +390,11 @@ function buildN_aryOperatorExpression(details, module, input = null) {
         }
         extra.current_index += index;
         var operands_tuple = new ftl.TupleFn(...operands.slice(0, f.params.size));
-        return new ftl.PipeFn(operands_tuple, raise ? new ftl.RaiseBinaryOperatorForArrayFn(f) : f);
+        // op.endsWith('->')
+        if (f.isPipeOp)
+            return new ftl.OpPipeFn(operands_tuple, f);
+        else
+            return new ftl.PipeFn(operands_tuple, f);
     })(module, input, details.ops, operands, details.ops.length, true, { current_index: 0, stop_index: details.ops.length });
 }
 function buildPrefixOperatorDeclaration(details, module) {
@@ -479,6 +453,14 @@ function buildFunctionDeclaration(details, module) {
     else {
         f_name = signature.name;
         params = signature.params;
+    }
+    // Prefix for binary operator in form of '[op]$'.
+    // For example:
+    //    fn a .<op> b {...}
+    // will generate function with name '.$' which can
+    // be individually imported.
+    if (params.size == 3 && f_name.endsWith('< >')) {
+        f_name = `${f_name.substring(0, f_name.length - 3)}$`;
     }
     let body = details.body;
     let param_list = params.map((p) => p.name);
@@ -553,7 +535,7 @@ function buildCallExpression(details, module, prev) {
     }
     let f = module.getAvailableFn(name);
     if (!f) {
-        f = prev && prev.hasName(name) && new ftl.RefFn(name, module);
+        f = prev && (prev instanceof ftl.TupleFn) && prev.hasName(name) && new ftl.RefFn(name, module) || null;
         if (!f) {
             if (!buildingFor('FunctionDeclaration')) {
                 throw new Error(`${name} not found!`);
@@ -766,6 +748,9 @@ function buildTuple(details, module, prev) {
         else if (elm instanceof ftl.FunctionInterfaceFn) {
             elm.seq = i;
         }
+    }
+    if (all_elms.length == 1 && all_elms[0] instanceof ftl.TupleFn) {
+        console.log('strange');
     }
     return new ftl.TupleFn(...all_elms);
 }

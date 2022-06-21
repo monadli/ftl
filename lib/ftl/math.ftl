@@ -1,12 +1,13 @@
-import ftl/lang[*, /]
+import ftl/lang
 
 //
 // basic math operators
 //
 
-fn x < y < z { return x < y && y < z }
-fn x <= y < z { return x <= y && y < z }
-fn x < y <= z { return x < y && y <= z }
+fn x < y < z  -> x < y && (y < z)
+fn x <= y < z -> x <= y && (y < z)
+fn x < y <= z -> x < y && (y <= z)
+fn x <= y <= z -> x <= y && (y <= z)
 
 //
 // basic math functions

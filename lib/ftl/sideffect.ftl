@@ -10,9 +10,7 @@ import ftl/lang[*]
 
 // Wraps native console's log.
 fn info(message, input) {
-  // for web demo, this is changed to show output into result textarea
-  let result_pane = document.getElementById('result')
-  result_pane.value += `${message}: ${input}\n`
+  console.log(`${message}: ${input}`)
 }
 
 // Throws error if result of condition is false.
