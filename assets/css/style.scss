@@ -4,8 +4,14 @@
 @import "{{ site.theme }}";
 
 nav {
+    top: 200px;
     bottom: 10px;
     overflow-y: auto;
+    text-align: left;
+}
+
+footer {
+    right: 10px;
 }
 
 pre {
