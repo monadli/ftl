@@ -3,9 +3,9 @@
 ## Introduction
 `FTL` is a very simple programming language in algebraic form that is primarily composed of `functional tuples` in the form of (t<sub>0</sub>, t<sub>1</sub>, ...) and tuple mapping operator `->` .
 
-The tuple is usually used as data structurein many programming languages. We make it functional by extending each element into a function, hence `functional tuple`. We also introduce a mapping topology between elements of two consecutive `functional tuples` with a operator `->`. Rules and special tuple element selectors are defines for the mapping topology. We call this `tupology` (**tu**-ple + to-**pology**)</mark>.
+The tuple is usually used as data structure in many programming languages. We make it functional by extending each element into a function, hence `functional tuple`. We also introduce a mapping topology between elements of two consecutive `functional tuples` with a operator `->`. Rules and special tuple element selectors are defined for the mapping topology. We call this `tupology` (**tu**-ple + to-**pology**).
 
-In `FTL`, the only intrisic operator defined at language level is the mapping operator `->`. However, a set of symbol characters are provided to define any operators with one or more such characters. Examples are arithmetic operators `+`, `-`, `*`, and `/`
+In `FTL`, the only intrinsic operator defined at language level is the mapping operator `->`. However, a set of symbol characters are provided to define any operators with one or more such characters. Examples are arithmetic operators `+`, `-`, `*`, and `/`
 
 There are no intrinsic control statements such as `for` or `while` loops, as well. This is because such control statements in the other languages can be expressed as functions are they actually defined as external functions.
 
@@ -31,7 +31,7 @@ With functional tuples and mapping operator, a complex algorithm may be expresse
 ## Language Elements
 ### Key Words
 1. `import ... [as]` - for importing other modules;
-2. `fn` - for defininig a function;
+2. `fn` - for defining a function;
 3. `true`, `false` - constant value for logical true and false;
 4. `_` and `_\d+$` such as `_0`, `_1`, etc. They are reserved as tuple selectors.
 
@@ -77,7 +77,7 @@ import ftl/lang[' !']
 4. list with elements separated by comma and wrapped in paired square brackets
 5. tuple with above as elements
 ### Functional Tuple
-A functional tuple is composed of a pair of parantheses enclosing elements separated by comma as follows:
+A functional tuple is composed of a pair of parentheses enclosing elements separated by comma as follows:
 
 (a:t<sub>0</sub>, b:t<sub>1</sub>, ..., c:t<sub>n-1</sub>)
 
@@ -113,15 +113,15 @@ The computation result for each element is essentially its function applied to r
 
 Figure 2 above shows the same mapping in different form where functional tuples and value tuples are separated into two vertical layer and data computation process is the data flowing between the two layers.
 
-For an application with the chain of tuples, the computation is the process from the first input and functional tuple and the result value tuple is sent to the next functionial tuple, and the same process repeats until the last functional tuple.
+For an application with the chain of tuples, the computation is the process from the first input and functional tuple and the result value tuple is sent to the next functional tuple, and the same process repeats until the last functional tuple.
 
-With tuple and mapping operator, an expression of arbitrary length can be created. In other words, a complex computation can be written into one such algbraic expression.
+With tuple and mapping operator, an expression of arbitrary length can be created. In other words, a complex computation can be written into one such algebraic expression.
 
 The `src/ftl/example/fft.ftl` is an example, where fast Fourier transform (FFT) is expressed in just one expression.
 
 ### Tuple Element Selector
-Tuple element selector is the most important mapping. It allows selction of tuple elements from value tuple from preceeding functional tuple.
-1. Whole tuple selector, `_`, is to select the whole input to it. Thus it serves as `identity function` in `FTL`.
+Tuple element selector is the most important mapping. It allows selection of tuple elements from value tuple from preceeding functional tuple.
+1. Whole tuple selector, `_`, is to select the whole input to it. Thus, it serves as `identity function` in `FTL`.
 2. A number following `_` is tuple element selector, e.g., `_0` selects the first element and `_1` selects the second one, etc.
 
 The tuple selectors are reserved and cannot be used as identifiers.
@@ -142,7 +142,7 @@ Examples:
 (pi:3.14159, e:2.71828) -> e == 2.71828
 ```
 ### Functional Tuple as Data Structure
-A functional tuple can be seen as a data structure as well. This is because in the end of computation, the result of a functional tuple is a value tuple with element asseccsible either sequencially as a list with sequential tuple selector, such as `_0`, `_1`, etc., or as a map with identifier selector.
+A functional tuple can be seen as a data structure as well. This is because in the end of computation, the result of a functional tuple is a value tuple with element accessible either sequentially as a list with sequential tuple selector, such as `_0`, `_1`, etc., or as a map with identifier selector.
 
 ### Implicit Whole Tuple Selector
 Besides the tuple selectors defined above, the whole value tuple will be applied to the expression of each tuple element when it is not an element selector. In other words, expression of any non-tuple element selector is a whole tuple selector.
@@ -153,9 +153,9 @@ For example:
 ```
 is equivalent to `sin(pi:3.14159, e:2.71828)`.
 
-The computation of an expession in FTL is the process of applying the above rules to each tuple element when the value tuple from prededing functional tuple is applied.
+The computation of an expression in FTL is the process of applying the above rules to each tuple element when the value tuple from preceding functional tuple is applied.
 
-Lastly but most importantly: a functional tuple can only see its immediate value tuple, not any other tuples beyond. Because of this, each tuple in an expression is ultimately a lamba expession.
+Lastly but most importantly: a functional tuple can only see its immediate value tuple, not any other tuples beyond. Because of this, each tuple in an expression is ultimately a lambda expression.
 
 ## Functions
 Any explicit function declaration has the following form:
@@ -165,9 +165,9 @@ fn name([argument list])
 
 where `fn` is the reserved word, and arguments are names delimited by comma.
 
-A function has to be declared before it can be referenced/used. Thus there is no way to define functions circularly referenced.
+A function has to be declared before it can be referenced/used. Thus, there is no way to define functions circularly referenced.
 
-A function can be recursive though (such as in `fft.ftl`) in its own definiton.
+A function can be recursive though (such as in `fft.ftl`) in its own definition.
 
 ### Lazy Argument Computation
 A parameter can be in form of function. When this is the case, the actual passing argument will be wrapped as a function for delayed invocation inside the function implementation.
@@ -175,7 +175,7 @@ A parameter can be in form of function. When this is the case, the actual passin
 For example, the ternary operator `? :` is written in such a way that at time of computation, either `is_true()` or `otherwise()` is computed based on the result of `if_true` but they will never be computed together. This will reduce unnecessary computation.
 
 ### Parameter as Tail Function for Reducing Call Stack Depth
-A parameter can be defined as a tail function (function signature with name ends with `$`) as well. At runtime the corresponding expression will be wrapped as a tail function and returned to calling stack without being invoked. Such mechanism is specially designed to reduce depth of call stacks when dealing with recursive functions. In the end, no matter how many recursives, the call stack depth can be maintained as a constant.
+A parameter can be defined as a tail function (function signature with name ends with `$`) as well. At runtime the corresponding expression will be wrapped as a tail function and returned to calling stack without being invoked. Such mechanism is specially designed to reduce depth of call stacks when dealing with recursive functions. In the end, no matter how many recursions, the call stack depth can be maintained as a constant.
 
 You have to make sure that when writing a function with tail parameter, it is really a tail.
 
@@ -212,7 +212,7 @@ A `sideffect` should not change the input for computation. In other words, an ex
 
 To achieve this, a copy of the input is passed to a `sideffect` and its returned value is discarded to prevent possible side effect for computation.
 
-At run time, it is built as part of the mapping preeeding the expression and it can be completely ignored when reasoning.
+At run time, it is built as part of the mapping preceding the expression and it can be completely ignored when reasoning.
 
 ### Function Composition
 Function composition is intrinsic to operator `->`:
@@ -256,7 +256,7 @@ For example, increment operator:
 fn val++ -> val + 1
 ```
 
-Remember in FTL, all functions are pure and stateless, `val++` does not mean the `val` itself has value changed, but just its value incremented and pass to next functioanl tuple.
+Remember in FTL, all functions are pure and stateless, `val++` does not mean the `val` itself has value changed, but just its value incremented and pass to next functional tuple.
 
 ### Binary Operator
 A binary operator is defined as a normal binary operator form with the operator in between of the two operands:
@@ -293,12 +293,12 @@ fn x < y < z -> x < y && (y < z)
 
 ### Operator Precedence and Associativity
 
-When multiple operators are involved in an expression, parantheses `(` and `)` can be used to specify precedence. Otherwise, each type of operator follow the rules in the corresponding subsections below.
+When multiple operators are involved in an expression, parentheses `(` and `)` can be used to specify precedence. Otherwise, each type of operator follows the rules in the corresponding subsections below.
 
 Overall, user defined unary operator has highest level precedence than binary/n-ary operators.
 
 #### Unary Operators
-When multiple prefix or postfix operators are applied to the same expression, most inner one has hightest precedence and most outer one has lowest precedence.
+When multiple prefix or postfix operators are applied to the same expression, most inner one has highest precedence and most outer one has lowest precedence.
 
 When both prefix and postfix operators are present, prefix operator has higher precedence.
 
@@ -338,11 +338,11 @@ If `2 * 3` needs to be computed first, do this:
 #### N-ary Operators
 `FTL` allows definiton of n-ary operators. For example, the ternary operator `? :` is defined in `ftl/lang.ftl` library.
 
-N-ary operators cannot be nested in the middle without parantheses. Using `? :` as an example. We can have `1 < 2 ? (2 < 3 ? true : false) : false` but `1 < 2 ? 2 < 3 ? true : false : false` will give error as `ERROR: N-ary operator '< ? < ? : :' not found!`
+N-ary operators cannot be nested in the middle without parentheses. Using `? :` as an example. We can have `1 < 2 ? (2 < 3 ? true : false) : false` but `1 < 2 ? 2 < 3 ? true : false : false` will give error as `ERROR: N-ary operator '< ? < ? : :' not found!`
 
-This is because the process of resolving operator is to search from the longest posible n-ary operator `< ? < ? : :`, then starts by removing one from right and search again for `< ? < ? :`, and repeat the same process until it goes down to `<`.
+This is because the process of resolving operator is to search from the longest possible n-ary operator `< ? < ? : :`, then starts by removing one from right and search again for `< ? < ? :`, and repeat the same process until it goes down to `<`.
 
-If `<` is found, it will repeat the same process for `? < ? : :`, etc, where `? <` will not resolve to any know operator combinations.
+If `<` is found, it will repeat the same process for `? < ? : :`, etc., where `? <` will not resolve to any known operator combinations.
 
 This process is actually used to resolve unary/binary operators as well.
 
@@ -374,7 +374,7 @@ and the result will be `-21`.
 #### Intrinsic Operator ->
 Please note that all user defined operators are in form of functions with strict evaluation except the ones with parameters in form of functions or tail functions. The intrinsic mapping operator `->`, however, has the form of binary operator but in essence does not do strict evaluation.
 
-This is because it evaluates the left hand side first then pass the result to the right hand side before doing evaluation there. In other words, the right hand side evaluation dependes on result of left hand side evaluation.
+This is because it evaluates the left-hand side first then pass the result to the right-hand side before doing evaluation there. In other words, the right hand side evaluation depends on result of left-hand side evaluation.
 
 To achieve this, the intrinsic operator`->` always has lowest precedence when user defined operators appear at the same level.
 
@@ -413,7 +413,7 @@ a.b
 where `a` is a tuple. If `b` exists in `a`, it will be returned. Otherwise `null` will be returned.
 
 
-`a ?.-> b` is condition element accessor. It can be used as `a?.b` which returns either `b` or an emppty tuple, thus condition element accessor can be chained as:
+`a ?.-> b` is condition element accessor. It can be used as `a?.b` which returns either `b` or an empty tuple, thus condition element accessor can be chained as:
 ```
 a?.b?.c
 ```
@@ -460,7 +460,7 @@ For example:
 1 .+ 2 == 3
 ```
 #### Lambda Expression
-Lambda exprerssion is an anonymous function which is supported in tupology expressions.
+Lambda expression is an anonymous function which is supported in tupology expressions.
 
 A lambda in an expression is in form of a function with a very special name `$`.
 
@@ -532,7 +532,7 @@ fn -val {
 ```
 
 #### Function/operator implementation with ftl
-When implementing with ftl, it starts wtih operator `->`.
+When implementing with ftl, it starts with operator `->`.
 
 For example:
 ```
