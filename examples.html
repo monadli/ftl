@@ -22,7 +22,7 @@ footer {
 <script>
 var module_content = {}
 var curr_path = ''
-var user_code = '// You may copy code from examples or write your own ftl code here.\n// Your code will stay here when you switch to examples.'
+var user_code = '// You may copy code from examples or write your own ftl code here.\n// Your code will stay here when you switch to examples.\n\n1234'
 var in_user_code = false
 
 
@@ -147,8 +147,14 @@ async function start_debug() {
     }
     */
   } catch (e) {
-    result_pane.value += `ERROR: ${e.message}`
-    console.error(e)
+    if (!(e instanceof ftl_debugger.DebuggerStopException)) {
+      result_pane.value += `ERROR: ${e.message}`
+      console.error(e)
+    }
+  }
+  finally {
+    enable_debug_panel(false)
+    enable_run_buttons_panel(true)
   }
 }
 

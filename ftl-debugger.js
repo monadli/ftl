@@ -1,6 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.debug_ctrl = exports.wrapFnWithDebugger = void 0;
+exports.debug_ctrl = exports.wrapFnWithDebugger = exports.DebuggerStopException = void 0;
+
+exports.DebuggerStopException = class DebuggerStopException extends Error {
+  constructor() {
+    super()
+  }
+}
+
 // from https://css-tricks.com/replace-javascript-dialogs-html-dialog-element/
 /**
  * Dialog module.
@@ -184,11 +191,9 @@ class DebugControl {
       this.play_btn.focus()
       return new Promise(resolve => {
         this.ui.addEventListener('stop', () => {
-          this.hide()
           resolve(false)
         }, { once: true })
         this.ui.addEventListener('play', () => {
-          this.hide()
           resolve(true)
         }, { once: true })
       })
@@ -220,19 +225,22 @@ class DebuggerFn extends ftl.WrapperFn {
   }
     }
 
-    displayInput(val) {
-
+    showInput(val) {
+      console.log(val)
     }
 
-    apply(input, context) {
-        debug_context.setInput(input)
-        const res = super.apply(input, context)
-        debug_context.setOutput(res)
-        if (this.debug_context.paused) {
-            return
-        }
-        await this.debug_context.pause()
-        return res
+  showOutput(val) {
+    console.log(val)
+    }
+    async apply(input, context) {
+      this.showInput(input)
+      let r = await exports.debug_ctrl.show()
+      if (r === false) {
+        throw new exports.DebuggerStopException()
+      }
+        const res = await super.apply(input, context)
+      this.showOutput(res)
+      return res
     }
 }
 
