@@ -523,14 +523,14 @@ class TupleFn extends ComposedFn {
     getNamedFn(name) {
         return this.find((fn) => fn instanceof NamedExprFn && fn.name == name);
     }
-    apply(input, context) {
+    async apply(input, context) {
         var tuple = new Tuple();
         var len = this.size;
         if (len == 0)
             return tuple;
         for (var i = 0; i < len; i++) {
             var fn = this._fns[i];
-            var res = fn.apply(input, context);
+            var res = await fn.apply(input, context);
             if (fn instanceof NamedExprFn || fn instanceof TailFn) {
                 tuple.addNameValue(fn.name, res);
             }
