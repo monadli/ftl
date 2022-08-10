@@ -1,5 +1,6 @@
-import ftl/lang[==, +, -, *, /, '- ', '?? ::']
-import ftl/math[PI, cos, sin]
+import ftl/lang
+import ftl/math
+import ftl/list
 
 // Fast Fourier Transform
 // @real: real part

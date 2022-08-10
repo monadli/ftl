@@ -17,6 +17,5 @@ import ftl/lang
 [1,2,3,4,5] -> _0[2:3] == [3, 4]
 [1,2,3,4,5] -> _0[3:] == [4, 5]
 
-
-// property accessor
-((1, 2), (3, 4)) -> (_0._0, _1._1) == (1, 4)
+// array element selecting parameters can be dynamically from variables
+([1,2,3,4,5], (begin: 1, end: 4, interval: 2)) -> _0[(_1.begin):(_1.interval):(_1.end)] == [2, 4]

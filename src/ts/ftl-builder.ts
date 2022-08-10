@@ -95,7 +95,7 @@ function buildElement(buildInfo:any, module:any, input:any=null):any {
 }
 
 function getBuilder(name:string) {
-  let builder =  eval(`build${name}`) //buildElements[name]
+  let builder = eval(`build${name}`)
   if (!builder)
     throw new Error(`Builder for ${name} not found!`)
   return builder
@@ -358,7 +358,6 @@ function buildN_aryOperatorExpression(details: any, module: ftl.Module, input: a
     }
   }
 
-  
   return (
 
     // This is used to parse operators and operands recursively.
@@ -470,10 +469,15 @@ function buildFunctionSignature(details:any, module:any) {
   return {name: name, params: params}
 }
 
-function buildFunctionDeclaration(details:any, module:any) {
+function buildFunctionDeclaration(details: any, module: any) {
+  function build_native_function() {
+    let script = eval(`(function(${param_list.join(',')})${body.script})`)
+    return new ftl.NativeFunctionFn(f_name, params, script)
+  }
+
   let signature = buildElement(details.signature, module, null)
 
-  let f_name
+  let f_name:string
   let params:ftl.TupleFn
 
   // prefix operator or infix operator
@@ -501,14 +505,13 @@ function buildFunctionDeclaration(details:any, module:any) {
   let fn
   if (body.script) {
     try {
-      let script = eval("(function(" + param_list.join(',') + ")" + body.script + ")")
-      fn = new ftl.NativeFunctionFn(f_name, params, script)
-    } catch (e:any) {
+      fn = build_native_function()
+    } catch (e: any) {
       if (e.message.startsWith('Unexpected token')) {
-        throw new Error(e.message + '. Most likely a javascript reserved key word is used as an identifier!')
+        throw new Error(`${e.message} in '${f_name}'. Most likely a javascript reserved key word is used as an identifier!`)
       }
       else
-        throw e
+        throw new Error(`${e.message} in '${f_name}'`)
     }
   }
   else {
@@ -632,7 +635,7 @@ function buildCallExpression(details:any, module:any, prev:any) {
 
         let param = new_params[i]
         let arg = call_args[n].getFnAt(index)
-       
+
         // named arg
         // excluding simple RefFn wrapped as NamedExprFn which share the smae name
         if (arg instanceof ftl.NamedExprFn && (!(arg.wrapped instanceof ftl.RefFn) || arg.wrapped.name != arg.name)) {
@@ -742,15 +745,15 @@ function buildArrayLiteral(details:any, module:any) {
 
       }
     }
-  
-    return new ftl.ConstFn(res)  
+
+    return new ftl.ConstFn(res)
   }
 
   else {
     return new ftl.ArrayInitializerFn(... elms)
   }
 }
-  
+
 function buildListLiteral(details:any, module:any) {
   return !details ? [] : details.list.map((elm:any) => {
     return buildElement(elm, module)
@@ -789,7 +792,7 @@ function buildArrayElementSelector(details: any, module: any) {
 
     let index_info = index.first
     if (index_info instanceof ftl.ArrayInitializerWithRangeFn) {
-      return new ftl.ArrayRangeSelectorFn(name, index_info.startValue.apply(), index_info.endValue.apply(), index_info.interval.apply())
+      return new ftl.ArrayRangeSelectorFn(name, index_info.startValue, index_info.endValue, index_info.interval)
     }
     return new ftl.ArrayElementSelectorFn(name, index_info)
   }
@@ -899,19 +902,7 @@ function build_function_parameters(params:ftl.TupleFn) {
   return new ftl.TupleFn(... fns)
 }
 
-function validate_tuple_elements(elms:any[]) {
-
-}
-
-//function addbuilder<D extends FtlBuilder>(builder:new(props?:any) => D) {
-//  buildElements[builder.name] = builder
-//}
-
-
-// this is for building function / operator parameters
-var dummy_param_tuple = new ftl.TupleFn()
-
-  // The following functions are used for parsing
+// The following functions are used for parsing
 
 function join(value:any) {
   return Array.isArray(value) ? value.join("") : value

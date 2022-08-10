@@ -23,11 +23,11 @@
 
 import ftl/lang
 
-// named tuple elment access
+// named elment access from a tuple
 (a:1, b:2).b == 2
 (c:(a:1, 2), d:(3, b:4)) -> (c.a, d.b) == (1, 4)
 
-// sequential tuple elment access
+// elment access with index from a tuple
 (1, 2)._1 == 2
 ((a:1, 2), a:3) -> _0._0 == 1
 ((1, 2), (3, 4)) -> (_0._0, _1._1) == (1, 4)
@@ -51,7 +51,18 @@ import ftl/lang
 // if element access via tuple element selector such as _0, _1, etc.,
 // it will assume accessing element from current tuple:
 (c:3) -> (h:1, c:2)?.c == 2
+(c:3) -> (h:1, c:2)?._0 == 1
 
 
 // returns empty tuple for non-exist element
 (a:(b:1, c:(d:3, 2)), b:1) -> a?.d?.e == ()
+
+// a nested tuple structure with nested field extracted
+(
+  name: "My Name", 
+  address: (
+      street:"123 Fake St.",
+      city:"Springfield"
+  )
+ )
+ -> (name, address.city) == ('My Name', 'Springfield')

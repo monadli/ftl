@@ -24,9 +24,9 @@ export function getModule(name: string) {
 
 /**
  * Adds a module into ftl runtime.
- * 
+ *
  * If a module with the same name is already there, will replace.
- * 
+ *
  * Since the module name is file path + name relative to startup program,
  * modules with the same name are mostly the same.
  *
@@ -38,7 +38,7 @@ export function addModule(module: Module) {
 
 /**
  * Internal function that returns string presentation of any value.
- * 
+ *
  * @param value value of any type including tuple
  */
 function toString(value: any) {
@@ -94,7 +94,7 @@ class FunctionParameterDeficiencyError extends FtlRuntimeError {
  * except the ones starting with '_' which are private to the module.
  *
  * Any imported identifies are private to the module and will not be exported again.
- * 
+ *
  * A module has an optional name which has to be unique to the whole runtime. 
  */
 export class Module {
@@ -121,7 +121,7 @@ export class Module {
 
   /**
    * Add a function from other module via import.
-   * 
+   *
    * @param name 
    * @param f 
    */
@@ -230,7 +230,7 @@ export class Module {
  * name with form defined in TupleSelectorPattern. When an element has
  * explicit name, it is accessible via either the explicit name or
  * implicit name.
- * 
+ *
  * For example:
  *   (1, a:2, 3) implies (_0:1, _1:2, _2:3) where the second element
  * not only has explicit name "a", but also has implicit name "_1".
@@ -264,7 +264,7 @@ export class Tuple {
 
   /**
    * Creates a tuple from a value only.
-   * 
+   *
    * The only value is accessible with name "_0".
    * @param key
    * @param value
@@ -373,7 +373,7 @@ export class Tuple {
 
   /**
    * Returns element at index.
-   * 
+   *
    * If index is beyond size, undefined is returned.
    */
   getIndex(index: number) {
@@ -445,7 +445,7 @@ export class Tuple {
       }
       return true
     }
-    
+
     if (!(o instanceof Tuple))
       return false
 
@@ -455,7 +455,7 @@ export class Tuple {
     for (var i = 0; i < this.size; i++) {
       var ith = this.getIndex(i)
       var oth = o.getIndex(i)
-      
+
       if (ith != oth && !arrayIdentical(ith, oth) && (!(ith instanceof Tuple) || !ith.equals(oth)))
         return false
     }
@@ -535,7 +535,7 @@ abstract class NamedFn extends Fn {
 
 /**
  * This abstract class is used to define a function composed of child functions.
- * 
+ *
  * properties:
  * fns: array of child functions
  */
@@ -604,7 +604,7 @@ export abstract class WrapperFn extends Fn {
  * 
  * Note that the value can be a function as well, but will not be computed
  * in the context of this class.
- * 
+ *
  * Properties:
  *   non-null value
  */
@@ -697,7 +697,7 @@ export abstract class FunctionBaseFn extends NamedFn {
 
 /**
  * Class that wraps native javascript function in form of:
- * 
+ *
  * fn name(params) {
  *   // javascript body
  * }
@@ -719,7 +719,7 @@ export class NativeFunctionFn extends FunctionBaseFn {
 
   /**
    * Constructs a function implemented in native javascript.
-   * 
+   *
    * @param name - string function name
    * @param params - parameter list in TupleFn
    * @param jsfunc - javascript function with parameter declaration and body.
@@ -774,9 +774,9 @@ export class FunctionFn extends FunctionBaseFn {
 
 /**
  * This class represent functional argument in a function parameter or operand declaration.
- * 
+ *
  * The purpose of function interface is to wrap an expression that is executed only when it is needed.
- * 
+ *
  * For example, the y() below:
  *   fn x || y()
  *
@@ -921,7 +921,7 @@ class ClosureFunction {
 
 /**
  * Named expression.
- * 
+ *
  * This is used to represent an element in a TupleFn.
  */
 export class NamedExprFn extends WrapperFn {
@@ -941,10 +941,10 @@ export class NamedExprFn extends WrapperFn {
 
 /**
  * Tuple function containing a list of named or non-named fns.
- * 
+ *
  * TupleFn is the most important function which represent a tuple in form of function,
  * or functional tuple.
- * 
+ *
  * The result of its computation is an implicit tuple.
  *
  * For example,
@@ -1132,7 +1132,7 @@ export class RefFn extends Fn {
   isRefType() {
     return false
   }
-  
+
   /**
    * Tells if this reference is a tuple selector such as '_0', '_1', etc.
    */
@@ -1304,7 +1304,7 @@ export class ExprFn extends WrapperFn {
 
 /**
  * CallExprFn captures call expressions such as sin(3.14).
- * 
+ *
  * A call expression may represent a full or partial function call,
  * or a lambda expression invocation with named references.   
  */
@@ -1347,20 +1347,20 @@ export class CallExprFn extends Fn {
 
 /**
  * This is a functional tuple reference, which returns a function.
- * 
+ *
  * It is used as argument passing to a function parameter which is functional.
- * 
+ *
  * For example:
- * 
+ *
  *   fn list => mapper(item) {...}
  *   [1, 2, 3] => (item + 2)
- * 
+ *
  * Here (item + 2) is actually equivalent to
  *   fn mapper(item) -> (item + 2)
- * 
+ *
  * When (item + 2) is passed to the argument mapper(item), it automatically reassembles it as a full function as:
  *   fn mapper(item) -> (item + 2)
- * 
+ *
  * The executable may also be written as:
  *   [1, 2, 3] => ($(i) - > i + 2)
  * where $(i) - > i + 2 is an explicit lambda with any identity as the functional parameter item.
@@ -1384,10 +1384,10 @@ export class ExprRefFn extends WrapperFn {
 
 /**
  * This class holds information about tail and provides executeRecursive() to resolve tail.
- * 
+ *
  * It is stateful. It will never be used in statement/function construction but only used
  * for transient execution.
- * 
+ *
  * When being executed, a tail is picked and executed. If it results in another or more tails,
  * these tails will not be recursively executed right away. Instead they are added into the tail list
  * and the whole tail will be return back, from where executeRecursive() is executed again to
@@ -1469,7 +1469,7 @@ class TailFn extends WrapperFn {
         var next = elm.apply(null, context)
         if (TailFn.isTail(next)) {
           this.addAllTails(next)
-          
+
           tail.replaceAt(i, inner_tail.name ? new NamedExprFn(inner_tail.name, next.wrapped) : next.wrapped)
         }
 
@@ -1521,9 +1521,9 @@ export class ArrayInitializerFn extends Fn {
 
 /**
  * Array initializer with values of start, end, and interval such as:
- * 
+ *
  *   [1:2:8]
- * 
+ *
  * where start = 1, end = 9, and interval = 2.
  */
 export class ArrayInitializerWithRangeFn extends Fn {
@@ -1602,23 +1602,23 @@ export class ArrayElementSelectorFn extends NamedFn {
 
 /**
  * This fn is for selecting a range of an array, such as:
- * 
+ *
  *   arr[1:2:8] // select from index 1 to 8th inclusive with interval 2
  *   arr[1:2:]  // select from index 1 to the end with interval 2
- * 
+ *
  * where arr is an array.
  */
 export class ArrayRangeSelectorFn extends Fn {
   name: string
-  start: number
-  end:number
-  interval:number
-  constructor(name:string, start:number, end:number, interval=1) {
+  start: Fn
+  end:Fn
+  interval:Fn
+  constructor(name:string, start:Fn, end:Fn, interval:Fn | null = null) {
     super()
     this.name = name
     this.start = start
     this.end = end
-    this.interval = interval
+    this.interval = interval || new ConstFn(1)
   }
 
   apply(input: any) {
@@ -1628,10 +1628,14 @@ export class ArrayRangeSelectorFn extends Fn {
       || []
     )
 
-    let end = this.end == -1 ? list.length : this.end + 1
-    let len = Math.ceil((end - this.start) / this.interval)
+    let start = this.start.apply(input)
+    let end = this.end.apply(input)
+    let interval = this.interval.apply(input)
+
+    end = end == -1 ? list.length : end + 1
+    let len = Math.ceil((end - start) / interval)
     let ret = new Array(len)
-    for (var i = this.start, j = 0; i < end; i += this.interval, j++) {
+    for (var i = start, j = 0; i < end; i += interval, j++) {
       ret [j] = list[i]
     }
     return ret
@@ -1662,18 +1666,18 @@ export class BinaryOperatorWithPrefixFn extends Fn {
 /**
  * This is for capturing form of partial or full expression with an expression
  * invoked by passing arguments as:
- * 
+ *
  *   (x + y)(x:1, y:2)
  *
  * A expression can be invoked with currying having arguments passed
  * one by one, such as:
- * 
+ *
  *   (x + y)(x:1)(y:2)
  *
  * The arguments has to be constants with names matching the ones in the expression.
  * Sequence of arguments does not matter. The following is equivalent as
  * above:
- * 
+ *
  *   (x + y)(y:2)(x:1)
  *
  * If partial arguments are passed in the currying form, it will form a partial
@@ -1718,7 +1722,7 @@ export class ExecutableFn extends WrapperFn {
 
   apply() {
     return this._wrapped.applyAndResolve()
-  }  
+  }
 }
 
 /**
@@ -1731,7 +1735,7 @@ export class ExecutableFn extends WrapperFn {
  *
  * To achieve this, a copy of the input is passed to a sideffect and its
  * returned value is discarded to prevent possible data change.
- * 
+ *
  * As result of build, it is part of the pipe preeeding the expression
  * but can be completely ignored when reasoning. That is why this class
  * is almost the same as CallExprFn but does not carry the signature.
