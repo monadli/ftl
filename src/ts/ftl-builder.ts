@@ -12,6 +12,18 @@ var runPath: string
 var optimization = false
 var currentBuildModules = new Set<string>()
 
+/**
+ * Error message indicating a function error if it contains await
+ * without being declared as async. Will capture this message and
+ * add async keyword for functions implemented in javascrit.
+ *
+ * This error message literal may be different on different javascript
+ * runtimes thus may need test and tailed for them.
+ *
+ * Tested for Node and Chrome.
+ */
+const ASYNC_FUNC_ERROR = 'await is only valid in async function'
+
 Error.stackTraceLimit = Infinity
 
 export function setRunPath(path: string) {
@@ -470,8 +482,8 @@ function buildFunctionSignature(details:any, module:any) {
 }
 
 function buildFunctionDeclaration(details: any, module: any) {
-  function build_native_function() {
-    let script = eval(`(function(${param_list.join(',')})${body.script})`)
+  function build_native_function(as_async = false) {
+    let script = eval(`(${as_async ? 'async ' : ''}function(${param_list.join(',')})${body.script})`)
     return new ftl.NativeFunctionFn(f_name, params, script)
   }
 
@@ -505,9 +517,11 @@ function buildFunctionDeclaration(details: any, module: any) {
   let fn
   if (body.script) {
     try {
-      fn = build_native_function()
+      fn = build_native_function(false)
     } catch (e: any) {
-      if (e.message.startsWith('Unexpected token')) {
+      if (e.message.startsWith(ASYNC_FUNC_ERROR)) { 
+        fn = build_native_function(true)
+      } else if (e.message.startsWith('Unexpected token')) {
         throw new Error(`${e.message} in '${f_name}'. Most likely a javascript reserved key word is used as an identifier!`)
       }
       else

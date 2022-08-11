@@ -56,8 +56,10 @@ fn condition$() ?< loop$() {
   let [loop_f, res] = loop().wrapped.unwrap()
   let [condition_f] = condition().wrapped.unwrap()
 
-  while (condition_f.applyAndResolve(res)) {
-    res = loop_f.apply(res)
+  let cond = await condition_f.applyAndResolve(res)
+  while (cond) {
+    res = await loop_f.apply(res)
+    cond = await condition_f.applyAndResolve(res)
   }
 
   return res

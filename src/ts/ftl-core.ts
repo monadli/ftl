@@ -38,7 +38,7 @@ export function addModule(module: Module) {
 
 /**
  * Internal function that returns string presentation of any value.
- *
+ * 
  * @param value value of any type including tuple
  */
 function toString(value: any) {
@@ -121,7 +121,7 @@ export class Module {
 
   /**
    * Add a function from other module via import.
-   *
+   * 
    * @param name 
    * @param f 
    */
@@ -206,11 +206,11 @@ export class Module {
   /**
    * Executes all executables and returns results in an array.
    */
-  apply(): unknown[] {
+  async apply(): Promise<unknown[]> {
     var ret:unknown[] = []
     for (let exec of this.executables) {
       try {
-        let res = exec.apply()
+        let res = await exec.apply()
         ret.push(res && (Array.isArray(res) && JSON.stringify(res) || res) || null)
       } catch (e) {
         ret.push(e)
@@ -264,7 +264,7 @@ export class Tuple {
 
   /**
    * Creates a tuple from a value only.
-   *
+   * 
    * The only value is accessible with name "_0".
    * @param key
    * @param value
@@ -500,16 +500,16 @@ export abstract class Fn {
   /**
    * Applies function with optional input and context.
    */
-  apply(input?: any, context?: any): Tuple | any {
+  async apply(input?: any, context?: any): Promise<Tuple | any> {
     return new Tuple()
   }
 
-  applyAndResolve(input?: any, context?: any) {
-    let ret = this.apply(input, context)
+  async applyAndResolve(input?: any, context?: any) {
+    let ret = await this.apply(input, context)
 
     // an executable may wrap a tail that needs to be executed
     while (TailFn.isTail(ret)) {
-      ret = ret.apply(null)
+      ret = await ret.apply(null)
     }
 
     if (ret instanceof Fn) {
@@ -590,8 +590,8 @@ export abstract class WrapperFn extends Fn {
     return this._wrapped instanceof ConstFn
   }
 
-  apply(input: any, context?: any) {
-    return this._wrapped.apply(input, context)
+  async apply(input: any, context?: any) {
+    return await this._wrapped.apply(input, context)
   }
 
   toString() {
@@ -620,7 +620,7 @@ export class ConstFn extends Fn {
   get valueType() { return typeof this._value }
   get value() { return this._value }
 
-  apply(input: any) {
+  async apply(input: any) {
     return Array.isArray(this._value) ? Array.from(this._value) : this._value
   }
 
@@ -690,8 +690,8 @@ export abstract class FunctionBaseFn extends NamedFn {
     return this._isPipeOp
   }
 
-  apply(input: any, context: any) {
-    return this._body.apply(input, context)
+  async apply(input: any, context: any) {
+    return await this._body.apply(input, context)
   }
 }
 
@@ -711,7 +711,7 @@ export class NativeFunctionFn extends FunctionBaseFn {
       this._jsfunc = jsfunc
     }
 
-    apply(input: any) {
+    async apply(input: any) {
       let args = (input instanceof Tuple) && input.toList() || [input]
       return this._jsfunc.apply(null, args)
     }
@@ -728,10 +728,10 @@ export class NativeFunctionFn extends FunctionBaseFn {
     super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc))
   }
 
-  apply(input: any, context?:any) {
+  async apply(input: any, context?:any) {
     if (FnUtil.isNone(input) && this.params.size > 0)
       throw new FunctionParameterDeficiencyError("Input to native function " + this.name + " does not match!")
-    return this._body.apply(this.params.apply(input))
+    return await this._body.apply(await this.params.apply(input))
   }
 
   toString() {
@@ -748,8 +748,8 @@ export class FunctionFn extends FunctionBaseFn {
       super(expr)
     }
 
-    apply(input: string, context?: any) {
-      let res:Fn|Tuple = super.apply(input, context)
+    async apply(input: string, context?: any) {
+      let res:Fn|Tuple = await super.apply(input, context)
       var i = 0
       while (res instanceof TailFn) {
         i++
@@ -759,7 +759,7 @@ export class FunctionFn extends FunctionBaseFn {
           return res
         }
 
-        res = res.hasTail() ? res.ResolveNextTail(this) : res.apply(null, this)
+        res = res.hasTail() ? await res.ResolveNextTail(this) : await res.apply(null, this)
       }
 
       // result may have been wrapped into ConstFn during tail computation
@@ -813,7 +813,7 @@ export class FunctionInterfaceFn extends NamedFn {
 
   get paramSize() { return this.params.length }
 
-  apply(input: any) {
+  async apply(input: any) {
 
     let f = input.getIndex(this._seq)
     if (typeof f == 'function' && (f.name == 'bound applyInNativeContext' || f.name == 'bound tailWrapper')) {
@@ -907,7 +907,7 @@ class ClosureFunction {
     return this.f.apply(tpl)
   }
 
-  apply(input: any, context?: any) {
+  async apply(input: any, context?: any) {
     var tuple = new Tuple()
 
     // append partial parameters first as closure
@@ -915,7 +915,7 @@ class ClosureFunction {
     // such as _0, _1, etc.
     tuple.appendAll(this.closureParams)
     tuple.appendAll(input)
-    return this.f.apply(tuple, context)
+    return await this.f.apply(tuple, context)
   }
 }
 
@@ -980,7 +980,7 @@ export class TupleFn extends ComposedFn {
     return this.find((fn: any) => fn instanceof NamedExprFn && fn.name == name)
   }
 
-  apply(input: any, context?: any): Tuple | any {
+  async apply(input: any, context?: any): Promise<Tuple | any> {
     var tuple = new Tuple()
     var len = this.size
     if (len == 0)
@@ -989,7 +989,7 @@ export class TupleFn extends ComposedFn {
     for (var i = 0; i < len; i++) {
       var fn = this._fns[i]
 
-      var res = fn.apply(input, context)
+      var res = await fn.apply(input, context)
       if (fn instanceof NamedExprFn || fn instanceof TailFn) {
         tuple.addNameValue(fn.name, res)
       }
@@ -1010,8 +1010,8 @@ export class PipeFn extends ComposedFn {
     super(... tuples)
   }
 
-  apply(tuple: any, context: any) {
-    var res = (this._fns[0] as Fn).apply(tuple, context)
+  async apply(tuple: any, context: any) {
+    var res = await (this._fns[0] as Fn).apply(tuple, context)
 
     // if name is unresolved
     if (res === this._fns[0])
@@ -1027,7 +1027,7 @@ export class PipeFn extends ComposedFn {
       else if (res instanceof Tuple && res.hasFn() && !OpPipeFn.isOpPipe(this._fns[i]))
         return new PipeFn(...[res.toTupleFn()].concat(this._fns.slice(i)))
 
-      res = this._fns[i].apply(res, context)
+      res = await this._fns[i].apply(res, context)
     }
 
     return res
@@ -1055,35 +1055,37 @@ export class OpPipeFn extends ComposedFn {
       return false
   }
 
-  apply(input: any, context: any) {
+  async apply(input: any, context: any) {
 
-    function resolve_refs(input: any, first_tuple_elm: any, op2: any): Fn | undefined {
+    async function resolve_refs(input: any, first_tuple_elm: any, op2: any): Promise<Fn | undefined> {
       if (!input)
         return op2
       if (op2 instanceof RefFn) {
         if (op2.isTupleSelector() || !(input instanceof Tuple) || first_tuple_elm instanceof TupleFn && first_tuple_elm.hasName(op2.name))
           return op2
         else {
-          let r = op2.apply(input)
+          let r = await op2.apply(input)
           return FnUtil.isNone(r) && op2 || (r instanceof Fn && r || new ConstFn(r))
         }
       } else if (op2 instanceof TupleFn) {
-        (op2 as any)._fns.forEach((f: Fn, i: number, array: any[]) => {
-          var converted = resolve_refs(input, first_tuple_elm, f)
+        let fns = (op2 as any)._fns
+        for (var i = 0; i < fns.length; i++) {
+          let f = fns[i]
+          var converted = await resolve_refs(input, first_tuple_elm, f)
           if (converted != f) {
-            array[i] = converted
+            fns[i] = converted
           }
-        })
+        }
         return op2
       } else if (op2 instanceof PipeFn) { 
-        resolve_refs(input, first_tuple_elm, (op2 as any)._fns[0])
+        await resolve_refs(input, first_tuple_elm, (op2 as any)._fns[0])
         return op2
       } else
         return op2
     }
 
     let first_tuple_elm = (this._fns[0] as TupleFn).getFnAt(0)
-    var res = first_tuple_elm.apply(input, context)
+    var res = await first_tuple_elm.apply(input, context)
 
     // if name is unresolved
     if (res === first_tuple_elm)
@@ -1102,9 +1104,9 @@ export class OpPipeFn extends ComposedFn {
 
     let combined = new Tuple()
     combined.addValue(res)
-    let op2 = resolve_refs(input, first_tuple_elm, (this._fns[0] as TupleFn).getFnAt(1))
+    let op2 = await resolve_refs(input, first_tuple_elm, (this._fns[0] as TupleFn).getFnAt(1))
     combined.addValue(op2)
-    return this._fns[1].apply(combined, context)
+    return await this._fns[1].apply(combined, context)
   }
 
   toString() {
@@ -1144,7 +1146,7 @@ export class RefFn extends Fn {
     return name.match(TupleSelectorPattern) || InputSelectorPattern == name
   }
 
-  apply(input: any, context?: any) {
+  async apply(input: any, context?: any) {
     var e:unknown | Fn
 
     if (this.name == InputSelectorPattern) {
@@ -1162,7 +1164,7 @@ export class RefFn extends Fn {
           if (this.params instanceof RefFn)
             args.push(input.get(this.params.name))
           else if (this.params instanceof Fn) {
-            args = this.params.apply(input)
+            args = await this.params.apply(input)
             args = args instanceof Tuple ? args.toList() : [args]
           }
           else for (var i = 0; i < this.params.size; i++)
@@ -1193,7 +1195,7 @@ export class RefFn extends Fn {
     }
 
     if (f) {
-      return f.apply(input, context)
+      return await f.apply(input, context)
     }
 
     return this
@@ -1234,7 +1236,7 @@ export class TupleSelectorFn extends Fn {
     this._seq = seq
   }
 
-  apply(input: any) {
+  async apply(input: any) {
     if (FnUtil.isNone(input))
       return this
 
@@ -1270,8 +1272,8 @@ export class SeqSelectorOrDefault extends TupleSelectorFn {
 
   get defaultValue() { return this._defaultValue }
 
-  apply(input: any) {
-    var sv = super.apply(input)
+  async apply(input: any) {
+    var sv = await super.apply(input)
     if (sv !== undefined && sv != null && sv != this)
       return sv
     return this._defaultValue
@@ -1290,10 +1292,10 @@ export class ExprFn extends WrapperFn {
     this._paramTuples = paramtuples
   }
 
-  apply(input: any, context?:any) {
-    var ret = super.apply(input)
+  async apply(input: any, context?:any) {
+    var ret = await super.apply(input)
     for (var i = 0; i < this._paramTuples.length; i++)
-      ret = ret.toTupleFn().apply(this._paramTuples[i].apply(input, context))
+      ret = await ret.toTupleFn().apply(this._paramTuples[i].apply(input, context))
     return ret instanceof Tuple && ret.size == 1 ? ret.get('_0') : ret
   }
 
@@ -1320,15 +1322,15 @@ export class CallExprFn extends Fn {
     this.params = params
   }
 
-  apply(input: any, context?:any) {
+  async apply(input: any, context?:any) {
     var f = !this.f ? input.get(this.name) : this.f
     if (!(f instanceof Fn))
       throw new FtlRuntimeError(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)")
 
     if (f instanceof RefFn)
-      f = f.apply(input)
+      f = await f.apply(input)
 
-    let intermediate = this.params[0].apply(input)
+    let intermediate = await this.params[0].apply(input)
     let ret
     if (typeof f == 'function') {
       if (intermediate instanceof Tuple) {
@@ -1337,10 +1339,10 @@ export class CallExprFn extends Fn {
         ret = f(intermediate)
       }
     } else {
-      ret = f.apply(intermediate)
+      ret = await f.apply(intermediate)
     }
     for (var i = 1; i < this.params.length; i++)
-      return ret.apply(this.params[i].apply(input))
+      return await ret.apply(await this.params[i].apply(input))
     return ret
   }
 }
@@ -1377,7 +1379,7 @@ export class ExprRefFn extends WrapperFn {
     this.fnl = fnl
   }
 
-  apply(input: any) {
+  async apply(input: any) {
     return new ClosureFunction(this._wrapped, input)
   }
 }
@@ -1456,7 +1458,7 @@ class TailFn extends WrapperFn {
     return elm instanceof TailFn
   }
 
-  ResolveNextTail(context: any) {
+  async ResolveNextTail(context: any) {
     var tail = this.nextTail()
     if (!tail) {
       return this
@@ -1466,7 +1468,7 @@ class TailFn extends WrapperFn {
     for (let elm of tail.fns) {
       if (TailFn.isTail(elm)) {
         let inner_tail:TailFn = elm as TailFn
-        var next = elm.apply(null, context)
+        var next = await elm.apply(null, context)
         if (TailFn.isTail(next)) {
           this.addAllTails(next)
 
@@ -1483,8 +1485,8 @@ class TailFn extends WrapperFn {
     return this
   }
 
-  apply(input: any, context?: any) {
-    var res = this._wrapped.apply(this.closure, context)
+  async apply(input: any, context?: any) {
+    var res = await this._wrapped.apply(this.closure, context)
     if (res instanceof TailFn) return res
     else if (res instanceof Tuple && res.hasTail()) return new TailFn(res.toTupleFn())
     return new ConstFn(res)
@@ -1505,16 +1507,16 @@ export class ArrayInitializerFn extends Fn {
   get size() { return this._values.length }
   get first() { return this.size > 0 && this._values[0] }
 
-  apply(input: any, context: any) {
-    var ret:any[] = []
-    this._values.forEach((v:any) => {
-      let val = v.apply(input, context)
+  async apply(input: any, context: any) {
+    var ret: any[] = []
+    for (let v of this._values) {
+      let val = await v.apply(input, context)
       if (Array.isArray(val)) {
         ret.splice(ret.length, 0, ... val)
       } else {
-        ret.push(v.apply(input, context))
+        ret.push(await v.apply(input, context))
       }
-    })
+    }
     return ret
   }
 }
@@ -1542,10 +1544,10 @@ export class ArrayInitializerWithRangeFn extends Fn {
   get endValue() { return this._endValue }
   get interval() { return this._interval }
 
-  apply(input: any, context: any) {
-    let start = this._startValue.apply(input, context)
-    let interval = this._interval.apply(input, context)
-    let end = this._endValue.apply(input, context)
+  async apply(input: any, context: any) {
+    let start = await this._startValue.apply(input, context)
+    let interval = await this._interval.apply(input, context)
+    let end = await this._endValue.apply(input, context)
     let len = Math.floor((end + interval - start) / interval)
     var array = new Array(len)
     var val = start
@@ -1570,7 +1572,7 @@ export class ArrayElementSelectorFn extends NamedFn {
 
   constructor(name: string, index: Fn | number) {
     super(name)
-    this._index = index instanceof ConstFn ? index.apply(null) : index
+    this._index = index
     if (Array.isArray(this._index)) {
       if (this._index.length == 1) {
         this._index = this._index[0]
@@ -1582,7 +1584,7 @@ export class ArrayElementSelectorFn extends NamedFn {
 
   get index() { return this._index }
 
-  apply(input: any) {
+  async apply(input: any) {
     let list = input && (
       input instanceof Tuple && (input.get(this.name) || null)
       || ((this.name == '_' || this.name == '_0') && input)
@@ -1592,7 +1594,7 @@ export class ArrayElementSelectorFn extends NamedFn {
     if (list instanceof VarFn)
       list = list.value
 
-    let index: any = typeof this._index == 'number' ? this._index : this._index.apply(input)
+    let index: any = typeof this._index == 'number' ? this._index : await this._index.apply(input)
     if (list)
       return list[index] || null
     else
@@ -1621,16 +1623,16 @@ export class ArrayRangeSelectorFn extends Fn {
     this.interval = interval || new ConstFn(1)
   }
 
-  apply(input: any) {
+  async apply(input: any) {
     let list = input && (
       input instanceof Tuple && (input.get(this.name) || null)
       || ((this.name == '_' || this.name == '_0') && input)
       || []
     )
 
-    let start = this.start.apply(input)
-    let end = this.end.apply(input)
-    let interval = this.interval.apply(input)
+    let start = await this.start.apply(input)
+    let end = await this.end.apply(input)
+    let interval = await this.interval.apply(input)
 
     end = end == -1 ? list.length : end + 1
     let len = Math.ceil((end - start) / interval)
@@ -1655,10 +1657,10 @@ export class BinaryOperatorWithPrefixFn extends Fn {
     this.prefix = prefix
   }
 
-  apply(input: any, context: any) {
-    let r1 = this.operand1.apply(input, context)
-    let r2 = this.operand2.apply(input, context)
-    return this.prefix.apply(Tuple.fromValues(r1, this.f, r2), context)
+  async apply(input: any, context: any) {
+    let r1 = await this.operand1.apply(input, context)
+    let r2 = await this.operand2.apply(input, context)
+    return await this.prefix.apply(Tuple.fromValues(r1, this.f, r2), context)
   }
 }
 
@@ -1696,14 +1698,14 @@ export class CurryExprFn extends Fn {
     this.params = params
   }
 
-  apply(input: any, module: any) {
+  async apply(input: any, module: any) {
     let res = this.expr
-    this.params.forEach(p => {
-      res = res.apply(p.apply())
+    for (var p of this.params) {
+      res = await res.apply(await p.apply())
       if (res instanceof Tuple) {
         res = res.toTupleFn()
       }
-    })
+    }
     return res instanceof Fn ? res.apply(input, module) : res
   }
 }
@@ -1720,8 +1722,8 @@ export class ExecutableFn extends WrapperFn {
     super(wrapped)
   }
 
-  apply() {
-    return this._wrapped.applyAndResolve()
+  async apply() {
+    return await this._wrapped.applyAndResolve()
   }
 }
 
@@ -1757,13 +1759,13 @@ export class SideffectFn extends Fn {
     this.params = params
   }
 
-  apply(input: any, context?: any) {
+  async apply(input: any, context?: any) {
     let args = input
     if (input instanceof Tuple) {
       args = new Tuple()
       args.appendAll(input)
     }
-    this.f.apply(this.params.apply(args), context)
+    await this.f.apply(this.params.apply(args), context)
     return input
   }
 }
@@ -1779,9 +1781,9 @@ export class SideffectedFn extends WrapperFn {
     return this._wrapped instanceof RefFn && this._wrapped.name || undefined
   }
 
-  apply(input: any, context?: any): Tuple | any {
+  async apply(input: any, context?: any): Promise<Tuple | any> {
     for (let d of this.sideffects)
-      d.apply(input, context)
-    return super.apply(input, context)
+      await d.apply(input, context)
+    return await super.apply(input, context)
   }
 }

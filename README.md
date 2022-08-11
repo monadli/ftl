@@ -1,5 +1,8 @@
 # Functional Tuple Language (FTL)
 
+## Special for This Branch
+In this branch, all `Fn.apply()` and all its decendents are implemented as `async`, primarily for the purpose of visual debugger. There may be other uses as well.
+
 `Functional Tuple Language` is a language based on a basic structure `functional tuple` (`tuple` for short) and a basic mapping operator `->` between tuples that maps output of one tuple to next tuple.
 
 With FTL, an application can be written in one expression composed of a chain of tuples with mapping operators in between. Such form is essentially an algebraic expression representing a topology of tuple mapping with mapping rules as tuple elements in form of functions. With such topology, values flow through mapping rules in a tuple and the result is sent to next tuple, and the same process is repeated until the last tuple.

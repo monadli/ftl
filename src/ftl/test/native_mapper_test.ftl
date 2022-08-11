@@ -11,8 +11,10 @@ import ftl/lang[+, ==]
 
 fn list => mapper(item) {
   var ret = []
-  for (var i = 0; i < list.length; i++)
-    ret.push(mapper(list[i]))
+  for (var i = 0; i < list.length; i++) {
+    let v = await mapper(list[i])
+    ret.push(v)
+  }
   return ret
 }
 
@@ -22,8 +24,10 @@ fn list => mapper(item) {
 // achieve the same using function
 fn map(list, mapper(item)) {
   var ret = []
-  for (var i = 0; i < list.length; i++)
-    ret.push(mapper(list[i]))
+  for (var i = 0; i < list.length; i++) {
+    let v = await mapper(list[i])
+    ret.push(v)
+  }
   return ret
 }
 
