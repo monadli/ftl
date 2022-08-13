@@ -2,6 +2,22 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.debug_ctrl = exports.wrapFnWithDebugger = exports.DebuggerStopException = void 0;
 
+function drawSquereBrakets(canvas, x, y, width, height, options) {
+  canvas.beginPath()
+  canvas.moveTo(x + 6, y)
+  canvas.lineTo(x, y)
+  canvas.lineTo(x, y + height)
+  canvas.lineTo(x + 6, y + height)
+  canvas.stroke()
+
+  canvas.beginPath()
+  canvas.moveTo(x + width - 6, y)
+  canvas.lineTo(x + width, y)
+  canvas.lineTo(x + width, y + height)
+  canvas.lineTo(x + width - 6, y + height)
+  canvas.stroke()
+}
+
 exports.DebuggerStopException = class DebuggerStopException extends Error {
   constructor() {
     super()
@@ -50,11 +66,15 @@ class DebuggerFn extends ftl.WrapperFn {
     super(fn)
   }
 
-  adjustSize(canvas, x, y) {
-    return [this._wrapped._wrapped.adjustSize(canvas, x, y), 10]
+  adjustSize(canvas, x, y, options) {
+    return [this._wrapped._wrapped.adjustSize(canvas, x, y, options), 10]
   }
 
-  render(canvas) {
+  adjustLocation(canvas, x, y, options) {
+
+  }
+
+  render(canvas, options) {
     return this._wrapped._wrapped.render(canvas)
   }
 
@@ -92,51 +112,62 @@ class TupleDebugger extends DebuggerFn {
     fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
   }
 
-  adjustSize(canvas, x, y) {
+  adjustSize(canvas, x, y, options) {
+    let margins = options.margin * 2
     this.x = x
     this.y = y
-    let y_start = y
+    let y_start = y + options.margin
     this.width = 0
     this._wrapped._fns.map(f => {
-      let [w, h] = f.adjustSize(canvas, x, y_start)
-      y_start += h
+      let [w, h] = f.adjustSize(canvas, x + options.margin, y_start, options)
+      y_start += h + options.margin
       if (w > this.width) this.width = w
     })
-    this.height = y_start
+    this.width += margins
+    this.height = y_start - y - options.margin
     return [this.width, this.height]
   }
 
-  render(canvas) {
+  render(canvas, options) {
     this._wrapped._fns.map(f => {
       f.render(canvas)
     })
 
-    canvas.beginPath()
-    canvas.moveTo(this.x + 5, this.y)
-    canvas.lineTo(this.x, this.y)
-    canvas.lineTo(this.x, this.y + this.height)
-    canvas.lineTo(this.x + 5, this.y + this.height)
-    canvas.stroke()
+    drawSquereBrakets(canvas, this.x, this.y, this.width, this.height, options)
+  }
+}
 
-    canvas.beginPath()
-    canvas.moveTo(this.x + this.width - 5, this.y)
-    canvas.lineTo(this.x + this.width, this.y)
-    canvas.lineTo(this.x + this.width, this.y + this.height)
-    canvas.lineTo(this.x + this.width - 5, this.y + this.height)
-    canvas.stroke()
+class PipeDebugger extends DebuggerFn {
+  constructor(fn) {
+    super(fn)
+    fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
   }
-/*
-  async apply(input, context) {
-    this.showInput(input)
-    let r = await exports.debug_ctrl.show()
-    if (r === false) {
-      throw new exports.DebuggerStopException()
+
+  adjustSize(canvas, x, y, options) {
+    let margins = options.margin * 2
+    this.x = x
+    this.y = y
+    let x_start = x
+    this.hight = 0
+    this._wrapped._fns.map(f => {
+      let [w, h] = f.adjustSize(canvas, x_start, y, options)
+      x_start += w + 40
+      if (h > this.hight) this.hight = h
+    })
+    this.width += x_start - x - 40
+    this.height +=  options.margin * 2
+    return [this.width, this.height]
+  }
+
+  render(canvas, options) {
+
+    let last = this._wrapped._fns[0]
+    last.render(canvas)
+    for (var i = 1; i < this._wrapped._fns.length; i++) {
+      canvas.fillText('\u2192', last.x + last.width, last.y + (last.hight + options.text_height) / 2)
+      this._wrapped._fns[0].render(canvas, options)
     }
-    const res = await super.apply(input, context)
-    this.showOutput(res)
-    return res
   }
-*/
 }
 
 const FnDebuggerMap = {
@@ -156,23 +187,22 @@ exports.wrapFnWithDebugger = function(fn) {
 }
 
 class ConstDebugger extends DebuggerFn {
-    constructor(fn) {
-        super(fn)
-    }
+  constructor(fn) {
+    super(fn)
+  }
 
-    adjustSize(canvas, x, y) {
-      this.x = x
-      this.y = y
-      console.log(canvas.font)
-      const val = this._wrapped.toString()
-      const metrix = canvas.measureText(this._wrapped.toString())
-      this.width = metrix.width + 8
-      this.height = 10
-      return [this.width, this.height]
-    }
+  adjustSize(canvas, x, y, options) {
+    const margins = options.margin * 2
+    const metrix = canvas.measureText(this._wrapped.toString())
 
-  render(canvas) {
-    canvas.strokeRect(this.x, this.y, this.width, this.height)
+    this.x = x
+    this.y = y
+    this.width = metrix.width + margins
+    this.height = options.text_height + margins
+    return [this.width, this.height]
+  }
+
+  render(canvas, options) {
     canvas.fillText(this._wrapped.toString(), this.x, this.y + 10)
   }
 }
@@ -180,3 +210,5 @@ class ConstDebugger extends DebuggerFn {
 FnDebuggerMap['ExecutableFn'] = WrapperDebugger
 FnDebuggerMap['ConstFn'] = ConstDebugger
 FnDebuggerMap['TupleFn'] = TupleDebugger
+FnDebuggerMap['PipeFn'] = PipeDebugger
+

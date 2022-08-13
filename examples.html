@@ -22,7 +22,7 @@ footer {
 <script>
 var module_content = {}
 var curr_path = ''
-var user_code = '// You may copy code from examples or write your own ftl code here.\n// Your code will stay here when you switch to examples.\n\n(1234, "test a string")'
+var user_code = '// You may copy code from examples or write your own ftl code here.\n// Your code will stay here when you switch to examples.\n\n'
 var in_user_code = false
 
 
@@ -117,8 +117,9 @@ async function start_debug() {
     ctx.font = '14px arial'
     ctx.lineWidth = 0.5
     let exec = new ftl_debugger.wrapFnWithDebugger(module._executables[0])
-    exec.adjustSize(ctx, 10, 10)
-    exec.render(ctx)
+    let options = { margin: 4, text_height: 14 }
+    exec.adjustSize(ctx, 10, 10, options)
+    exec.render(ctx, options)
     await exec.apply()
     // draw all executables into diagram
     //for (let exec of module.executables) {
@@ -163,38 +164,39 @@ function debug_stop() {
   enable_debug_panel(false)
 }
 
-function run_ftl() {
+async function run_ftl() {
   enable_debug_button(false)
   let result_pane = document.getElementById('result')
   try {
 
     let editor = document.getElementById('code_content')
     result_pane.value = ``
-    ftl_builder.init()    
+    ftl_builder.init()
     let module = in_user_code
       ? ftl_builder.buildModuleWithContent('demo', 'import ftl/sideffect\n' + editor.value)
       : ftl_builder.buildModule('demo', `./${curr_path}`)
-
-    var infoF = module.getAvailableFn('logger')
-    var sideffect = new ftl.SideffectFn(
-      'logger',
-      module.getAvailableFn('logger'),
-      new ftl.TupleFn(
-        new ftl.ConstFn(console),
-        new ftl.RefFn('_', module)
+/*
+    if (in_user_code) {
+      var infoF = module.getAvailableFn('logger')
+      var sideffect = new ftl.SideffectFn(
+        'logger',
+        module.getAvailableFn('logger'),
+        new ftl.TupleFn(
+          new ftl.ConstFn(console),
+          new ftl.RefFn('_', module)
+        )
       )
-    )
-    // draw all executables into diagram
-    for (let exec of module.executables) {
-      console.log(exec)
-      
-      exec._wrapped = new ftl.SideffectedFn(exec._wrapped, [sideffect])
+      // draw all executables into diagram
+      for (let exec of module.executables) {
+        console.log(exec)
+        exec._wrapped = new ftl.SideffectedFn(exec._wrapped, [sideffect])
+      }
     }
-
+*/
     // run all executables
     for (let exec of module.executables) {
       try {
-        let res = exec.apply()
+        let res = await exec.apply()
         if (res !== undefined) {
           if (Array.isArray(res) || typeof res == 'string') {
             result_pane.value += JSON.stringify(res)

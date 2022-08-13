@@ -1,5 +1,15 @@
 // copy from main branch compiled ftl-core.js with comments removed
 "use strict";
+// ftl core functions and classes.
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SideffectedFn = exports.SideffectFn = exports.ExecutableFn = exports.CurryExprFn = exports.BinaryOperatorWithPrefixFn = exports.ArrayRangeSelectorFn = exports.ArrayElementSelectorFn = exports.ArrayInitializerWithRangeFn = exports.ArrayInitializerFn = exports.ExprRefFn = exports.CallExprFn = exports.ExprFn = exports.SeqSelectorOrDefault = exports.TupleSelectorFn = exports.FunctionHolder = exports.RefFn = exports.OpPipeFn = exports.PipeFn = exports.TupleFn = exports.NamedExprFn = exports.FunctionInterfaceFn = exports.FunctionFn = exports.NativeFunctionFn = exports.FunctionBaseFn = exports.ConstFn = exports.WrapperFn = exports.Fn = exports.Tuple = exports.Module = exports.FnUtil = exports.addModule = exports.getModule = void 0;
 const version = '0.0.1';
@@ -86,17 +96,19 @@ class Module {
     get executables() { return this._executables[Symbol.iterator](); }
     get executableCount() { return this._executables.length; }
     apply() {
-        var ret = [];
-        for (let exec of this.executables) {
-            try {
-                let res = exec.apply();
-                ret.push(res && (Array.isArray(res) && JSON.stringify(res) || res) || null);
+        return __awaiter(this, void 0, void 0, function* () {
+            var ret = [];
+            for (let exec of this.executables) {
+                try {
+                    let res = yield exec.apply();
+                    ret.push(res && (Array.isArray(res) && JSON.stringify(res) || res) || null);
+                }
+                catch (e) {
+                    ret.push(e);
+                }
             }
-            catch (e) {
-                ret.push(e);
-            }
-        }
-        return ret;
+            return ret;
+        });
     }
 }
 exports.Module = Module;
@@ -263,17 +275,22 @@ exports.Tuple = Tuple;
 class Fn {
     get typeName() { return this.constructor.name; }
     apply(input, context) {
-        return new Tuple();
+        return __awaiter(this, void 0, void 0, function* () {
+            return new Tuple();
+        });
     }
     applyAndResolve(input, context) {
-        let ret = this.apply(input, context);
-        while (TailFn.isTail(ret)) {
-            ret = ret.apply(null);
-        }
-        if (ret instanceof Fn) {
-            ret = ret.apply(input, context);
-        }
-        return ret;
+        return __awaiter(this, void 0, void 0, function* () {
+            let ret = yield this.apply(input, context);
+            // an executable may wrap a tail that needs to be executed
+            while (TailFn.isTail(ret)) {
+                ret = yield ret.apply(null);
+            }
+            if (ret instanceof Fn) {
+                ret = ret.apply(input, context);
+            }
+            return ret;
+        });
     }
 }
 exports.Fn = Fn;
@@ -316,7 +333,9 @@ class WrapperFn extends Fn {
         return this._wrapped instanceof ConstFn;
     }
     apply(input, context) {
-        return this._wrapped.apply(input, context);
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield this._wrapped.apply(input, context);
+        });
     }
     toString() {
         return this._wrapped.toString();
@@ -331,7 +350,9 @@ class ConstFn extends Fn {
     get valueType() { return typeof this._value; }
     get value() { return this._value; }
     apply(input) {
-        return Array.isArray(this._value) ? Array.from(this._value) : this._value;
+        return __awaiter(this, void 0, void 0, function* () {
+            return Array.isArray(this._value) ? Array.from(this._value) : this._value;
+        });
     }
     toString() {
         return toString(this._value);
@@ -373,7 +394,9 @@ class FunctionBaseFn extends NamedFn {
         return this._isPipeOp;
     }
     apply(input, context) {
-        return this._body.apply(input, context);
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield this._body.apply(input, context);
+        });
     }
 }
 exports.FunctionBaseFn = FunctionBaseFn;
@@ -382,9 +405,11 @@ class NativeFunctionFn extends FunctionBaseFn {
         super(name, params, new NativeFunctionFn.NativeScriptFn(jsfunc));
     }
     apply(input, context) {
-        if (FnUtil.isNone(input) && this.params.size > 0)
-            throw new FunctionParameterDeficiencyError("Input to native function " + this.name + " does not match!");
-        return this._body.apply(this.params.apply(input));
+        return __awaiter(this, void 0, void 0, function* () {
+            if (FnUtil.isNone(input) && this.params.size > 0)
+                throw new FunctionParameterDeficiencyError("Input to native function " + this.name + " does not match!");
+            return yield this._body.apply(yield this.params.apply(input));
+        });
     }
     toString() {
         return this.name;
@@ -397,8 +422,10 @@ NativeFunctionFn.NativeScriptFn = class extends Fn {
         this._jsfunc = jsfunc;
     }
     apply(input) {
-        let args = (input instanceof Tuple) && input.toList() || [input];
-        return this._jsfunc.apply(null, args);
+        return __awaiter(this, void 0, void 0, function* () {
+            let args = (input instanceof Tuple) && input.toList() || [input];
+            return this._jsfunc.apply(null, args);
+        });
     }
 };
 class FunctionFn extends FunctionBaseFn {
@@ -412,18 +439,24 @@ FunctionFn.FunctionBodyFn = class extends WrapperFn {
         super(expr);
     }
     apply(input, context) {
-        let res = super.apply(input, context);
-        var i = 0;
-        while (res instanceof TailFn) {
-            i++;
-            if (i == 10000)
-                break;
-            if (context == this) {
-                return res;
+        const _super = Object.create(null, {
+            apply: { get: () => super.apply }
+        });
+        return __awaiter(this, void 0, void 0, function* () {
+            let res = yield _super.apply.call(this, input, context);
+            var i = 0;
+            while (res instanceof TailFn) {
+                i++;
+                if (i == 10000)
+                    break;
+                if (context == this) {
+                    return res;
+                }
+                res = res.hasTail() ? yield res.ResolveNextTail(this) : yield res.apply(null, this);
             }
-            res = res.hasTail() ? res.ResolveNextTail(this) : res.apply(null, this);
-        }
-        return res instanceof ConstFn ? res.apply(null) : res;
+            // result may have been wrapped into ConstFn during tail computation
+            return res instanceof ConstFn ? res.apply(null) : res;
+        });
     }
 };
 class FunctionInterfaceFn extends NamedFn {
@@ -439,20 +472,26 @@ class FunctionInterfaceFn extends NamedFn {
     setAsTail() { this._tail = true; }
     get paramSize() { return this.params.length; }
     apply(input) {
-        let f = input.getIndex(this._seq);
-        if (typeof f == 'function' && (f.name == 'bound applyInNativeContext' || f.name == 'bound tailWrapper')) {
-            return f;
-        }
-        // for delayed computation, specifically delay the computation
-        if (this.isTail()) {
-            let tail = new TailFn(f);
-            return tail.tailWrapper.bind(tail);
-        }
-        // in a native function wrapped in NativeFunctionFn or ftl function wrapped in
-        else {
-            let closure = new ClosureFunction(input instanceof Tuple ? f : input, this.params);
-            return closure.applyInNativeContext.bind(closure);
-        }
+        return __awaiter(this, void 0, void 0, function* () {
+            let f = input.getIndex(this._seq);
+            if (typeof f == 'function' && (f.name == 'bound applyInNativeContext' || f.name == 'bound tailWrapper')) {
+                return f;
+            }
+            // For tail, simply return a TailFn wrapping the action function f
+            // for delayed computation, specifically delay the computation
+            // when returned to calling stack to reduce stack depth.
+            if (this.isTail()) {
+                let tail = new TailFn(f);
+                return tail.tailWrapper.bind(tail);
+            }
+            // Otherwise, bind as a regular javascript function which can be either called
+            // in a native function wrapped in NativeFunctionFn or ftl function wrapped in
+            // FunctionFn
+            else {
+                let closure = new ClosureFunction(input instanceof Tuple ? f : input, this.params);
+                return closure.applyInNativeContext.bind(closure);
+            }
+        });
     }
 }
 exports.FunctionInterfaceFn = FunctionInterfaceFn;
@@ -495,11 +534,15 @@ class ClosureFunction {
         return this.f.apply(tpl);
     }
     apply(input, context) {
-        var tuple = new Tuple();
-        // for correctly resolve positional reference
-        tuple.appendAll(this.closureParams);
-        tuple.appendAll(input);
-        return this.f.apply(tuple, context);
+        return __awaiter(this, void 0, void 0, function* () {
+            var tuple = new Tuple();
+            // append partial parameters first as closure
+            // for correctly resolve positional reference
+            // such as _0, _1, etc.
+            tuple.appendAll(this.closureParams);
+            tuple.appendAll(input);
+            return yield this.f.apply(tuple, context);
+        });
     }
 }
 class NamedExprFn extends WrapperFn {
@@ -523,21 +566,23 @@ class TupleFn extends ComposedFn {
     getNamedFn(name) {
         return this.find((fn) => fn instanceof NamedExprFn && fn.name == name);
     }
-    async apply(input, context) {
-        var tuple = new Tuple();
-        var len = this.size;
-        if (len == 0)
-            return tuple;
-        for (var i = 0; i < len; i++) {
-            var fn = this._fns[i];
-            var res = await fn.apply(input, context);
-            if (fn instanceof NamedExprFn || fn instanceof TailFn) {
-                tuple.addNameValue(fn.name, res);
+    apply(input, context) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var tuple = new Tuple();
+            var len = this.size;
+            if (len == 0)
+                return tuple;
+            for (var i = 0; i < len; i++) {
+                var fn = this._fns[i];
+                var res = yield fn.apply(input, context);
+                if (fn instanceof NamedExprFn || fn instanceof TailFn) {
+                    tuple.addNameValue(fn.name, res);
+                }
+                else
+                    tuple.addValue(res);
             }
-            else
-                tuple.addValue(res);
-        }
-        return tuple.size == 1 && !tuple.hasNames() ? tuple.getIndex(0) : tuple;
+            return tuple.size == 1 && !tuple.hasNames() ? tuple.getIndex(0) : tuple;
+        });
     }
 }
 exports.TupleFn = TupleFn;
@@ -546,19 +591,23 @@ class PipeFn extends ComposedFn {
         super(...tuples);
     }
     apply(tuple, context) {
-        var res = this._fns[0].apply(tuple, context);
-        if (res === this._fns[0])
-            return this;
-        for (var i = 1; i < this._fns.length; i++) {
-            if (res instanceof TailFn)
-                return new TailFn(new PipeFn(res, ...this._fns.slice(i)));
-            else if (res instanceof Tuple && res.hasTail())
-                return new TailFn(new PipeFn(res.toTupleFn(), ...this._fns.slice(i)));
-            else if (res instanceof Tuple && res.hasFn() && !OpPipeFn.isOpPipe(this._fns[i]))
-                return new PipeFn(...[res.toTupleFn()].concat(this._fns.slice(i)));
-            res = this._fns[i].apply(res, context);
-        }
-        return res;
+        return __awaiter(this, void 0, void 0, function* () {
+            var res = yield this._fns[0].apply(tuple, context);
+            // if name is unresolved
+            if (res === this._fns[0])
+                return this;
+            for (var i = 1; i < this._fns.length; i++) {
+                if (res instanceof TailFn)
+                    return new TailFn(new PipeFn(res, ...this._fns.slice(i)));
+                else if (res instanceof Tuple && res.hasTail())
+                    return new TailFn(new PipeFn(res.toTupleFn(), ...this._fns.slice(i)));
+                // still has unresolved ref
+                else if (res instanceof Tuple && res.hasFn() && !OpPipeFn.isOpPipe(this._fns[i]))
+                    return new PipeFn(...[res.toTupleFn()].concat(this._fns.slice(i)));
+                res = yield this._fns[i].apply(res, context);
+            }
+            return res;
+        });
     }
     toString() {
         return 'lambda expression';
@@ -566,8 +615,8 @@ class PipeFn extends ComposedFn {
 }
 exports.PipeFn = PipeFn;
 class OpPipeFn extends ComposedFn {
-    constructor(... tuples) {
-        super(... tuples);
+    constructor(...tuples) {
+        super(...tuples);
         if (tuples.length != 2) {
             throw new FtlRuntimeError(`OpPipeFn has ${tuples.length} elements!`);
         }
@@ -581,51 +630,57 @@ class OpPipeFn extends ComposedFn {
             return false;
     }
     apply(input, context) {
-        function resolve_refs(input, first_tuple_elm, op2) {
-            if (!input)
-                return op2;
-            if (op2 instanceof RefFn) {
-                if (op2.isTupleSelector() || !(input instanceof Tuple) || first_tuple_elm instanceof TupleFn && first_tuple_elm.hasName(op2.name))
-                    return op2;
-                else {
-                    let r = op2.apply(input);
-                    return FnUtil.isNone(r) && op2 || (r instanceof Fn && r || new ConstFn(r));
-                }
-            }
-            else if (op2 instanceof TupleFn) {
-                op2._fns.forEach((f, i, array) => {
-                    var converted = resolve_refs(input, first_tuple_elm, f);
-                    if (converted != f) {
-                        array[i] = converted;
+        return __awaiter(this, void 0, void 0, function* () {
+            function resolve_refs(input, first_tuple_elm, op2) {
+                return __awaiter(this, void 0, void 0, function* () {
+                    if (!input)
+                        return op2;
+                    if (op2 instanceof RefFn) {
+                        if (op2.isTupleSelector() || !(input instanceof Tuple) || first_tuple_elm instanceof TupleFn && first_tuple_elm.hasName(op2.name))
+                            return op2;
+                        else {
+                            let r = yield op2.apply(input);
+                            return FnUtil.isNone(r) && op2 || (r instanceof Fn && r || new ConstFn(r));
+                        }
                     }
+                    else if (op2 instanceof TupleFn) {
+                        let fns = op2._fns;
+                        for (var i = 0; i < fns.length; i++) {
+                            let f = fns[i];
+                            var converted = yield resolve_refs(input, first_tuple_elm, f);
+                            if (converted != f) {
+                                fns[i] = converted;
+                            }
+                        }
+                        return op2;
+                    }
+                    else if (op2 instanceof PipeFn) {
+                        yield resolve_refs(input, first_tuple_elm, op2._fns[0]);
+                        return op2;
+                    }
+                    else
+                        return op2;
                 });
-                return op2;
             }
-            else if (op2 instanceof PipeFn) {
-                resolve_refs(input, first_tuple_elm, op2._fns[0]);
-                return op2;
+            let first_tuple_elm = this._fns[0].getFnAt(0);
+            var res = yield first_tuple_elm.apply(input, context);
+            if (res === first_tuple_elm)
+                return this;
+            if (res instanceof TailFn) {
+                return new TailFn(new PipeFn(res, this._fns[1]));
             }
-            else
-                return op2;
-        }
-        let first_tuple_elm = this._fns[0].getFnAt(0);
-        var res = first_tuple_elm.apply(input, context);
-        if (res === first_tuple_elm)
-            return this;
-        if (res instanceof TailFn) {
-            return new TailFn(new PipeFn(res, this._fns[1]));
-        }
-        else if (res instanceof Tuple && res.hasTail()) {
-            return new TailFn(new PipeFn(res.toTupleFn(), this._fns[1]));
-        }
-        else if (res instanceof Tuple && res.getIndex(0) instanceof Fn) {
-            return new PipeFn(...[res.toTupleFn()].concat(this._fns[1]));
-        }
-        let combined = new Tuple();
-        combined.addValue(res);
-        let op2 = resolve_refs(input, first_tuple_elm, this._fns[0].getFnAt(1));
-        combined.addValue(op2);
-        return this._fns[1].apply(combined, context);
+            else if (res instanceof Tuple && res.hasTail()) {
+                return new TailFn(new PipeFn(res.toTupleFn(), this._fns[1]));
+            }
+            else if (res instanceof Tuple && res.getIndex(0) instanceof Fn) {
+                return new PipeFn(...[res.toTupleFn()].concat(this._fns[1]));
+            }
+            let combined = new Tuple();
+            combined.addValue(res);
+            let op2 = yield resolve_refs(input, first_tuple_elm, this._fns[0].getFnAt(1));
+            combined.addValue(op2);
+            return yield this._fns[1].apply(combined, context);
+        });
     }
     toString() {
         return 'lambda expression';
@@ -649,48 +704,50 @@ class RefFn extends Fn {
         return name.match(TupleSelectorPattern) || InputSelectorPattern == name;
     }
     apply(input, context) {
-        var e;
-        if (this.name == InputSelectorPattern) {
-            return input;
-        }
-        if (input && input instanceof Tuple)
-            e = input.get(this.name);
-        if (e !== undefined) {
-            if (this.params != null) {
-                if (typeof (e) == 'function') {
-                    var args = [];
-                    if (this.params instanceof RefFn)
-                        args.push(input.get(this.params.name));
-                    else if (this.params instanceof Fn) {
-                        args = this.params.apply(input);
-                        args = args instanceof Tuple ? args.toList() : [args];
-                    }
-                    else
-                        for (var i = 0; i < this.params.size; i++)
-                            args.push(input.get(this.params[i].name));
-                    return e.apply(null, args);
-                }
-                else {
-                    var tpl = this.params.apply(input);
-                    if (this.params instanceof RefFn)
-                        tpl = Tuple.fromNameValue(this.params.name, tpl);
-                    else if (!(tpl instanceof Tuple))
-                        tpl = Tuple.fromValue(tpl);
-                    return e.apply(tpl);
-                }
+        return __awaiter(this, void 0, void 0, function* () {
+            var e;
+            if (this.name == InputSelectorPattern) {
+                return input;
             }
-            return e;
-        }
-        if (this.name == '_0' && input && !(input instanceof Tuple))
-            return input;
-        var f;
-        if (this.module) {
-            f = this.module.getAvailableFn(this.name);
-        }
-        if (f) {
-            return f.apply(input, context);
-        }
-        return this;
+            if (input && input instanceof Tuple)
+                e = input.get(this.name);
+            if (e !== undefined) {
+                if (this.params != null) {
+                    if (typeof (e) == 'function') {
+                        var args = [];
+                        if (this.params instanceof RefFn)
+                            args.push(input.get(this.params.name));
+                        else if (this.params instanceof Fn) {
+                            args = yield this.params.apply(input);
+                            args = args instanceof Tuple ? args.toList() : [args];
+                        }
+                        else
+                            for (var i = 0; i < this.params.size; i++)
+                                args.push(input.get(this.params[i].name));
+                        return e.apply(null, args);
+                    }
+                    else {
+                        var tpl = this.params.apply(input);
+                        if (this.params instanceof RefFn)
+                            tpl = Tuple.fromNameValue(this.params.name, tpl);
+                        else if (!(tpl instanceof Tuple))
+                            tpl = Tuple.fromValue(tpl);
+                        return e.apply(tpl);
+                    }
+                }
+                return e;
+            }
+            if (this.name == '_0' && input && !(input instanceof Tuple))
+                return input;
+            var f;
+            if (this.module) {
+                f = this.module.getAvailableFn(this.name);
+            }
+            if (f) {
+                return yield f.apply(input, context);
+            }
+            return this;
+        });
     }
 }
 exports.RefFn = RefFn;
@@ -711,13 +768,15 @@ class TupleSelectorFn extends Fn {
         this._seq = seq;
     }
     apply(input) {
-        if (FnUtil.isNone(input))
-            return this;
-        if (input instanceof Tuple)
-            return input.getIndex(this._seq);
-        if (this._seq == 0)
-            return input;
-        return null;
+        return __awaiter(this, void 0, void 0, function* () {
+            if (FnUtil.isNone(input))
+                return this;
+            if (input instanceof Tuple)
+                return input.getIndex(this._seq);
+            if (this._seq == 0)
+                return input;
+            return null;
+        });
     }
 }
 exports.TupleSelectorFn = TupleSelectorFn;
@@ -731,10 +790,15 @@ class SeqSelectorOrDefault extends TupleSelectorFn {
     }
     get defaultValue() { return this._defaultValue; }
     apply(input) {
-        var sv = super.apply(input);
-        if (sv !== undefined && sv != null && sv != this)
-            return sv;
-        return this._defaultValue;
+        const _super = Object.create(null, {
+            apply: { get: () => super.apply }
+        });
+        return __awaiter(this, void 0, void 0, function* () {
+            var sv = yield _super.apply.call(this, input);
+            if (sv !== undefined && sv != null && sv != this)
+                return sv;
+            return this._defaultValue;
+        });
     }
 }
 exports.SeqSelectorOrDefault = SeqSelectorOrDefault;
@@ -744,10 +808,15 @@ class ExprFn extends WrapperFn {
         this._paramTuples = paramtuples;
     }
     apply(input, context) {
-        var ret = super.apply(input);
-        for (var i = 0; i < this._paramTuples.length; i++)
-            ret = ret.toTupleFn().apply(this._paramTuples[i].apply(input, context));
-        return ret instanceof Tuple && ret.size == 1 ? ret.get('_0') : ret;
+        const _super = Object.create(null, {
+            apply: { get: () => super.apply }
+        });
+        return __awaiter(this, void 0, void 0, function* () {
+            var ret = yield _super.apply.call(this, input);
+            for (var i = 0; i < this._paramTuples.length; i++)
+                ret = yield ret.toTupleFn().apply(this._paramTuples[i].apply(input, context));
+            return ret instanceof Tuple && ret.size == 1 ? ret.get('_0') : ret;
+        });
     }
     toString() {
         return 'expression';
@@ -762,27 +831,29 @@ class CallExprFn extends Fn {
         this.params = params;
     }
     apply(input, context) {
-        var f = !this.f ? input.get(this.name) : this.f;
-        if (!(f instanceof Fn))
-            throw new FtlRuntimeError(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
-        if (f instanceof RefFn)
-            f = f.apply(input);
-        let intermediate = this.params[0].apply(input);
-        let ret;
-        if (typeof f == 'function') {
-            if (intermediate instanceof Tuple) {
-                ret = f(...intermediate.toList());
+        return __awaiter(this, void 0, void 0, function* () {
+            var f = !this.f ? input.get(this.name) : this.f;
+            if (!(f instanceof Fn))
+                throw new FtlRuntimeError(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
+            if (f instanceof RefFn)
+                f = yield f.apply(input);
+            let intermediate = yield this.params[0].apply(input);
+            let ret;
+            if (typeof f == 'function') {
+                if (intermediate instanceof Tuple) {
+                    ret = f(...intermediate.toList());
+                }
+                else {
+                    ret = f(intermediate);
+                }
             }
             else {
-                ret = f(intermediate);
+                ret = yield f.apply(intermediate);
             }
-        }
-        else {
-            ret = f.apply(intermediate);
-        }
-        for (var i = 1; i < this.params.length; i++)
-            return ret.apply(this.params[i].apply(input));
-        return ret;
+            for (var i = 1; i < this.params.length; i++)
+                return yield ret.apply(yield this.params[i].apply(input));
+            return ret;
+        });
     }
 }
 exports.CallExprFn = CallExprFn;
@@ -794,7 +865,9 @@ class ExprRefFn extends WrapperFn {
         this.fnl = fnl;
     }
     apply(input) {
-        return new ClosureFunction(this._wrapped, input);
+        return __awaiter(this, void 0, void 0, function* () {
+            return new ClosureFunction(this._wrapped, input);
+        });
     }
 }
 exports.ExprRefFn = ExprRefFn;
@@ -843,34 +916,38 @@ class TailFn extends WrapperFn {
         return elm instanceof TailFn;
     }
     ResolveNextTail(context) {
-        var tail = this.nextTail();
-        if (!tail) {
-            return this;
-        }
-        var i = 0;
-        for (let elm of tail.fns) {
-            if (TailFn.isTail(elm)) {
-                let inner_tail = elm;
-                var next = elm.apply(null, context);
-                if (TailFn.isTail(next)) {
-                    this.addAllTails(next);
-                    tail.replaceAt(i, inner_tail.name ? new NamedExprFn(inner_tail.name, next.wrapped) : next.wrapped);
-                }
-                else {
-                    tail.replaceAt(i, inner_tail.name ? new NamedExprFn(inner_tail.name, next instanceof Fn ? next : new ConstFn(next)) : next);
-                }
+        return __awaiter(this, void 0, void 0, function* () {
+            var tail = this.nextTail();
+            if (!tail) {
+                return this;
             }
-            i++;
-        }
-        return this;
+            var i = 0;
+            for (let elm of tail.fns) {
+                if (TailFn.isTail(elm)) {
+                    let inner_tail = elm;
+                    var next = yield elm.apply(null, context);
+                    if (TailFn.isTail(next)) {
+                        this.addAllTails(next);
+                        tail.replaceAt(i, inner_tail.name ? new NamedExprFn(inner_tail.name, next.wrapped) : next.wrapped);
+                    }
+                    else {
+                        tail.replaceAt(i, inner_tail.name ? new NamedExprFn(inner_tail.name, next instanceof Fn ? next : new ConstFn(next)) : next);
+                    }
+                }
+                i++;
+            }
+            return this;
+        });
     }
     apply(input, context) {
-        var res = this._wrapped.apply(this.closure, context);
-        if (res instanceof TailFn)
-            return res;
-        else if (res instanceof Tuple && res.hasTail())
-            return new TailFn(res.toTupleFn());
-        return new ConstFn(res);
+        return __awaiter(this, void 0, void 0, function* () {
+            var res = yield this._wrapped.apply(this.closure, context);
+            if (res instanceof TailFn)
+                return res;
+            else if (res instanceof Tuple && res.hasTail())
+                return new TailFn(res.toTupleFn());
+            return new ConstFn(res);
+        });
     }
 }
 class ArrayInitializerFn extends Fn {
@@ -881,17 +958,19 @@ class ArrayInitializerFn extends Fn {
     get size() { return this._values.length; }
     get first() { return this.size > 0 && this._values[0]; }
     apply(input, context) {
-        var ret = [];
-        this._values.forEach((v) => {
-            let val = v.apply(input, context);
-            if (Array.isArray(val)) {
-                ret.splice(ret.length, 0, ...val);
+        return __awaiter(this, void 0, void 0, function* () {
+            var ret = [];
+            for (let v of this._values) {
+                let val = yield v.apply(input, context);
+                if (Array.isArray(val)) {
+                    ret.splice(ret.length, 0, ...val);
+                }
+                else {
+                    ret.push(yield v.apply(input, context));
+                }
             }
-            else {
-                ret.push(v.apply(input, context));
-            }
+            return ret;
         });
-        return ret;
     }
 }
 exports.ArrayInitializerFn = ArrayInitializerFn;
@@ -906,24 +985,26 @@ class ArrayInitializerWithRangeFn extends Fn {
     get endValue() { return this._endValue; }
     get interval() { return this._interval; }
     apply(input, context) {
-        let start = this._startValue.apply(input, context);
-        let interval = this._interval.apply(input, context);
-        let end = this._endValue.apply(input, context);
-        let len = Math.floor((end + interval - start) / interval);
-        var array = new Array(len);
-        var val = start;
-        for (var i = 0; i < len; i++) {
-            array[i] = val;
-            val += interval;
-        }
-        return array;
+        return __awaiter(this, void 0, void 0, function* () {
+            let start = yield this._startValue.apply(input, context);
+            let interval = yield this._interval.apply(input, context);
+            let end = yield this._endValue.apply(input, context);
+            let len = Math.floor((end + interval - start) / interval);
+            var array = new Array(len);
+            var val = start;
+            for (var i = 0; i < len; i++) {
+                array[i] = val;
+                val += interval;
+            }
+            return array;
+        });
     }
 }
 exports.ArrayInitializerWithRangeFn = ArrayInitializerWithRangeFn;
 class ArrayElementSelectorFn extends NamedFn {
     constructor(name, index) {
         super(name);
-        this._index = index instanceof ConstFn ? index.apply(null) : index;
+        this._index = index;
         if (Array.isArray(this._index)) {
             if (this._index.length == 1) {
                 this._index = this._index[0];
@@ -935,38 +1016,45 @@ class ArrayElementSelectorFn extends NamedFn {
     }
     get index() { return this._index; }
     apply(input) {
-        let list = input && (input instanceof Tuple && (input.get(this.name) || null)
-            || ((this.name == '_' || this.name == '_0') && input)
-            || []);
-        if (list instanceof VarFn)
-            list = list.value;
-        let index = typeof this._index == 'number' ? this._index : this._index.apply(input);
-        if (list)
-            return list[index] || null;
-        else
-            return this;
+        return __awaiter(this, void 0, void 0, function* () {
+            let list = input && (input instanceof Tuple && (input.get(this.name) || null)
+                || ((this.name == '_' || this.name == '_0') && input)
+                || []);
+            if (list instanceof VarFn)
+                list = list.value;
+            let index = typeof this._index == 'number' ? this._index : yield this._index.apply(input);
+            if (list)
+                return list[index] || null;
+            else
+                return this;
+        });
     }
 }
 exports.ArrayElementSelectorFn = ArrayElementSelectorFn;
 class ArrayRangeSelectorFn extends Fn {
-    constructor(name, start, end, interval = 1) {
+    constructor(name, start, end, interval = null) {
         super();
         this.name = name;
         this.start = start;
         this.end = end;
-        this.interval = interval;
+        this.interval = interval || new ConstFn(1);
     }
     apply(input) {
-        let list = input && (input instanceof Tuple && (input.get(this.name) || null)
-            || ((this.name == '_' || this.name == '_0') && input)
-            || []);
-        let end = this.end == -1 ? list.length : this.end + 1;
-        let len = Math.ceil((end - this.start) / this.interval);
-        let ret = new Array(len);
-        for (var i = this.start, j = 0; i < end; i += this.interval, j++) {
-            ret[j] = list[i];
-        }
-        return ret;
+        return __awaiter(this, void 0, void 0, function* () {
+            let list = input && (input instanceof Tuple && (input.get(this.name) || null)
+                || ((this.name == '_' || this.name == '_0') && input)
+                || []);
+            let start = yield this.start.apply(input);
+            let end = yield this.end.apply(input);
+            let interval = yield this.interval.apply(input);
+            end = end == -1 ? list.length : end + 1;
+            let len = Math.ceil((end - start) / interval);
+            let ret = new Array(len);
+            for (var i = start, j = 0; i < end; i += interval, j++) {
+                ret[j] = list[i];
+            }
+            return ret;
+        });
     }
 }
 exports.ArrayRangeSelectorFn = ArrayRangeSelectorFn;
@@ -979,9 +1067,11 @@ class BinaryOperatorWithPrefixFn extends Fn {
         this.prefix = prefix;
     }
     apply(input, context) {
-        let r1 = this.operand1.apply(input, context);
-        let r2 = this.operand2.apply(input, context);
-        return this.prefix.apply(Tuple.fromValues(r1, this.f, r2), context);
+        return __awaiter(this, void 0, void 0, function* () {
+            let r1 = yield this.operand1.apply(input, context);
+            let r2 = yield this.operand2.apply(input, context);
+            return yield this.prefix.apply(Tuple.fromValues(r1, this.f, r2), context);
+        });
     }
 }
 exports.BinaryOperatorWithPrefixFn = BinaryOperatorWithPrefixFn;
@@ -992,14 +1082,16 @@ class CurryExprFn extends Fn {
         this.params = params;
     }
     apply(input, module) {
-        let res = this.expr;
-        this.params.forEach(p => {
-            res = res.apply(p.apply());
-            if (res instanceof Tuple) {
-                res = res.toTupleFn();
+        return __awaiter(this, void 0, void 0, function* () {
+            let res = this.expr;
+            for (var p of this.params) {
+                res = yield res.apply(yield p.apply());
+                if (res instanceof Tuple) {
+                    res = res.toTupleFn();
+                }
             }
+            return res instanceof Fn ? res.apply(input, module) : res;
         });
-        return res instanceof Fn ? res.apply(input, module) : res;
     }
 }
 exports.CurryExprFn = CurryExprFn;
@@ -1008,7 +1100,9 @@ class ExecutableFn extends WrapperFn {
         super(wrapped);
     }
     apply() {
-        return this._wrapped.applyAndResolve();
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield this._wrapped.applyAndResolve();
+        });
     }
 }
 exports.ExecutableFn = ExecutableFn;
@@ -1025,13 +1119,15 @@ class SideffectFn extends Fn {
         this.params = params;
     }
     apply(input, context) {
-        let args = input;
-        if (input instanceof Tuple) {
-            args = new Tuple();
-            args.appendAll(input);
-        }
-        this.f.apply(this.params.apply(args), context);
-        return input;
+        return __awaiter(this, void 0, void 0, function* () {
+            let args = input;
+            if (input instanceof Tuple) {
+                args = new Tuple();
+                args.appendAll(input);
+            }
+            yield this.f.apply(this.params.apply(args), context);
+            return input;
+        });
     }
 }
 exports.SideffectFn = SideffectFn;
@@ -1044,9 +1140,14 @@ class SideffectedFn extends WrapperFn {
         return this._wrapped instanceof RefFn && this._wrapped.name || undefined;
     }
     apply(input, context) {
-        for (let d of this.sideffects)
-            d.apply(input, context);
-        return super.apply(input, context);
+        const _super = Object.create(null, {
+            apply: { get: () => super.apply }
+        });
+        return __awaiter(this, void 0, void 0, function* () {
+            for (let d of this.sideffects)
+                yield d.apply(input, context);
+            return yield _super.apply.call(this, input, context);
+        });
     }
 }
 exports.SideffectedFn = SideffectedFn;
