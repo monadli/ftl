@@ -114,11 +114,13 @@ async function start_debug() {
 
     const canvas = document.getElementById('ftl-graph')
     const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.font = '14px arial'
     ctx.lineWidth = 0.5
     let exec = new ftl_debugger.wrapFnWithDebugger(module._executables[0])
-    let options = { margin: 4, text_height: 14 }
-    exec.adjustSize(ctx, 10, 10, options)
+    let options = { margin: 4, text_height: 14, font: '14px arial', large_font: '28px arial' }
+    exec.adjustSize(ctx, 40, 40, options)
+    exec.adjustLocation(0, 0, options)
     exec.render(ctx, options)
     await exec.apply()
     // draw all executables into diagram
@@ -344,5 +346,8 @@ except "->", which is preserved. Simply copy from below when you need to define 
 </body>
 <script>
   document.getElementById('debug-panel').appendChild(ftl_debugger.debug_ctrl.ui)
+  canvas = document.getElementById('ftl-graph')
+  ctx = canvas.getContext('2d')
+  ftl_debugger.setCanvas(ctx)
 </script>
 </html>
