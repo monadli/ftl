@@ -36,25 +36,48 @@ exports.DebuggerStopException = class DebuggerStopException extends Error {
  */
 class DebugControl {
   constructor() {
+    this.currentState = ''
     this.ui = document.createElement('div');
-    this.ui.innerHTML = `<button id="debug.continue">▶️</button><button id="debug.stop">⏹️</button>`
+    this.ui.innerHTML = `<button id="debug.continue" title='Continue'>⏩⏸️</button><button id="debug.stepover" title='Step Over'>▶️</button><button id="debug.stepinto" title='Step Into'>🔽🔼</button><button id="debug.stepout" title='Step Out'>🔼</button><button id="debug.stop" title='Stop'>⏹️</button>`
     this.elements = {}
     this.focusable = []
-    this.play_btn = this.ui.querySelector('#debug\\.continue')
+    this.continue_btn = this.ui.querySelector('#debug\\.continue')
+    this.stepover_btn = this.ui.querySelector('#debug\\.stepover')
     this.stop_btn = this.ui.querySelector('#debug\\.stop')
-    this.play_btn.addEventListener('click', () => { this.ui.dispatchEvent(new Event('play')) })
+
+    this.continue_btn.addEventListener('click', () => {
+      this.currentState = continue_btn.title.toLowerCase()
+      if (continue_btn.title == 'Continue') {
+        continue_btn.innerHTML = '⏸️'
+        continue_btn.title = 'Pause'
+      } else {
+        continue_btn.innerHTML = '⏩'
+        continue_btn.title = 'Continue'
+      }
+      continue_btn.innerHTML = '⏸️'
+      continue_btn.title = 'Pause'
+      this.ui.dispatchEvent(new Event(this.currentState))
+    })
+
+    this.stepover_btn.addEventListener('click', () => {
+      this.currentState = 'stepover'
+      this.ui.dispatchEvent(new Event('stepover'))
+    })
     this.stop_btn.addEventListener('click', () => {this.ui.dispatchEvent(new Event('stop'))})
   }
 
   show() {
     this.ui.style.display = 'block'
-    this.play_btn.focus()
+    this.stepover_btn.focus()
     return new Promise(resolve => {
-      this.ui.addEventListener('stop', () => {
-        resolve(false)
+      this.ui.addEventListener('pause', () => {
+        resolve('pause')
       }, { once: true })
-      this.ui.addEventListener('play', () => {
-        resolve(true)
+      this.ui.addEventListener('stop', () => {
+        resolve('stop')
+      }, { once: true })
+      this.ui.addEventListener('stepover', () => {
+        resolve('stepover')
       }, { once: true })
     })
   }
@@ -71,6 +94,10 @@ class DebuggerFn extends ftl.WrapperFn {
 
   constructor(fn) {
     super(fn)
+    this.options = {
+      show_input: false,
+      show_output: true
+    }
   }
 
   /**
@@ -109,6 +136,9 @@ class DebuggerFn extends ftl.WrapperFn {
 
   showOutput(val, x, y) {
     if (val != undefined) {
+      if (typeof val == 'number') {
+        val = Math.round(val * 100) / 100
+      }
       val = val == null ? 'null' : val.toString()
       let metrix = canvas.measureText(val)
       let style = canvas.fillStyle
@@ -119,14 +149,16 @@ class DebuggerFn extends ftl.WrapperFn {
   }
 
   async apply(input, context) {
-    this.showInput(input, this.x, this.y)
+    if (this.options.show_input)
+      this.showInput(input, this.x, this.y)
     let r = await exports.debug_ctrl.show()
-    if (r === false) {
+    if (r === 'stop') {
       throw new exports.DebuggerStopException()
     }
 
     const res = await super.apply(input, context)
-    this.showOutput(res, this.x + this.width, this.y)
+    if (this.options.show_output)
+      this.showOutput(res, this.x + this.width, this.y)
     return res
   }
 }
@@ -134,13 +166,61 @@ class DebuggerFn extends ftl.WrapperFn {
 class WrapperDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
+    this.options.show_output = false
     fn._wrapped = exports.wrapFnWithDebugger(fn._wrapped)
+  }
+}
+
+class ArrayInitializerDebugger extends DebuggerFn {
+  constructor(fn) {
+    super(fn)
+    fn._values = fn._values.map(f => exports.wrapFnWithDebugger(f))
+  }
+
+  adjustSize(canvas, x, y, options) {
+    this.x = x
+    this.y = y
+    let [w, h] = [0, 0]
+    w += canvas.measureText('[').width
+    for (let i = 0; i < this._wrapped._values.length; i++) {
+      if (i > 0) {
+        w += canvas.measureText(', ').width
+      }
+      let v = this._wrapped._values[i]
+      let [sw, sh] = v.adjustSize(canvas, x + w, y, options)
+      w += sw
+      h = Math.max(h, sh)
+    }
+    w += canvas.measureText(']').width
+    return [this.width, this.height] = [w, h]
+  }
+
+  adjustLocation(deltaX, deltaY, options) {
+    this.x += deltaX
+    this.y += deltaY
+    for (let v of this._wrapped._values) {
+      v.adjustLocation(deltaX, deltaY, options)
+    }
+  }
+
+  render(canvas, options) {
+    canvas.fillText('[', this.x, this.y + options.text_height)
+    let last_p
+    for (let i = 0; i < this._wrapped._values.length; i++) {
+      if (i > 0) {
+        canvas.fillText(', ', last_p.x + last_p.width, last_p.y + options.text_height)
+      }
+      last_p = this._wrapped._values[i]
+      last_p.render(canvas, options)
+    }
+    canvas.fillText(']', last_p.x + last_p.width, last_p.y + options.text_height)
   }
 }
 
 class TupleDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
+    this.options.show_output = false
     fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
   }
 
@@ -181,6 +261,7 @@ class TupleDebugger extends DebuggerFn {
 class PipeDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
+    this.options.show_output = false
     fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
   }
 
@@ -239,6 +320,57 @@ exports.wrapFnWithDebugger = function(fn) {
     return new wrap(fn)
 }
 
+class CallExprDebugger extends DebuggerFn {
+  constructor(fn) {
+    super(fn)
+
+    fn.f = exports.wrapFnWithDebugger(fn.f)
+    fn.params = fn.params.map(f => exports.wrapFnWithDebugger(f))
+  }
+
+  adjustSize(canvas, x, y, options) {
+    this.x = x
+    this.y = y
+    let [w, h] = this._wrapped.f.adjustSize(canvas, x, y, options)
+    w += canvas.measureText('(').width
+    for (let i = 0; i < this._wrapped.params.length; i++) {
+      if (i > 0) {
+        w += canvas.measureText(', ').width
+      }
+      let p = this._wrapped.params[i]
+      let [sw, sh] = p.adjustSize(canvas, x + w, y, options)
+      w += sw
+      h = Math.max(h, sh)
+    }
+    w += canvas.measureText(')').width
+    return [this.width, this.height] = [w, h]
+  }
+
+  adjustLocation(deltaX, deltaY, options) {
+    this.x += deltaX
+    this.y += deltaY
+    this._wrapped.f.adjustLocation(deltaX, deltaY, options)
+    for (let p of this._wrapped.params) {
+      p.adjustLocation(deltaX, deltaY, options)
+    }
+  }
+
+  render(canvas, options) {
+    this._wrapped.f.render(canvas, options)
+    canvas.fillText('(', this._wrapped.f.x + this._wrapped.f.width, this._wrapped.f.y + options.text_height)
+    let last_p
+    for (let i = 0; i < this._wrapped.params.length; i++) {
+      if (i > 0) {
+        canvas.fillText(', ', last_p.x + last_p.width, last_p.y + options.text_height)
+      }
+      last_p = this._wrapped.params[i]
+      last_p.render(canvas, options)
+    }
+    canvas.fillText(')', last_p.x + last_p.width, last_p.y + options.text_height)
+  }
+
+}
+
 class ConstDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
@@ -258,6 +390,12 @@ class ConstDebugger extends DebuggerFn {
   render(canvas, options) {
     canvas.strokeRect(this.x, this.y, this.width, this.height)
     canvas.fillText(this._wrapped.toString(), this.x + options.margin, this.y + options.text_height + options.margin)
+  }
+}
+
+class ExprRefDebugger extends WrapperDebugger {
+  constructor(fn) {
+    super(fn)
   }
 }
 
@@ -326,10 +464,15 @@ class NamedExprDebugger extends WrapperDebugger {
   }
 }
 
+FnDebuggerMap['ArrayInitializerFn'] = ArrayInitializerDebugger
 FnDebuggerMap['ConstFn'] = ConstDebugger
 FnDebuggerMap['ExecutableFn'] = WrapperDebugger
+FnDebuggerMap['ExprRefFn'] = ExprRefDebugger
+FnDebuggerMap['FunctionFn'] = FunctionDebugger
 FnDebuggerMap['NamedExprFn'] = NamedExprDebugger
 FnDebuggerMap['NativeFunctionFn'] = FunctionDebugger
+FnDebuggerMap['NativeFunctionFn.? :'] = FunctionDebugger
 FnDebuggerMap['PipeFn'] = PipeDebugger
 FnDebuggerMap['RefFn'] = RefDebugger
 FnDebuggerMap['TupleFn'] = TupleDebugger
+FnDebuggerMap['CallExprFn']= CallExprDebugger
