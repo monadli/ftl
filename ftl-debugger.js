@@ -36,57 +36,65 @@ exports.DebuggerStopException = class DebuggerStopException extends Error {
  */
 class DebugControl {
   constructor() {
-    this.currentState = ''
     this.ui = document.createElement('div');
-    this.ui.innerHTML = `<button id="debug.continue" title='Continue'>⏩⏸️</button><button id="debug.stepover" title='Step Over'>▶️</button><button id="debug.stepinto" title='Step Into'>🔽🔼</button><button id="debug.stepout" title='Step Out'>🔼</button><button id="debug.stop" title='Stop'>⏹️</button>`
+    this.ui.innerHTML = `<button id="debug.continue" title='Continue'>⏩</button><button id="debug.stepover" title='Step Over'>▶️</button><button id="debug.stepinto" title='Step Into'>🔽</button><button id="debug.stepout" title='Step Out' disabled>🔼</button><button id="debug.stop" title='Stop'>⏹️</button>`
     this.elements = {}
     this.focusable = []
     this.continue_btn = this.ui.querySelector('#debug\\.continue')
     this.stepover_btn = this.ui.querySelector('#debug\\.stepover')
+    this.stepinto_btn = this.ui.querySelector('#debug\\.stepinto')
+    this.stepout_btn = this.ui.querySelector('#debug\\.stepout')
     this.stop_btn = this.ui.querySelector('#debug\\.stop')
+    this.clickedButton = this.stepover_btn
 
     this.continue_btn.addEventListener('click', () => {
-      this.currentState = continue_btn.title.toLowerCase()
-      if (continue_btn.title == 'Continue') {
-        continue_btn.innerHTML = '⏸️'
-        continue_btn.title = 'Pause'
+      if (this.continue_btn.title == 'Continue') {
+        this.continue_btn.innerHTML = '⏸️'
+        this.continue_btn.title = 'Pause'
       } else {
-        continue_btn.innerHTML = '⏩'
-        continue_btn.title = 'Continue'
+        this.continue_btn.innerHTML = '⏩'
+        this.continue_btn.title = 'Continue'
       }
-      continue_btn.innerHTML = '⏸️'
-      continue_btn.title = 'Pause'
-      this.ui.dispatchEvent(new Event(this.currentState))
     })
 
-    this.stepover_btn.addEventListener('click', () => {
-      this.currentState = 'stepover'
-      this.ui.dispatchEvent(new Event('stepover'))
+    this.ui.addEventListener('click', (e) => {
+      this.enableAllButtons(false)
+      this.clickedButton = e.target
+      this.ui.dispatchEvent(new Event('debug'))
     })
-    this.stop_btn.addEventListener('click', () => {this.ui.dispatchEvent(new Event('stop'))})
+  }
+
+  enableAllButtons(enabled) {
+    var disabled = !enabled
+    if (this.continue_btn.disabled == enabled)
+      this.continue_btn.disabled = disabled
+    if (this.stepover_btn.disabled == enabled)
+      this.stepover_btn.disabled = disabled
+    if (this.stepinto_btn.disabled == enabled)
+      this.stepinto_btn.disabled = disabled
+    if (this.stepout_btn.disabled == enabled)
+      this.stepout_btn.disabled = disabled
+    if (this.stop_btn.disabled == enabled)
+      this.stop_btn.disabled = disabled
   }
 
   show() {
-    this.ui.style.display = 'block'
-    this.stepover_btn.focus()
-    return new Promise(resolve => {
-      this.ui.addEventListener('pause', () => {
-        resolve('pause')
-      }, { once: true })
-      this.ui.addEventListener('stop', () => {
-        resolve('stop')
-      }, { once: true })
-      this.ui.addEventListener('stepover', () => {
-        resolve('stepover')
-      }, { once: true })
-    })
-  }
-
-  hide() {
-    this.ui.style.display = 'none'
+    if (this.clickedButton.title == 'Stop') {
+      return new Promise(resolve => setTimeout(() => resolve('Stop'), 1))
+    } else if (this.clickedButton.title == 'Pause') {
+      this.stop_btn.disabled = false
+      this.continue_btn.disabled = false
+      return new Promise(resolve => setTimeout(() => resolve('Continue'), 5000))
+    } else {
+      this.enableAllButtons(true)
+      return new Promise(resolve => {
+        this.ui.addEventListener('debug', () => {
+          resolve(this.clickedButton.title)
+        }, { once: true })
+      })
+    }
   }
 }
-
 
 exports.debug_ctrl = new DebugControl()
 
@@ -152,7 +160,7 @@ class DebuggerFn extends ftl.WrapperFn {
     if (this.options.show_input)
       this.showInput(input, this.x, this.y)
     let r = await exports.debug_ctrl.show()
-    if (r === 'stop') {
+    if (r === 'Stop') {
       throw new exports.DebuggerStopException()
     }
 
@@ -464,6 +472,28 @@ class NamedExprDebugger extends WrapperDebugger {
   }
 }
 
+class TurnaryOpDebugger extends FunctionDebugger {
+  constructor(fn) {
+    super(fn)
+  }
+
+  adjustSize(canvas, x, y, options) {
+    const margins = options.margin * 2
+    const metrix = canvas.measureText(this._wrapped._name)
+
+    this.x = x
+    this.y = y
+    this.width = metrix.width + margins
+    this.height = options.text_height + margins
+    return [this.width, this.height]
+  }
+
+  render(canvas, options) {
+    canvas.strokeRect(this.x, this.y, this.width, this.height)
+    canvas.fillText(this._wrapped._name, this.x + options.margin, this.y + options.text_height + options.margin)
+  }
+}
+
 FnDebuggerMap['ArrayInitializerFn'] = ArrayInitializerDebugger
 FnDebuggerMap['ConstFn'] = ConstDebugger
 FnDebuggerMap['ExecutableFn'] = WrapperDebugger
@@ -471,7 +501,7 @@ FnDebuggerMap['ExprRefFn'] = ExprRefDebugger
 FnDebuggerMap['FunctionFn'] = FunctionDebugger
 FnDebuggerMap['NamedExprFn'] = NamedExprDebugger
 FnDebuggerMap['NativeFunctionFn'] = FunctionDebugger
-FnDebuggerMap['NativeFunctionFn.? :'] = FunctionDebugger
+FnDebuggerMap['NativeFunctionFn.? :'] = TurnaryOpDebugger
 FnDebuggerMap['PipeFn'] = PipeDebugger
 FnDebuggerMap['RefFn'] = RefDebugger
 FnDebuggerMap['TupleFn'] = TupleDebugger
