@@ -45,7 +45,6 @@ class DebugControl {
     this.stepinto_btn = this.ui.querySelector('#debug\\.stepinto')
     this.stepout_btn = this.ui.querySelector('#debug\\.stepout')
     this.stop_btn = this.ui.querySelector('#debug\\.stop')
-    this.clickedButton = this.stepover_btn
 
     this.continue_btn.addEventListener('click', () => {
       if (this.continue_btn.title == 'Continue') {
@@ -78,9 +77,15 @@ class DebugControl {
       this.stop_btn.disabled = disabled
   }
 
+  reset() {
+    this.clickedButton = this.stepover_btn
+  }
+
   show() {
     if (this.clickedButton.title == 'Stop') {
-      return new Promise(resolve => setTimeout(() => resolve('Stop'), 1))
+      return new Promise(resolve => setTimeout(() => {
+        resolve('Stop')
+      }, 1))
     } else if (this.clickedButton.title == 'Pause') {
       this.stop_btn.disabled = false
       this.continue_btn.disabled = false
@@ -98,6 +103,9 @@ class DebugControl {
 
 exports.debug_ctrl = new DebugControl()
 
+/**
+ * This is the root of all debugging wrapper for an Fn.
+ */
 class DebuggerFn extends ftl.WrapperFn {
 
   constructor(fn) {
@@ -106,6 +114,22 @@ class DebuggerFn extends ftl.WrapperFn {
       show_input: false,
       show_output: true
     }
+    this.breakpoint = false
+  }
+
+  setBreakpoint() {
+    if (this.breakpoint) {
+      canvas.strokeStyle = 'white'
+      canvas.lineWidth = 3
+      canvas.strokeRect(this.x, this.y, this.width, this.height);
+      canvas.strokeStyle = 'black'
+      canvas.lineWidth = 1
+    } else {
+      canvas.strokeStyle = '#357EC7'
+      canvas.lineWidth = 3
+    }
+    canvas.strokeRect(this.x, this.y, this.width, this.height);
+    this.breakpoint = !this.breakpoint
   }
 
   /**
@@ -129,6 +153,28 @@ class DebuggerFn extends ftl.WrapperFn {
 
   render(canvas, options) {
     this._wrapped._wrapped.render(canvas, options)
+  }
+
+  // Find the Fn that is clicked.
+  selectFn(x, y) {
+    if (x >= this.x && x <= this.x + this.width
+       && y >= this.y && y <= this.y + this.height) {
+      var selected
+      if (this.contained) {
+        if (Array.isArray(this.contained)) {
+          for (var item of this.contained) {
+            selected = item.selectFn(x, y)
+            if (selected)
+              break
+          }
+        } else {
+          selected = this.contained.selectFn(x, y)
+        }
+      }
+      return selected || this
+    }  
+    else
+      return null
   }
 
   showInput(val, x, y) {
@@ -175,14 +221,14 @@ class WrapperDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
     this.options.show_output = false
-    fn._wrapped = exports.wrapFnWithDebugger(fn._wrapped)
+    this.contained = fn._wrapped = exports.wrapFnWithDebugger(fn._wrapped)
   }
 }
 
 class ArrayInitializerDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
-    fn._values = fn._values.map(f => exports.wrapFnWithDebugger(f))
+    this.contained = fn._values = fn._values.map(f => exports.wrapFnWithDebugger(f))
   }
 
   adjustSize(canvas, x, y, options) {
@@ -229,7 +275,7 @@ class TupleDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
     this.options.show_output = false
-    fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
+    this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
   }
 
   adjustSize(canvas, x, y, options) {
@@ -270,7 +316,7 @@ class PipeDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
     this.options.show_output = false
-    fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
+    this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
   }
 
   adjustSize(canvas, x, y, options) {
@@ -314,25 +360,25 @@ const FnDebuggerMap = {
 }
 
 function addFnDebugger(name, dbg) {
-    FnDebuggerMap[name] = dbg
+  FnDebuggerMap[name] = dbg
 }
 
 function getFnDebugger(name) {
-    return FnDebuggerMap[name]
+  return FnDebuggerMap[name]
 }
 
 exports.wrapFnWithDebugger = function(fn) {
-    let wrap = getFnDebugger(fn.typeName)
-    if (!wrap)
-      throw new Error(`No debugger found for "${fn.typeName}"!`)
-    return new wrap(fn)
+  let wrap = getFnDebugger(fn.typeName)
+  if (!wrap)
+    throw new Error(`No debugger found for "${fn.typeName}"!`)
+  return new wrap(fn)
 }
 
 class CallExprDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
 
-    fn.f = exports.wrapFnWithDebugger(fn.f)
+    this.contained = fn.f = exports.wrapFnWithDebugger(fn.f)
     fn.params = fn.params.map(f => exports.wrapFnWithDebugger(f))
   }
 

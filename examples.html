@@ -117,11 +117,13 @@ async function start_debug() {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.font = '14px arial'
     ctx.lineWidth = 0.5
+    ftl_debugger.debug_ctrl.reset()
     let exec = new ftl_debugger.wrapFnWithDebugger(module._executables[0])
     let options = { margin: 4, text_height: 14, font: '14px arial', large_font: '28px arial' }
     exec.adjustSize(ctx, 40, 40, options)
     exec.adjustLocation(0, 0, options)
     exec.render(ctx, options)
+    window.ftl_exec = exec
     await exec.apply()
     // draw all executables into diagram
     //for (let exec of module.executables) {
@@ -156,6 +158,7 @@ async function start_debug() {
     }
   }
   finally {
+    window.ftl_exec = null
     enable_debug_panel(false)
     enable_run_buttons_panel(true)
   }
@@ -224,19 +227,17 @@ function input() {
     return new Tuple()
 }
 
-function draw_graph() {
-  const canvas = document.getElementById('ftl-graph');
-
-  if (canvas.getContext) {
-    const ctx = canvas.getContext('2d')
-
-    ctx.fillStyle = 'rgb(200, 0, 0)';
-    ctx.fillRect(10, 10, 50, 50);
-
-    ctx.fillStyle = 'rgba(0, 0, 200, 0.5)';
-    ctx.fillRect(30, 30, 50, 50);
+function showBreakPoint(e) {
+  if (!window.ftl_exec)
+    return
+  let selected = window.ftl_exec.selectFn(e.offsetX, e.offsetY)
+  if (selected) {
+    console.log(`selected ${selected}`)
+    selected.setBreakpoint()
+  } else
+    console.log('found nothing')
 }
-}
+
 var exports = {}
 </script>
 
@@ -265,7 +266,7 @@ var ftl_debugger = exports
 </script>
 
 </head>
-<body style='font-family:arial;font-size: 14pt;'>
+<body style='font-family:arial;font-size: 14pt;' onload='load_ftl("demo", "welcome")'>
 <h2>FTL Examples</h2>
 <p>This page contains FTL library, basics of FTL in individual examples, and some actual examples.</p>
 <p>Lastly there is <b>write your own program</b> panel where you can either copy from example or write your own FTL program.</p>
@@ -333,7 +334,7 @@ except "->", which is preserved. Simply copy from below when you need to define 
     <div id='debug-panel' style='margin-top: 20px; margin-bottom: 10px;display:none'>
     </div>
 
-  <canvas id='ftl-graph' width='500' height='400' style="width:500px;height:400px;border:1px solid #d3d3d3;">Function graphs show here.</canvas>
+  <canvas id='ftl-graph' width='500' height='400' style="width:500px;height:400px;border:1px solid #d3d3d3;" onclick='showBreakPoint(event)'>Function graphs show here.</canvas>
 
   <div style='width:100%;height:400px'>
     <textarea id='result' readonly='true' style='width:100%;height:200px;;font-size:14pt'></textarea>
