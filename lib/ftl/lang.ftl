@@ -74,8 +74,8 @@ fn loop$() <? condition$() {
   let [condition_f] = condition().wrapped.unwrap()
 
   do {
-    res = loop_f.apply(res)
-  } while (condition_f.applyAndResolve(res))
+    res = await loop_f.apply(res)
+  } while (await condition_f.applyAndResolve(res))
 
   return res
 }
