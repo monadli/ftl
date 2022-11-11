@@ -38,7 +38,7 @@ export function addModule(module: Module) {
 
 /**
  * Internal function that returns string presentation of any value.
- * 
+ *
  * @param value value of any type including tuple
  */
 function toString(value: any) {
@@ -121,7 +121,7 @@ export class Module {
 
   /**
    * Add a function from other module via import.
-   * 
+   *
    * @param name 
    * @param f 
    */
@@ -264,7 +264,7 @@ export class Tuple {
 
   /**
    * Creates a tuple from a value only.
-   * 
+   *
    * The only value is accessible with name "_0".
    * @param key
    * @param value
@@ -420,7 +420,7 @@ export class Tuple {
 
       // if name is significant
       if (!name.startsWith('_') || isNaN(parseInt(name.substring(1)))) {
-        if (val instanceof TailFn)
+        if (isTailFn(val))
           val.name = name
         else
           val = new NamedExprFn(name, val)
@@ -485,6 +485,42 @@ export class Tuple {
     buf.push(curr)
     return `<${buf.join(', ')}>`
   }
+}
+
+function isConstFn(val: any): val is ConstFn {
+  return val instanceof ConstFn || val instanceof ProxyFn && val.wrapped instanceof ConstFn
+}
+
+function isFunctionInterfaceFn(val: any): val is FunctionInterfaceFn {
+  return val instanceof FunctionInterfaceFn || val instanceof ProxyFn && val.wrapped instanceof FunctionInterfaceFn
+}
+
+function isNamedExprFn(val: any): val is NamedExprFn {
+  return val instanceof NamedExprFn || val instanceof ProxyFn && val.wrapped instanceof NamedExprFn
+}
+
+function isOpPipeFn(val: any): val is OpPipeFn {
+  return val instanceof OpPipeFn || val instanceof ProxyFn && val.wrapped instanceof OpPipeFn
+}
+
+function isPipeFn(val: any): val is PipeFn {
+  return val instanceof PipeFn || val instanceof ProxyFn && val.wrapped instanceof PipeFn
+}
+
+function isRefFn(val: any): val is RefFn {
+  return val instanceof RefFn || val instanceof ProxyFn && val.wrapped instanceof RefFn
+}
+
+function isTailFn(val: any): val is TailFn {
+  return val instanceof TailFn || val instanceof ProxyFn && val.wrapped instanceof TailFn
+}
+
+function isTupleFn(val: any): val is TupleFn {
+  return val instanceof TupleFn || val instanceof ProxyFn && val.wrapped instanceof TupleFn
+}
+
+function isVarFn(val: any): val is VarFn {
+  return val instanceof VarFn || val instanceof ProxyFn && val.wrapped instanceof VarFn
 }
 
 /**
@@ -587,7 +623,7 @@ export abstract class WrapperFn extends Fn {
   get wrapped() { return this._wrapped }
 
   isConst() {
-    return this._wrapped instanceof ConstFn
+    return isConstFn(this._wrapped)
   }
 
   async apply(input: any, context?: any) {
@@ -751,7 +787,7 @@ export class FunctionFn extends FunctionBaseFn {
     async apply(input: string, context?: any) {
       let res:Fn|Tuple = await super.apply(input, context)
       var i = 0
-      while (res instanceof TailFn) {
+      while (isTailFn(res)) {
         i++
         if (i == 10000)
           break
@@ -763,7 +799,7 @@ export class FunctionFn extends FunctionBaseFn {
       }
 
       // result may have been wrapped into ConstFn during tail computation
-      return res instanceof ConstFn ? res.apply(null) : res
+      return isConstFn(res) ? res.apply(null) : res
     }
   }
 
@@ -888,18 +924,18 @@ class ClosureFunction {
     // no named parameters
 
     var start = 0
-    if (this.closureParams instanceof RefFn) {
+    if (isRefFn(this.closureParams)) {
       if (this.closureParams.isRefType()) {
       } else
         tpl.addNameValue(this.closureParams.name, input)
       start = 1
-    } else if (this.closureParams instanceof TupleFn) {
+    } else if (isTupleFn(this.closureParams)) {
       tpl = this.jsArgsToTuple(this.closureParams, arguments)
       start = this.closureParams.size
     }
 
     // call expr where params is array of TupleFn
-    else if (Array.isArray(this.closureParams) && this.closureParams[0] instanceof TupleFn) {
+    else if (Array.isArray(this.closureParams) && isTupleFn(this.closureParams[0])) {
       tpl = this.jsArgsToTuple(this.closureParams[0], arguments)
       start = this.closureParams[0].size
     }
@@ -935,7 +971,7 @@ export class NamedExprFn extends WrapperFn {
   get name() { return this._name }
 
   hasRef() {
-    return this._wrapped instanceof RefFn
+    return isRefFn(this._wrapped)
   }
 }
 
@@ -977,7 +1013,7 @@ export class TupleFn extends ComposedFn {
    * Returns element with the name.
    */
   getNamedFn(name: string) {
-    return this.find((fn: any) => fn instanceof NamedExprFn && fn.name == name)
+    return this.find((fn: any) => isNamedExprFn(fn) && fn.name == name)
   }
 
   async apply(input: any, context?: any): Promise<Tuple | any> {
@@ -990,7 +1026,7 @@ export class TupleFn extends ComposedFn {
       var fn = this._fns[i]
 
       var res = await fn.apply(input, context)
-      if (fn instanceof NamedExprFn || fn instanceof TailFn) {
+      if (isNamedExprFn(fn) || isTailFn(fn)) {
         tuple.addNameValue(fn.name, res)
       }
       else
@@ -1018,7 +1054,7 @@ export class PipeFn extends ComposedFn {
       return this
 
     for (var i = 1; i < this._fns.length; i++) {
-      if (res instanceof TailFn)
+      if (isTailFn(res))
         return new TailFn(new PipeFn(res, ... this._fns.slice(i)))
       else if (res instanceof Tuple && res.hasTail())
         return new TailFn(new PipeFn(res.toTupleFn(), ... this._fns.slice(i)))
@@ -1047,9 +1083,9 @@ export class OpPipeFn extends ComposedFn {
   }
 
   static isOpPipe(fn: Fn): boolean {
-    if (fn instanceof OpPipeFn)
+    if (isOpPipeFn(fn))
       return true
-    else if (fn instanceof PipeFn || fn instanceof TupleFn)
+      else if (isPipeFn(fn) || isTupleFn(fn))
       return OpPipeFn.isOpPipe((fn as any)._fns[0])
     else
       return false
@@ -1060,14 +1096,14 @@ export class OpPipeFn extends ComposedFn {
     async function resolve_refs(input: any, first_tuple_elm: any, op2: any): Promise<Fn | undefined> {
       if (!input)
         return op2
-      if (op2 instanceof RefFn) {
-        if (op2.isTupleSelector() || !(input instanceof Tuple) || first_tuple_elm instanceof TupleFn && first_tuple_elm.hasName(op2.name))
-          return op2
+        if (isRefFn(op2)) {
+          if (op2.isTupleSelector() || !(input instanceof Tuple) || isTupleFn(first_tuple_elm) && first_tuple_elm.hasName(op2.name))
+            return op2
         else {
           let r = await op2.apply(input)
           return FnUtil.isNone(r) && op2 || (r instanceof Fn && r || new ConstFn(r))
         }
-      } else if (op2 instanceof TupleFn) {
+      } else if (isTupleFn(op2)) {
         let fns = (op2 as any)._fns
         for (var i = 0; i < fns.length; i++) {
           let f = fns[i]
@@ -1077,7 +1113,7 @@ export class OpPipeFn extends ComposedFn {
           }
         }
         return op2
-      } else if (op2 instanceof PipeFn) { 
+      } else if (isPipeFn(op2)) { 
         await resolve_refs(input, first_tuple_elm, (op2 as any)._fns[0])
         return op2
       } else
@@ -1091,8 +1127,8 @@ export class OpPipeFn extends ComposedFn {
     if (res === first_tuple_elm)
       return this
 
-    if (res instanceof TailFn) {
-      return new TailFn(new PipeFn(res, this._fns[1]))
+    if (isTailFn(res)) {
+        return new TailFn(new PipeFn(res, this._fns[1]))
     } else if (res instanceof Tuple && res.hasTail()) {
       return new TailFn(new PipeFn(res.toTupleFn(), this._fns[1]))
     }
@@ -1161,7 +1197,7 @@ export class RefFn extends Fn {
       if (this.params != null) {
         if (typeof (e) == 'function') {
           var args = []
-          if (this.params instanceof RefFn)
+          if (isRefFn(this.params))
             args.push(input.get(this.params.name))
           else if (this.params instanceof Fn) {
             args = await this.params.apply(input)
@@ -1175,7 +1211,7 @@ export class RefFn extends Fn {
         // e not a function but an Fn
         else {
           var tpl = this.params.apply(input)
-          if (this.params instanceof RefFn)
+          if (isRefFn(this.params))
             tpl = Tuple.fromNameValue(this.params.name, tpl)
           else if (!(tpl instanceof Tuple))
             tpl = Tuple.fromValue(tpl)
@@ -1327,7 +1363,7 @@ export class CallExprFn extends Fn {
     if (!(f instanceof Fn))
       throw new FtlRuntimeError(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)")
 
-    if (f instanceof RefFn)
+    if (isRefFn(f))
       f = await f.apply(input)
 
     let intermediate = await this.params[0].apply(input)
@@ -1372,7 +1408,7 @@ export class ExprRefFn extends WrapperFn {
   closure: any
 
   constructor(fnl: any, expr: any) {
-    if (!(fnl instanceof FunctionInterfaceFn))
+    if (!(isFunctionInterfaceFn(fnl)))
       throw new FtlRuntimeError("functional is not instanceof FunctionInterfaceFn")
 
     super(expr)
@@ -1404,11 +1440,11 @@ class TailFn extends WrapperFn {
     super(fn)
     this.closure = closure
 
-    if (fn instanceof PipeFn) {
+    if (isPipeFn(fn)) {
       var first = fn.first
       if (TailFn.isTail(first)) {
         fn.replaceAt(0, (first as TailFn)._wrapped)
-      } else if (first instanceof TupleFn) {
+      } else if (isTupleFn(first)) {
         this.addTail(first)
       }
     }
@@ -1429,7 +1465,7 @@ class TailFn extends WrapperFn {
       this._tails.unshift(tail)
     }
     else {
-      tail.filter(elm => elm instanceof TupleFn).forEach(elm => {
+      tail.filter(elm => isTupleFn(elm)).forEach(elm => {
         this.addTail(elm as TupleFn)
       })
     }
@@ -1455,7 +1491,7 @@ class TailFn extends WrapperFn {
    * @param elm element to be tested
    */
   static isTail(elm:any) {
-    return elm instanceof TailFn
+    return isTailFn(elm)
   }
 
   async ResolveNextTail(context: any) {
@@ -1487,7 +1523,7 @@ class TailFn extends WrapperFn {
 
   async apply(input: any, context?: any) {
     var res = await this._wrapped.apply(this.closure, context)
-    if (res instanceof TailFn) return res
+    if (isTailFn(res)) return res
     else if (res instanceof Tuple && res.hasTail()) return new TailFn(res.toTupleFn())
     return new ConstFn(res)
   }
@@ -1591,7 +1627,7 @@ export class ArrayElementSelectorFn extends NamedFn {
       || []
     )
 
-    if (list instanceof VarFn)
+    if (isVarFn(list))
       list = list.value
 
     let index: any = typeof this._index == 'number' ? this._index : await this._index.apply(input)
@@ -1778,12 +1814,36 @@ export class SideffectedFn extends WrapperFn {
   }
 
   get name() {
-    return this._wrapped instanceof RefFn && this._wrapped.name || undefined
+    return isRefFn(this._wrapped) && this._wrapped.name || undefined
   }
 
   async apply(input: any, context?: any): Promise<Tuple | any> {
     for (let d of this.sideffects)
       await d.apply(input, context)
     return await super.apply(input, context)
+  }
+}
+
+/**
+ * This class is only used to wrap a function
+ * for non-computation. Example is for debugging.
+ */
+export abstract class ProxyFn extends Fn {
+
+  protected _wrapped: Fn
+
+  constructor(wrapped: Fn) {
+    super()
+    this._wrapped = wrapped
+  }
+
+  get wrapped() { return this._wrapped }
+
+  async apply(input: any, context?: any) {
+    return await this._wrapped.apply(input, context)
+  }
+
+  toString() {
+    return this._wrapped.toString()
   }
 }
