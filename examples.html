@@ -63,7 +63,7 @@ function load_ftl(path, name) {
     console.log(`loaded ${path}/${name}.ftl`)
     document.getElementById('code-name').innerHTML = `${name}.ftl`
     curr_path = name
-    
+
     let editor = document.getElementById('code_content')
     if (in_user_code) {
       user_code = editor.value  
@@ -72,7 +72,7 @@ function load_ftl(path, name) {
 
     editor.value = ftl_content
     editor.readOnly = true
-    
+
     if (path == 'lib') {
       document.getElementById('run-button').disabled = true
     } else {
@@ -93,14 +93,29 @@ function load_user_code() {
   document.getElementById('code-name').innerHTML = 'write your own program'
 }
 
-function enable_run_button(enabled) { document.getElementById('run-button').style.disabled = !enabled }
-function enable_debug_button(enabled) { document.getElementById('debug-button').style.disabled = !enabled }
-function enable_debug_panel(enabled) { document.getElementById('debug-panel').style.display = enabled ? 'block' : 'none' }
-function enable_run_buttons_panel(enabled) { document.getElementById('run-buttons-panel').style.display = enabled ? 'block' : 'none' }
+function enable_by_id(id, enable) {
+  document.getElementById(id).style.disabled = !enable
+}
+function enable_run_button(enable) { enable_by_id('run-button', enable) }
+function enable_debug_button(enable) { enable_by_id('debug-button', enable) }
+function display_nav(enable) {
+  document.getElementsByTagName('nav')[0].style.display = enable ? 'block' : 'none'
+}
+function display_panel_by_id(id, display) {
+  document.getElementById(id).style.display = display ? 'block' : 'none'
+}
+function display_debug_panel(display) { display_panel_by_id('debug-panel', display) }
+function enable_run_buttons_panel(display) { display_panel_by_id('run-buttons-panel', display) }
+function enable_editor(enable) {
+  if (in_user_code)
+    document.getElementById('code_content').readOnly = !enable
+}
 
 async function start_debug() {
-  enable_debug_panel(true)
+  display_debug_panel(true)
   enable_run_buttons_panel(false)
+  display_nav(false)
+  enable_editor(false)
 
   let result_pane = document.getElementById('result')
   try {
@@ -133,7 +148,7 @@ async function start_debug() {
     ////let wait = await ftl_debugger.debug_ctrl.show().then(res => {console.log(res);})
     ////console.log('working', wait)
     /*
-    
+
     // run all executables
     for (let exec of module.executables) {
       try {
@@ -159,14 +174,16 @@ async function start_debug() {
   }
   finally {
     window.ftl_exec = null
-    enable_debug_panel(false)
+    display_debug_panel(false)
     enable_run_buttons_panel(true)
+    display_nav(true)
+    enable_editor(true)
   }
 }
 
 function debug_stop() {
   enable_run_buttons_panel(true)
-  enable_debug_panel(false)
+  display_debug_panel(false)
 }
 
 async function run_ftl() {
@@ -203,7 +220,10 @@ async function run_ftl() {
       try {
         let res = await exec.apply()
         if (res !== undefined) {
-          if (Array.isArray(res) || typeof res == 'string') {
+          if (res instanceof ftl.RefFn) {
+            result_pane.value += `Reference to '${res.name}' seems not resolved. Did you forget to import?`
+          }
+          else if (Array.isArray(res) || typeof res == 'string') {
             result_pane.value += JSON.stringify(res)
           } else {
             result_pane.value += res

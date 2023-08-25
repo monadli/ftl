@@ -3,11 +3,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.debug_ctrl = exports.wrapFnWithDebugger = exports.DebuggerStopException = exports.setCanvas = void 0;
 
 let canvas
+let debugStage = ''
 
 function setCanvas(val) {
   canvas = val
 }
 exports.setCanvas = setCanvas
+
+const DebugState = {
+  Continue: 'Continue',
+  Paused: 'Pause',
+  StepInto: 'Step Into',
+  StepOut: 'Step Out',
+  StepOver: 'Step Over',
+  Stop: 'Stop'
+}
 
 function drawSquereBrakets(canvas, x, y, width, height, options) {
   canvas.beginPath()
@@ -25,6 +35,13 @@ function drawSquereBrakets(canvas, x, y, width, height, options) {
   canvas.stroke()
 }
 
+function drawRect(fn, color) {
+  const style = canvas.strokeStyle
+  canvas.strokeStyle = color
+  canvas.strokeRect(fn.x, fn.y, fn.width, fn.height)
+  canvas.strokeStyle = style
+}
+
 exports.DebuggerStopException = class DebuggerStopException extends Error {
   constructor() {
     super()
@@ -37,64 +54,72 @@ exports.DebuggerStopException = class DebuggerStopException extends Error {
 class DebugControl {
   constructor() {
     this.ui = document.createElement('div');
-    this.ui.innerHTML = `<button id="debug.continue" title='Continue'>⏩</button><button id="debug.stepover" title='Step Over'>▶️</button><button id="debug.stepinto" title='Step Into'>🔽</button><button id="debug.stepout" title='Step Out' disabled>🔼</button><button id="debug.stop" title='Stop'>⏹️</button>`
+
+    this.ui.innerHTML =
+`<button id="debug.continue" title='${DebugState.Continue}'>⏩</button>
+<button id="debug.pause" title='${DebugState.Pause}' style='display:hidden'>⏸️</button>
+<button id="debug.stepover" title='${DebugState.StepOver}'>▶️</button>
+<button id="debug.stepinto" title='${DebugState.StepInto}'>🔽</button>
+<button id="debug.stepout" title='${DebugState.StepOut}' disabled>🔼</button>
+<button id="debug.stop" title='${DebugState.Stop}'>⏹️</button>`
+
     this.elements = {}
     this.focusable = []
     this.continue_btn = this.ui.querySelector('#debug\\.continue')
+    this.pause_btn = this.ui.querySelector('#debug\\.pause')
     this.stepover_btn = this.ui.querySelector('#debug\\.stepover')
     this.stepinto_btn = this.ui.querySelector('#debug\\.stepinto')
     this.stepout_btn = this.ui.querySelector('#debug\\.stepout')
     this.stop_btn = this.ui.querySelector('#debug\\.stop')
-
-    this.continue_btn.addEventListener('click', () => {
-      if (this.continue_btn.title == 'Continue') {
-        this.continue_btn.innerHTML = '⏸️'
-        this.continue_btn.title = 'Pause'
-      } else {
-        this.continue_btn.innerHTML = '⏩'
-        this.continue_btn.title = 'Continue'
-      }
-    })
-
     this.ui.addEventListener('click', (e) => {
+      if (e.target.nodeName != 'BUTTON')
+        return
       this.enableAllButtons(false)
       this.clickedButton = e.target
+      if (this.clickedButton == this.continue_btn) {
+        this.clickedButton.style.display = 'none'
+        this.pause_btn.style.display = 'inline'
+        this.enableAllButtons(false)
+        this.pause_btn.style.display = 'inline'
+        this.pause_btn.enabled = true
+      } else if (this.clickedButton == this.pause_btn) {
+        this.clickedButton.style.display = 'none'
+        this.continue_btn.style.display = 'inline'
+      }
+      debugStage = this.clickedButton.title
       this.ui.dispatchEvent(new Event('debug'))
     })
   }
 
+  // Enable or disable all but stop buttons.
   enableAllButtons(enabled) {
     var disabled = !enabled
-    if (this.continue_btn.disabled == enabled)
-      this.continue_btn.disabled = disabled
-    if (this.stepover_btn.disabled == enabled)
-      this.stepover_btn.disabled = disabled
-    if (this.stepinto_btn.disabled == enabled)
-      this.stepinto_btn.disabled = disabled
-    if (this.stepout_btn.disabled == enabled)
-      this.stepout_btn.disabled = disabled
-    if (this.stop_btn.disabled == enabled)
-      this.stop_btn.disabled = disabled
+    for (let btn of this.ui.children) {
+      if (btn.id != 'debug.stop' && btn.disabled == enabled)
+        btn.disabled = disabled
+    }
   }
 
   reset() {
-    this.clickedButton = this.stepover_btn
+    debugStage = ''
+    this.continue_btn.style.display = 'inline'
+    this.pause_btn.style.display = 'none'
   }
 
-  show() {
-    if (this.clickedButton.title == 'Stop') {
+  show(pause) {
+    if (debugStage == DebugState.Continue) {
+      this.reset()
+    }
+
+    if (debugStage == DebugState.Stop) {
       return new Promise(resolve => setTimeout(() => {
         resolve('Stop')
       }, 1))
-    } else if (this.clickedButton.title == 'Pause') {
-      this.stop_btn.disabled = false
-      this.continue_btn.disabled = false
-      return new Promise(resolve => setTimeout(() => resolve('Continue'), 5000))
     } else {
       this.enableAllButtons(true)
       return new Promise(resolve => {
         this.ui.addEventListener('debug', () => {
-          resolve(this.clickedButton.title)
+          resolve(debugStage)
         }, { once: true })
       })
     }
@@ -105,8 +130,10 @@ exports.debug_ctrl = new DebugControl()
 
 /**
  * This is the root of all debugging wrapper for an Fn.
+ *
+ * In descendent classes, any wrapped fns are all referenced as contained.
  */
-class DebuggerFn extends ftl.WrapperFn {
+class DebuggerFn extends ftl.ProxyFn {
 
   constructor(fn) {
     super(fn)
@@ -114,11 +141,12 @@ class DebuggerFn extends ftl.WrapperFn {
       show_input: false,
       show_output: true
     }
-    this.breakpoint = false
+    this.isBreakpoint = false
+    this.debugPause = true
   }
 
   setBreakpoint() {
-    if (this.breakpoint) {
+    if (this.isBreakpoint) {
       canvas.strokeStyle = 'white'
       canvas.lineWidth = 3
       canvas.strokeRect(this.x, this.y, this.width, this.height);
@@ -129,7 +157,7 @@ class DebuggerFn extends ftl.WrapperFn {
       canvas.lineWidth = 3
     }
     canvas.strokeRect(this.x, this.y, this.width, this.height);
-    this.breakpoint = !this.breakpoint
+    this.isBreakpoint = !this.isBreakpoint
   }
 
   /**
@@ -141,18 +169,18 @@ class DebuggerFn extends ftl.WrapperFn {
   adjustSize(canvas, x, y, options) {
     this.x = x
     this.y = y
-    return [this.width, this.height] = this._wrapped._wrapped.adjustSize(canvas, x, y, options)
+    return [this.width, this.height] = this.proxied._wrapped.adjustSize(canvas, x, y, options)
   }
 
   adjustLocation(deltaX, deltaY, options) {
     this.x += deltaX
     this.y += deltaY
-    if (this._wrapped && this._wrapped._wrapped)
-      this._wrapped._wrapped.adjustLocation(deltaX, deltaY, options)
+    if (this.proxied && this.proxied._wrapped)
+      this.proxied._wrapped.adjustLocation(deltaX, deltaY, options)
   }
 
   render(canvas, options) {
-    this._wrapped._wrapped.render(canvas, options)
+    this.proxied._wrapped.render(canvas, options)
   }
 
   // Find the Fn that is clicked.
@@ -172,7 +200,7 @@ class DebuggerFn extends ftl.WrapperFn {
         }
       }
       return selected || this
-    }  
+    }
     else
       return null
   }
@@ -203,14 +231,23 @@ class DebuggerFn extends ftl.WrapperFn {
   }
 
   async apply(input, context) {
+    let debugPause = debugStage != DebugState.Continue && this.debugPause
     if (this.options.show_input)
       this.showInput(input, this.x, this.y)
-    let r = await exports.debug_ctrl.show()
-    if (r === 'Stop') {
-      throw new exports.DebuggerStopException()
+    var drawDebugIndicator = debugPause && !(this instanceof PauseNoShowDebugger)
+    if (drawDebugIndicator) {
+      drawRect(this, 'red')
+    }
+    if (debugPause || this.isBreakpoint) {
+      let r = await exports.debug_ctrl.show()
+      if (r === DebugState.Stop) {
+        throw new exports.DebuggerStopException()
+      }
     }
 
     const res = await super.apply(input, context)
+    if (drawDebugIndicator)
+      drawRect(this, 'black')
     if (this.options.show_output)
       this.showOutput(res, this.x + this.width, this.y)
     return res
@@ -221,6 +258,7 @@ class WrapperDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
     this.options.show_output = false
+    this.debugPause = false
     this.contained = fn._wrapped = exports.wrapFnWithDebugger(fn._wrapped)
   }
 }
@@ -228,6 +266,7 @@ class WrapperDebugger extends DebuggerFn {
 class ArrayInitializerDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
+    this.options.show_output = false
     this.contained = fn._values = fn._values.map(f => exports.wrapFnWithDebugger(f))
   }
 
@@ -236,11 +275,11 @@ class ArrayInitializerDebugger extends DebuggerFn {
     this.y = y
     let [w, h] = [0, 0]
     w += canvas.measureText('[').width
-    for (let i = 0; i < this._wrapped._values.length; i++) {
+    for (let i = 0; i < this.proxied._values.length; i++) {
       if (i > 0) {
         w += canvas.measureText(', ').width
       }
-      let v = this._wrapped._values[i]
+      let v = this.proxied._values[i]
       let [sw, sh] = v.adjustSize(canvas, x + w, y, options)
       w += sw
       h = Math.max(h, sh)
@@ -252,7 +291,7 @@ class ArrayInitializerDebugger extends DebuggerFn {
   adjustLocation(deltaX, deltaY, options) {
     this.x += deltaX
     this.y += deltaY
-    for (let v of this._wrapped._values) {
+    for (let v of this.proxied._values) {
       v.adjustLocation(deltaX, deltaY, options)
     }
   }
@@ -260,11 +299,11 @@ class ArrayInitializerDebugger extends DebuggerFn {
   render(canvas, options) {
     canvas.fillText('[', this.x, this.y + options.text_height)
     let last_p
-    for (let i = 0; i < this._wrapped._values.length; i++) {
+    for (let i = 0; i < this.proxied._values.length; i++) {
       if (i > 0) {
         canvas.fillText(', ', last_p.x + last_p.width, last_p.y + options.text_height)
       }
-      last_p = this._wrapped._values[i]
+      last_p = this.proxied._values[i]
       last_p.render(canvas, options)
     }
     canvas.fillText(']', last_p.x + last_p.width, last_p.y + options.text_height)
@@ -276,6 +315,7 @@ class TupleDebugger extends DebuggerFn {
     super(fn)
     this.options.show_output = false
     this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
+    this.debugPause = false
   }
 
   adjustSize(canvas, x, y, options) {
@@ -284,7 +324,7 @@ class TupleDebugger extends DebuggerFn {
     this.y = y
     let y_start = y + options.margin
     this.width = 0
-    this._wrapped._fns.map(f => {
+    this.contained.map(f => {
       let [w, h] = f.adjustSize(canvas, x + options.margin, y_start, options)
       y_start += h + options.margin
       if (w > this.width) this.width = w
@@ -298,13 +338,13 @@ class TupleDebugger extends DebuggerFn {
   adjustLocation(deltaX, deltaY, options) {
     this.x += deltaX
     this.y += deltaY
-    this._wrapped._fns.forEach(elm => {
+    this.proxied._fns.forEach(elm => {
       elm.adjustLocation(deltaX, deltaY, options)
     })
   }
 
   render(canvas, options) {
-    this._wrapped._fns.map(f => {
+    this.proxied._fns.map(f => {
       f.render(canvas, options)
     })
     canvas.strokeRect(this.x, this.y, this.width, this.height)
@@ -317,6 +357,7 @@ class PipeDebugger extends DebuggerFn {
     super(fn)
     this.options.show_output = false
     this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
+    this.debugPause = false
   }
 
   adjustSize(canvas, x, y, options) {
@@ -325,7 +366,7 @@ class PipeDebugger extends DebuggerFn {
     this.y = y
     let x_start = x
     this.width = this.height = 0
-    this._wrapped._fns.map(f => {
+    this.contained.map(f => {
       let [w, h] = f.adjustSize(canvas, x_start, y, options)
       x_start += w + 30
       this.height = Math.max(h, this.height)
@@ -336,7 +377,7 @@ class PipeDebugger extends DebuggerFn {
   }
 
   adjustLocation(deltaX, deltaY, options) {
-    this._wrapped._fns.forEach(elm => {
+    this.proxied._fns.forEach(elm => {
       let delta_y = (this.height - elm.height)/2 - options.margin
       elm.adjustLocation(deltaX, deltaY + delta_y, options)
     })
@@ -344,13 +385,13 @@ class PipeDebugger extends DebuggerFn {
 
   render(canvas, options) {
 
-    let last = this._wrapped._fns[0]
+    let last = this.proxied._fns[0]
     last.render(canvas, options)
-    for (var i = 1; i < this._wrapped._fns.length; i++) {
+    for (var i = 1; i < this.proxied._fns.length; i++) {
       canvas.font = options.large_font
       canvas.fillText('\u2192', last.x + last.width, last.y + (last.height + options.text_height) / 2)
       canvas.font = options.font
-      last = this._wrapped._fns[i]
+      last = this.proxied._fns[i]
       last.render(canvas, options)
     }
   }
@@ -385,39 +426,42 @@ class CallExprDebugger extends DebuggerFn {
   adjustSize(canvas, x, y, options) {
     this.x = x
     this.y = y
-    let [w, h] = this._wrapped.f.adjustSize(canvas, x, y, options)
+    let [w, h] = this._proxied.f.adjustSize(canvas, x, y, options)
     w += canvas.measureText('(').width
-    for (let i = 0; i < this._wrapped.params.length; i++) {
+    for (let i = 0; i < this._proxied.params.length; i++) {
       if (i > 0) {
         w += canvas.measureText(', ').width
       }
-      let p = this._wrapped.params[i]
+      let p = this._proxied.params[i]
       let [sw, sh] = p.adjustSize(canvas, x + w, y, options)
       w += sw
       h = Math.max(h, sh)
     }
     w += canvas.measureText(')').width
+
+    // adjust f's y
+    this._proxied.f.y += (h - this._proxied.f.height) / 2
     return [this.width, this.height] = [w, h]
   }
 
   adjustLocation(deltaX, deltaY, options) {
     this.x += deltaX
     this.y += deltaY
-    this._wrapped.f.adjustLocation(deltaX, deltaY, options)
-    for (let p of this._wrapped.params) {
+    this._proxied.f.adjustLocation(deltaX, deltaY, options)
+    for (let p of this._proxied.params) {
       p.adjustLocation(deltaX, deltaY, options)
     }
   }
 
   render(canvas, options) {
-    this._wrapped.f.render(canvas, options)
-    canvas.fillText('(', this._wrapped.f.x + this._wrapped.f.width, this._wrapped.f.y + options.text_height)
+    this._proxied.f.render(canvas, options)
+    canvas.fillText('(', this._proxied.f.x + this._proxied.f.width, this._proxied.f.y + options.text_height)
     let last_p
-    for (let i = 0; i < this._wrapped.params.length; i++) {
+    for (let i = 0; i < this._proxied.params.length; i++) {
       if (i > 0) {
         canvas.fillText(', ', last_p.x + last_p.width, last_p.y + options.text_height)
       }
-      last_p = this._wrapped.params[i]
+      last_p = this._proxied.params[i]
       last_p.render(canvas, options)
     }
     canvas.fillText(')', last_p.x + last_p.width, last_p.y + options.text_height)
@@ -432,7 +476,7 @@ class ConstDebugger extends DebuggerFn {
 
   adjustSize(canvas, x, y, options) {
     const margins = options.margin * 2
-    const metrix = canvas.measureText(this._wrapped.toString())
+    const metrix = canvas.measureText(this.proxied.toString())
 
     this.x = x
     this.y = y
@@ -443,7 +487,21 @@ class ConstDebugger extends DebuggerFn {
 
   render(canvas, options) {
     canvas.strokeRect(this.x, this.y, this.width, this.height)
-    canvas.fillText(this._wrapped.toString(), this.x + options.margin, this.y + options.text_height + options.margin)
+    canvas.fillText(this.proxied.toString(), this.x + options.margin, this.y + options.text_height + options.margin)
+  }
+}
+
+class DebugPauseDebugger extends WrapperDebugger {
+  constructor(fn) {
+    super(fn)
+    this.debugPause = true
+  }
+}
+
+class PauseNoShowDebugger extends WrapperDebugger {
+  constructor(fn) {
+    super(fn)
+    this.debugPause = true
   }
 }
 
@@ -460,7 +518,7 @@ class FunctionDebugger extends DebuggerFn {
 
   adjustSize(canvas, x, y, options) {
     const margins = options.margin * 2
-    const metrix = canvas.measureText(this._wrapped._name)
+    const metrix = canvas.measureText(this.proxied._name)
 
     this.x = x
     this.y = y
@@ -471,18 +529,19 @@ class FunctionDebugger extends DebuggerFn {
 
   render(canvas, options) {
     canvas.strokeRect(this.x, this.y, this.width, this.height)
-    canvas.fillText(this._wrapped._name, this.x + options.margin, this.y + options.text_height + options.margin)
+    canvas.fillText(this.proxied._name, this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
 
 class RefDebugger extends DebuggerFn {
   constructor(fn) {
     super(fn)
+    this.options.show_output = true
   }
 
   adjustSize(canvas, x, y, options) {
     const margins = options.margin * 2
-    const metrix = canvas.measureText(this._wrapped.name)
+    const metrix = canvas.measureText(this.proxied.name)
 
     this.x = x
     this.y = y
@@ -493,7 +552,7 @@ class RefDebugger extends DebuggerFn {
 
   render(canvas, options) {
     canvas.strokeRect(this.x, this.y, this.width, this.height)
-    canvas.fillText(this._wrapped.name, this.x + options.margin, this.y + options.text_height + options.margin)
+    canvas.fillText(this.proxied.name, this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
 
@@ -502,19 +561,25 @@ class NamedExprDebugger extends WrapperDebugger {
     super(fn)
   }
 
+  get name() { return this._proxied.name }
+
+  hasRef() {
+    return this.proxied.hasRef()
+  }
+
   adjustSize(canvas, x, y, options) {
     this.x = x
     this.y = y
-    const metrix = canvas.measureText(this._wrapped.name + ': ')
-    let [w, h] = this._wrapped._wrapped.adjustSize(canvas, x + metrix.width, y, options)
+    const metrix = canvas.measureText(this.proxied.name + ': ')
+    let [w, h] = this.proxied.wrapped.adjustSize(canvas, x + metrix.width, y, options)
     this.width = w + metrix.width
     this.height = h
     return [this.width, this.height]
   }
 
   render(canvas, options) {
-    canvas.fillText(this._wrapped.name + ': ', this.x, this.y + options.text_height + options.margin)
-    this._wrapped._wrapped.render(canvas, options)
+    canvas.fillText(this.proxied.name + ': ', this.x, this.y + options.text_height + options.margin)
+    this.proxied.wrapped.render(canvas, options)
   }
 }
 
@@ -525,7 +590,7 @@ class TurnaryOpDebugger extends FunctionDebugger {
 
   adjustSize(canvas, x, y, options) {
     const margins = options.margin * 2
-    const metrix = canvas.measureText(this._wrapped._name)
+    const metrix = canvas.measureText(this.proxied._name)
 
     this.x = x
     this.y = y
@@ -536,13 +601,13 @@ class TurnaryOpDebugger extends FunctionDebugger {
 
   render(canvas, options) {
     canvas.strokeRect(this.x, this.y, this.width, this.height)
-    canvas.fillText(this._wrapped._name, this.x + options.margin, this.y + options.text_height + options.margin)
+    canvas.fillText(this.proxied._name, this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
 
 FnDebuggerMap['ArrayInitializerFn'] = ArrayInitializerDebugger
 FnDebuggerMap['ConstFn'] = ConstDebugger
-FnDebuggerMap['ExecutableFn'] = WrapperDebugger
+FnDebuggerMap['ExecutableFn'] = PauseNoShowDebugger
 FnDebuggerMap['ExprRefFn'] = ExprRefDebugger
 FnDebuggerMap['FunctionFn'] = FunctionDebugger
 FnDebuggerMap['NamedExprFn'] = NamedExprDebugger

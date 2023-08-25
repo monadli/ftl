@@ -1,6 +1,5 @@
-// copy from main branch compiled ftl-core.js with comments removed
+// copy of compiled ftl-core.js from async branch with comments removed
 "use strict";
-// ftl core functions and classes.
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -11,7 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SideffectedFn = exports.SideffectFn = exports.ExecutableFn = exports.CurryExprFn = exports.BinaryOperatorWithPrefixFn = exports.ArrayRangeSelectorFn = exports.ArrayElementSelectorFn = exports.ArrayInitializerWithRangeFn = exports.ArrayInitializerFn = exports.ExprRefFn = exports.CallExprFn = exports.ExprFn = exports.SeqSelectorOrDefault = exports.TupleSelectorFn = exports.FunctionHolder = exports.RefFn = exports.OpPipeFn = exports.PipeFn = exports.TupleFn = exports.NamedExprFn = exports.FunctionInterfaceFn = exports.FunctionFn = exports.NativeFunctionFn = exports.FunctionBaseFn = exports.ConstFn = exports.WrapperFn = exports.Fn = exports.Tuple = exports.Module = exports.FnUtil = exports.addModule = exports.getModule = void 0;
+exports.ProxyFn = exports.SideffectedFn = exports.SideffectFn = exports.ExecutableFn = exports.CurryExprFn = exports.BinaryOperatorWithPrefixFn = exports.ArrayRangeSelectorFn = exports.ArrayElementSelectorFn = exports.ArrayInitializerWithRangeFn = exports.ArrayInitializerFn = exports.ExprRefFn = exports.CallExprFn = exports.ExprFn = exports.SeqSelectorOrDefault = exports.TupleSelectorFn = exports.FunctionHolder = exports.RefFn = exports.OpPipeFn = exports.PipeFn = exports.TupleFn = exports.NamedExprFn = exports.FunctionInterfaceFn = exports.FunctionFn = exports.NativeFunctionFn = exports.FunctionBaseFn = exports.ConstFn = exports.WrapperFn = exports.Fn = exports.Tuple = exports.Module = exports.FnUtil = exports.addModule = exports.getModule = void 0;
 const version = '0.0.1';
 const TupleSelectorPattern = /_\d+$/;
 const InputSelectorPattern = '_';
@@ -218,7 +217,7 @@ class Tuple {
                 val = new ConstFn(val);
             }
             if (!name.startsWith('_') || isNaN(parseInt(name.substring(1)))) {
-                if (val instanceof TailFn)
+                if (isTailFn(val))
                     val.name = name;
                 else
                     val = new NamedExprFn(name, val);
@@ -272,6 +271,33 @@ class Tuple {
     }
 }
 exports.Tuple = Tuple;
+function isConstFn(val) {
+    return val instanceof ConstFn || val instanceof ProxyFn && val.proxied instanceof ConstFn;
+}
+function isFunctionInterfaceFn(val) {
+    return val instanceof FunctionInterfaceFn || val instanceof ProxyFn && val.proxied instanceof FunctionInterfaceFn;
+}
+function isNamedExprFn(val) {
+    return val instanceof NamedExprFn || val instanceof ProxyFn && val.proxied instanceof NamedExprFn;
+}
+function isOpPipeFn(val) {
+    return val instanceof OpPipeFn || val instanceof ProxyFn && val.proxied instanceof OpPipeFn;
+}
+function isPipeFn(val) {
+    return val instanceof PipeFn || val instanceof ProxyFn && val.proxied instanceof PipeFn;
+}
+function isRefFn(val) {
+    return val instanceof RefFn || val instanceof ProxyFn && val.proxied instanceof RefFn;
+}
+function isTailFn(val) {
+    return val instanceof TailFn || val instanceof ProxyFn && val.proxied instanceof TailFn;
+}
+function isTupleFn(val) {
+    return val instanceof TupleFn || val instanceof ProxyFn && val.proxied instanceof TupleFn;
+}
+function isVarFn(val) {
+    return val instanceof VarFn || val instanceof ProxyFn && val.proxied instanceof VarFn;
+}
 class Fn {
     get typeName() { return this.constructor.name; }
     apply(input, context) {
@@ -282,7 +308,6 @@ class Fn {
     applyAndResolve(input, context) {
         return __awaiter(this, void 0, void 0, function* () {
             let ret = yield this.apply(input, context);
-            // an executable may wrap a tail that needs to be executed
             while (TailFn.isTail(ret)) {
                 ret = yield ret.apply(null);
             }
@@ -330,7 +355,7 @@ class WrapperFn extends Fn {
     }
     get wrapped() { return this._wrapped; }
     isConst() {
-        return this._wrapped instanceof ConstFn;
+        return isConstFn(this._wrapped);
     }
     apply(input, context) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -445,7 +470,7 @@ FunctionFn.FunctionBodyFn = class extends WrapperFn {
         return __awaiter(this, void 0, void 0, function* () {
             let res = yield _super.apply.call(this, input, context);
             var i = 0;
-            while (res instanceof TailFn) {
+            while (isTailFn(res)) {
                 i++;
                 if (i == 10000)
                     break;
@@ -454,8 +479,7 @@ FunctionFn.FunctionBodyFn = class extends WrapperFn {
                 }
                 res = res.hasTail() ? yield res.ResolveNextTail(this) : yield res.apply(null, this);
             }
-            // result may have been wrapped into ConstFn during tail computation
-            return res instanceof ConstFn ? res.apply(null) : res;
+            return isConstFn(res) ? res.apply(null) : res;
         });
     }
 };
@@ -477,16 +501,10 @@ class FunctionInterfaceFn extends NamedFn {
             if (typeof f == 'function' && (f.name == 'bound applyInNativeContext' || f.name == 'bound tailWrapper')) {
                 return f;
             }
-            // For tail, simply return a TailFn wrapping the action function f
-            // for delayed computation, specifically delay the computation
-            // when returned to calling stack to reduce stack depth.
             if (this.isTail()) {
                 let tail = new TailFn(f);
                 return tail.tailWrapper.bind(tail);
             }
-            // Otherwise, bind as a regular javascript function which can be either called
-            // in a native function wrapped in NativeFunctionFn or ftl function wrapped in
-            // FunctionFn
             else {
                 let closure = new ClosureFunction(input instanceof Tuple ? f : input, this.params);
                 return closure.applyInNativeContext.bind(closure);
@@ -516,18 +534,18 @@ class ClosureFunction {
         var tpl = new Tuple();
         // no named parameters
         var start = 0;
-        if (this.closureParams instanceof RefFn) {
+        if (isRefFn(this.closureParams)) {
             if (this.closureParams.isRefType()) {
             }
             else
                 tpl.addNameValue(this.closureParams.name, input);
             start = 1;
         }
-        else if (this.closureParams instanceof TupleFn) {
+        else if (isTupleFn(this.closureParams)) {
             tpl = this.jsArgsToTuple(this.closureParams, arguments);
             start = this.closureParams.size;
         }
-        else if (Array.isArray(this.closureParams) && this.closureParams[0] instanceof TupleFn) {
+        else if (Array.isArray(this.closureParams) && isTupleFn(this.closureParams[0])) {
             tpl = this.jsArgsToTuple(this.closureParams[0], arguments);
             start = this.closureParams[0].size;
         }
@@ -536,9 +554,7 @@ class ClosureFunction {
     apply(input, context) {
         return __awaiter(this, void 0, void 0, function* () {
             var tuple = new Tuple();
-            // append partial parameters first as closure
             // for correctly resolve positional reference
-            // such as _0, _1, etc.
             tuple.appendAll(this.closureParams);
             tuple.appendAll(input);
             return yield this.f.apply(tuple, context);
@@ -552,7 +568,7 @@ class NamedExprFn extends WrapperFn {
     }
     get name() { return this._name; }
     hasRef() {
-        return this._wrapped instanceof RefFn;
+        return isRefFn(this._wrapped);
     }
 }
 exports.NamedExprFn = NamedExprFn;
@@ -564,7 +580,7 @@ class TupleFn extends ComposedFn {
         return this.getNamedFn(name) != null;
     }
     getNamedFn(name) {
-        return this.find((fn) => fn instanceof NamedExprFn && fn.name == name);
+        return this.find((fn) => isNamedExprFn(fn) && fn.name == name);
     }
     apply(input, context) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -575,7 +591,7 @@ class TupleFn extends ComposedFn {
             for (var i = 0; i < len; i++) {
                 var fn = this._fns[i];
                 var res = yield fn.apply(input, context);
-                if (fn instanceof NamedExprFn || fn instanceof TailFn) {
+                if (isNamedExprFn(fn) || isTailFn(fn)) {
                     tuple.addNameValue(fn.name, res);
                 }
                 else
@@ -593,15 +609,13 @@ class PipeFn extends ComposedFn {
     apply(tuple, context) {
         return __awaiter(this, void 0, void 0, function* () {
             var res = yield this._fns[0].apply(tuple, context);
-            // if name is unresolved
             if (res === this._fns[0])
                 return this;
             for (var i = 1; i < this._fns.length; i++) {
-                if (res instanceof TailFn)
+                if (isTailFn(res))
                     return new TailFn(new PipeFn(res, ...this._fns.slice(i)));
                 else if (res instanceof Tuple && res.hasTail())
                     return new TailFn(new PipeFn(res.toTupleFn(), ...this._fns.slice(i)));
-                // still has unresolved ref
                 else if (res instanceof Tuple && res.hasFn() && !OpPipeFn.isOpPipe(this._fns[i]))
                     return new PipeFn(...[res.toTupleFn()].concat(this._fns.slice(i)));
                 res = yield this._fns[i].apply(res, context);
@@ -622,9 +636,9 @@ class OpPipeFn extends ComposedFn {
         }
     }
     static isOpPipe(fn) {
-        if (fn instanceof OpPipeFn)
+        if (isOpPipeFn(fn))
             return true;
-        else if (fn instanceof PipeFn || fn instanceof TupleFn)
+        else if (isPipeFn(fn) || isTupleFn(fn))
             return OpPipeFn.isOpPipe(fn._fns[0]);
         else
             return false;
@@ -635,15 +649,15 @@ class OpPipeFn extends ComposedFn {
                 return __awaiter(this, void 0, void 0, function* () {
                     if (!input)
                         return op2;
-                    if (op2 instanceof RefFn) {
-                        if (op2.isTupleSelector() || !(input instanceof Tuple) || first_tuple_elm instanceof TupleFn && first_tuple_elm.hasName(op2.name))
+                    if (isRefFn(op2)) {
+                        if (op2.isTupleSelector() || !(input instanceof Tuple) || isTupleFn(first_tuple_elm) && first_tuple_elm.hasName(op2.name))
                             return op2;
                         else {
                             let r = yield op2.apply(input);
                             return FnUtil.isNone(r) && op2 || (r instanceof Fn && r || new ConstFn(r));
                         }
                     }
-                    else if (op2 instanceof TupleFn) {
+                    else if (isTupleFn(op2)) {
                         let fns = op2._fns;
                         for (var i = 0; i < fns.length; i++) {
                             let f = fns[i];
@@ -654,7 +668,7 @@ class OpPipeFn extends ComposedFn {
                         }
                         return op2;
                     }
-                    else if (op2 instanceof PipeFn) {
+                    else if (isPipeFn(op2)) {
                         yield resolve_refs(input, first_tuple_elm, op2._fns[0]);
                         return op2;
                     }
@@ -666,7 +680,7 @@ class OpPipeFn extends ComposedFn {
             var res = yield first_tuple_elm.apply(input, context);
             if (res === first_tuple_elm)
                 return this;
-            if (res instanceof TailFn) {
+            if (isTailFn(res)) {
                 return new TailFn(new PipeFn(res, this._fns[1]));
             }
             else if (res instanceof Tuple && res.hasTail()) {
@@ -715,7 +729,7 @@ class RefFn extends Fn {
                 if (this.params != null) {
                     if (typeof (e) == 'function') {
                         var args = [];
-                        if (this.params instanceof RefFn)
+                        if (isRefFn(this.params))
                             args.push(input.get(this.params.name));
                         else if (this.params instanceof Fn) {
                             args = yield this.params.apply(input);
@@ -728,7 +742,7 @@ class RefFn extends Fn {
                     }
                     else {
                         var tpl = this.params.apply(input);
-                        if (this.params instanceof RefFn)
+                        if (isRefFn(this.params))
                             tpl = Tuple.fromNameValue(this.params.name, tpl);
                         else if (!(tpl instanceof Tuple))
                             tpl = Tuple.fromValue(tpl);
@@ -835,7 +849,7 @@ class CallExprFn extends Fn {
             var f = !this.f ? input.get(this.name) : this.f;
             if (!(f instanceof Fn))
                 throw new FtlRuntimeError(this.name + " is not a functional expression. Can not be invoked as " + this.name + "(...)");
-            if (f instanceof RefFn)
+            if (isRefFn(f))
                 f = yield f.apply(input);
             let intermediate = yield this.params[0].apply(input);
             let ret;
@@ -859,7 +873,7 @@ class CallExprFn extends Fn {
 exports.CallExprFn = CallExprFn;
 class ExprRefFn extends WrapperFn {
     constructor(fnl, expr) {
-        if (!(fnl instanceof FunctionInterfaceFn))
+        if (!(isFunctionInterfaceFn(fnl)))
             throw new FtlRuntimeError("functional is not instanceof FunctionInterfaceFn");
         super(expr);
         this.fnl = fnl;
@@ -877,12 +891,12 @@ class TailFn extends WrapperFn {
         this._tails = new Array();
         this.name = null;
         this.closure = closure;
-        if (fn instanceof PipeFn) {
+        if (isPipeFn(fn)) {
             var first = fn.first;
             if (TailFn.isTail(first)) {
                 fn.replaceAt(0, first._wrapped);
             }
-            else if (first instanceof TupleFn) {
+            else if (isTupleFn(first)) {
                 this.addTail(first);
             }
         }
@@ -895,7 +909,7 @@ class TailFn extends WrapperFn {
             this._tails.unshift(tail);
         }
         else {
-            tail.filter(elm => elm instanceof TupleFn).forEach(elm => {
+            tail.filter(elm => isTupleFn(elm)).forEach(elm => {
                 this.addTail(elm);
             });
         }
@@ -913,7 +927,7 @@ class TailFn extends WrapperFn {
         return this._tails.pop();
     }
     static isTail(elm) {
-        return elm instanceof TailFn;
+        return isTailFn(elm);
     }
     ResolveNextTail(context) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -942,7 +956,7 @@ class TailFn extends WrapperFn {
     apply(input, context) {
         return __awaiter(this, void 0, void 0, function* () {
             var res = yield this._wrapped.apply(this.closure, context);
-            if (res instanceof TailFn)
+            if (isTailFn(res))
                 return res;
             else if (res instanceof Tuple && res.hasTail())
                 return new TailFn(res.toTupleFn());
@@ -1020,7 +1034,7 @@ class ArrayElementSelectorFn extends NamedFn {
             let list = input && (input instanceof Tuple && (input.get(this.name) || null)
                 || ((this.name == '_' || this.name == '_0') && input)
                 || []);
-            if (list instanceof VarFn)
+            if (isVarFn(list))
                 list = list.value;
             let index = typeof this._index == 'number' ? this._index : yield this._index.apply(input);
             if (list)
@@ -1137,7 +1151,7 @@ class SideffectedFn extends WrapperFn {
         this.sideffects = sideffects;
     }
     get name() {
-        return this._wrapped instanceof RefFn && this._wrapped.name || undefined;
+        return isRefFn(this._wrapped) && this._wrapped.name || undefined;
     }
     apply(input, context) {
         const _super = Object.create(null, {
@@ -1151,3 +1165,19 @@ class SideffectedFn extends WrapperFn {
     }
 }
 exports.SideffectedFn = SideffectedFn;
+class ProxyFn extends Fn {
+    constructor(proxied) {
+        super();
+        this._proxied = proxied;
+    }
+    get proxied() { return this._proxied; }
+    apply(input, context) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield this._proxied.apply(input, context);
+        });
+    }
+    toString() {
+        return this._proxied.toString();
+    }
+}
+exports.ProxyFn = ProxyFn;
