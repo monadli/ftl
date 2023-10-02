@@ -3,12 +3,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.debug_ctrl = exports.wrapFnWithDebugger = exports.DebuggerStopException = exports.setCanvas = void 0;
 
 let canvas
+let debugCanvas
 let debugStage = ''
 
 function setCanvas(val) {
   canvas = val
 }
+
+function setDebugCanvas(val) {
+  debugCanvas = val
+}
+
 exports.setCanvas = setCanvas
+exports.setDebugCanvas = setDebugCanvas
 
 const DebugState = {
   Continue: 'Continue',
@@ -19,7 +26,7 @@ const DebugState = {
   Stop: 'Stop'
 }
 
-function drawSquereBrakets(canvas, x, y, width, height, options) {
+function drawSquereBrakets(x, y, width, height, options) {
   canvas.beginPath()
   canvas.moveTo(x + 6, y)
   canvas.lineTo(x, y)
@@ -38,8 +45,24 @@ function drawSquereBrakets(canvas, x, y, width, height, options) {
 function drawRect(fn, color) {
   const style = canvas.strokeStyle
   canvas.strokeStyle = color
-  canvas.strokeRect(fn.x, fn.y, fn.width, fn.height)
+  strokeRect(fn.x, fn.y, fn.width, fn.height)
   canvas.strokeStyle = style
+}
+
+function strokeRect(x, y, w, h) {
+  canvas.strokeRect(x, y, w, h)
+}
+
+function strokeDebugRect(x, y, w, h, color, lineWidth=1) {
+  debugCanvas.save()
+  debugCanvas.strokeStyle = color
+  debugCanvas.lineWidth = lineWidth
+  debugCanvas.strokeRect(x, y, w, h)
+  debugCanvas.restore()
+}
+
+function clearDebugRect(x, y, w, h, lineWidth=1) {
+  debugCanvas.clearRect(x - lineWidth, y - lineWidth, w + 2 * lineWidth, h + 2 * lineWidth)
 }
 
 exports.DebuggerStopException = class DebuggerStopException extends Error {
@@ -145,19 +168,17 @@ class DebuggerFn extends ftl.ProxyFn {
     this.debugPause = true
   }
 
+  paintBreakPoint() {
+    if (this.isBreakpoint)
+      strokeDebugRect(this.x, this.y, this.width, this.height, '#357EC7', 3)
+  }
+
   setBreakpoint() {
-    if (this.isBreakpoint) {
-      canvas.strokeStyle = 'white'
-      canvas.lineWidth = 3
-      canvas.strokeRect(this.x, this.y, this.width, this.height);
-      canvas.strokeStyle = 'black'
-      canvas.lineWidth = 1
-    } else {
-      canvas.strokeStyle = '#357EC7'
-      canvas.lineWidth = 3
-    }
-    canvas.strokeRect(this.x, this.y, this.width, this.height);
     this.isBreakpoint = !this.isBreakpoint
+    if (this.isBreakpoint)
+      this.paintBreakPoint()
+    else
+      clearDebugRect(this.x, this.y, this.width, this.height, 3)
   }
 
   /**
@@ -230,15 +251,26 @@ class DebuggerFn extends ftl.ProxyFn {
     }
   }
 
+  showDebugRect() {
+    strokeDebugRect(this.x, this.y, this.width, this.height, 'red')
+  }
+
+  eraseDebugRect() {
+    clearDebugRect(this.x, this.y, this.width, this.height)
+    this.paintBreakPoint()
+  }
+
   async apply(input, context) {
-    let debugPause = debugStage != DebugState.Continue && this.debugPause
+    let debugPause = debugStage != DebugState.Continue && this.debugPause || this.isBreakpoint
     if (this.options.show_input)
       this.showInput(input, this.x, this.y)
     var drawDebugIndicator = debugPause && !(this instanceof PauseNoShowDebugger)
+
     if (drawDebugIndicator) {
-      drawRect(this, 'red')
+      this.showDebugRect()
     }
-    if (debugPause || this.isBreakpoint) {
+
+    if (debugPause) {
       let r = await exports.debug_ctrl.show()
       if (r === DebugState.Stop) {
         throw new exports.DebuggerStopException()
@@ -246,8 +278,10 @@ class DebuggerFn extends ftl.ProxyFn {
     }
 
     const res = await super.apply(input, context)
-    if (drawDebugIndicator)
-      drawRect(this, 'black')
+    if (drawDebugIndicator) {
+      this.eraseDebugRect()
+    }
+
     if (this.options.show_output)
       this.showOutput(res, this.x + this.width, this.y)
     return res
@@ -347,8 +381,8 @@ class TupleDebugger extends DebuggerFn {
     this.proxied._fns.map(f => {
       f.render(canvas, options)
     })
-    canvas.strokeRect(this.x, this.y, this.width, this.height)
-    drawSquereBrakets(canvas, this.x, this.y, this.width, this.height, options)
+    // strokeRect(this.x, this.y, this.width, this.height)
+    drawSquereBrakets(this.x, this.y, this.width, this.height, options)
   }
 }
 
@@ -486,7 +520,7 @@ class ConstDebugger extends DebuggerFn {
   }
 
   render(canvas, options) {
-    canvas.strokeRect(this.x, this.y, this.width, this.height)
+    //strokeRect(this.x, this.y, this.width, this.height)
     canvas.fillText(this.proxied.toString(), this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
@@ -528,7 +562,7 @@ class FunctionDebugger extends DebuggerFn {
   }
 
   render(canvas, options) {
-    canvas.strokeRect(this.x, this.y, this.width, this.height)
+    strokeRect(this.x, this.y, this.width, this.height)
     canvas.fillText(this.proxied._name, this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
@@ -551,7 +585,7 @@ class RefDebugger extends DebuggerFn {
   }
 
   render(canvas, options) {
-    canvas.strokeRect(this.x, this.y, this.width, this.height)
+    strokeRect(this.x, this.y, this.width, this.height)
     canvas.fillText(this.proxied.name, this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
@@ -600,7 +634,7 @@ class TurnaryOpDebugger extends FunctionDebugger {
   }
 
   render(canvas, options) {
-    canvas.strokeRect(this.x, this.y, this.width, this.height)
+    strokeRect(this.x, this.y, this.width, this.height)
     canvas.fillText(this.proxied._name, this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
