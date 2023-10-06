@@ -166,6 +166,7 @@ class DebuggerFn extends ftl.ProxyFn {
     }
     this.isBreakpoint = false
     this.debugPause = true
+    this.computedVal = null
   }
 
   paintBreakPoint() {
@@ -229,26 +230,20 @@ class DebuggerFn extends ftl.ProxyFn {
   showInput(val, x, y) {
     if (val != undefined) {
       val = val == null ? 'null' : val.toString()
-      let metrix = canvas.measureText(val)
-      let style = canvas.fillStyle
-      canvas.fillStyle = 'red'
-      canvas.fillText(val, x - metrix.width, y)
-      canvas.fillStyle = style
+      let metrix = debugCanvas.measureText(val)
+
+      debugCanvas.save()
+      debugCanvas.fillStyle = 'red'
+      debugCanvas.fillText(val, x - metrix.width, y)
+      debugCanvas.restore()
     }
   }
 
-  showOutput(val, x, y) {
-    if (val != undefined) {
-      if (typeof val == 'number') {
-        val = Math.round(val * 100) / 100
-      }
-      val = val == null ? 'null' : val.toString()
-      let metrix = canvas.measureText(val)
-      let style = canvas.fillStyle
-      canvas.fillStyle = 'red'
-      canvas.fillText(val, x, y)
-      canvas.fillStyle = style
-    }
+  showOutput(val, x, y, color) {
+    debugCanvas.save()
+    debugCanvas.fillStyle = color
+    debugCanvas.fillText(val, x, y)
+    debugCanvas.restore()
   }
 
   showDebugRect() {
@@ -261,6 +256,11 @@ class DebuggerFn extends ftl.ProxyFn {
   }
 
   async apply(input, context) {
+    // wipe out previous output display
+    // this is useful when an expression is repeatedly called
+    if (this.options.show_output && this.computedVal != null)
+      this.showOutput(this.computedVal, this.x + this.width, this.y, 'white')
+
     let debugPause = debugStage != DebugState.Continue && this.debugPause || this.isBreakpoint
     if (this.options.show_input)
       this.showInput(input, this.x, this.y)
@@ -282,8 +282,10 @@ class DebuggerFn extends ftl.ProxyFn {
       this.eraseDebugRect()
     }
 
+    this.computedVal = res == null ? 'null' : (typeof res == 'number' ? (Math.round(res * 100) / 100) : res).toString()
     if (this.options.show_output)
-      this.showOutput(res, this.x + this.width, this.y)
+      this.showOutput(this.computedVal, this.x + this.width, this.y, 'red')
+
     return res
   }
 }
