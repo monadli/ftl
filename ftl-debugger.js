@@ -241,8 +241,9 @@ class DebuggerFn extends ftl.ProxyFn {
 
   showOutput(val, x, y, color) {
     debugCanvas.save()
+    debugCanvas.font = '10px arial'
     debugCanvas.fillStyle = color
-    debugCanvas.fillText(val, x, y)
+    debugCanvas.fillText(val, x - 4, y + 6)
     debugCanvas.restore()
   }
 
@@ -390,6 +391,12 @@ class TupleDebugger extends DebuggerFn {
 
 class PipeDebugger extends DebuggerFn {
   constructor(fn) {
+
+    if (fn._fns.length == 2 && fn._fns[0] instanceof TupleFn
+      && fn._fns[1] instanceof FunctionBaseFn
+      && OPERATOR_SYMBOLS.includes(fn._fns[1]._name[0]))
+      return new OperatorDebugger(fn)
+
     super(fn)
     this.options.show_output = false
     this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
@@ -564,8 +571,57 @@ class FunctionDebugger extends DebuggerFn {
   }
 
   render(canvas, options) {
-    strokeRect(this.x, this.y, this.width, this.height)
+    let font = canvas.font
+    canvas.font = `italic ${font}`
     canvas.fillText(this.proxied._name, this.x + options.margin, this.y + options.text_height + options.margin)
+    canvas.font = font
+  }
+}
+
+class OperatorDebugger extends DebuggerFn {
+  constructor(fn) {
+    super(fn)
+    this.options.show_output = false
+    this.opNames = fn._fns[1]._name.split(' ')
+    this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
+    this.debugPause = false
+  }
+
+  adjustSize(canvas, x, y, options) {
+    this.x = x
+    this.y = y
+    let x_start = x
+    this.width = this.height = 0
+    this.contained[0].contained.map((f, idx) => {
+      let [w, h] = f.adjustSize(canvas, x_start, y + options.margin, options)
+      x_start += w + 4
+      if (idx < this.opNames.length) {
+        x_start += canvas.measureText(this.opNames).width + 4
+      }
+
+      this.height = Math.max(h, this.height)
+    })
+    this.width += x_start - x
+    this.height += options.margin * 2
+    this.contained[1].x = this.x + this.width
+    this.contained[1].width = 8
+    this.contained[1].y = this.y
+    return [this.width, this.height]
+  }
+
+  adjustLocation(deltaX, deltaY, options) {
+    this.contained[0].contained.forEach(elm => {
+      let delta_y = (this.height - elm.height)/2 - options.margin
+      elm.adjustLocation(deltaX, deltaY + delta_y, options)
+    })
+  }
+
+  render(canvas, options) {
+    this.contained[0].contained.forEach((c, idx) => {
+      c.render(canvas, options)
+      if (idx < this.opNames.length)
+        canvas.fillText(this.opNames[idx], c.x + c.width + 4, c.y + (c.height + options.text_height) / 2)
+    })
   }
 }
 
