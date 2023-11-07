@@ -2,6 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.debug_ctrl = exports.wrapFnWithDebugger = exports.DebuggerStopException = exports.setCanvas = void 0;
 
+const LEFT_BRACE_ANGLE = 0.7 * Math.PI
+const RIGHT_BRACE_ANGLE = Math.PI - LEFT_BRACE_ANGLE
+
 let canvas
 let debugCanvas
 let debugStage = ''
@@ -24,6 +27,19 @@ const DebugState = {
   StepOut: 'Step Out',
   StepOver: 'Step Over',
   Stop: 'Stop'
+}
+
+function drawParentheses(x, y, width, height, ) {
+  // left - from bottom up
+  canvas.beginPath()
+  canvas.arc(x + 10, y + height - 4, 10, LEFT_BRACE_ANGLE, Math.PI)
+  canvas.arc(x + 10, y + 4, 10, Math.PI, 2 * Math.PI -LEFT_BRACE_ANGLE)
+  ctx.stroke()
+  // right - from top down
+  canvas.beginPath()
+  canvas.arc(x + width - 10, y + 4, 10, -RIGHT_BRACE_ANGLE, 0)
+  canvas.arc(x + width - 10, y + height - 4, 10, 0, RIGHT_BRACE_ANGLE)
+  ctx.stroke()
 }
 
 function drawSquereBrakets(x, y, width, height, options) {
@@ -167,6 +183,9 @@ class DebuggerFn extends ftl.ProxyFn {
     this.isBreakpoint = false
     this.debugPause = true
     this.computedVal = null
+
+    // draws parantheses if true
+    this.enclose = false
   }
 
   paintBreakPoint() {
@@ -353,6 +372,7 @@ class TupleDebugger extends DebuggerFn {
     this.options.show_output = false
     this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
     this.debugPause = false
+    this.vertical = true
   }
 
   adjustSize(canvas, x, y, options) {
@@ -384,8 +404,7 @@ class TupleDebugger extends DebuggerFn {
     this.proxied._fns.map(f => {
       f.render(canvas, options)
     })
-    // strokeRect(this.x, this.y, this.width, this.height)
-    drawSquereBrakets(this.x, this.y, this.width, this.height, options)
+    drawParentheses(this.x, this.y, this.width, this.height, options)
   }
 }
 
@@ -464,13 +483,13 @@ class CallExprDebugger extends DebuggerFn {
 
     this.contained = fn.f = exports.wrapFnWithDebugger(fn.f)
     fn.params = fn.params.map(f => exports.wrapFnWithDebugger(f))
+    fn.params.vertical = false
   }
 
   adjustSize(canvas, x, y, options) {
     this.x = x
     this.y = y
     let [w, h] = this._proxied.f.adjustSize(canvas, x, y, options)
-    w += canvas.measureText('(').width
     for (let i = 0; i < this._proxied.params.length; i++) {
       if (i > 0) {
         w += canvas.measureText(', ').width
@@ -480,7 +499,6 @@ class CallExprDebugger extends DebuggerFn {
       w += sw
       h = Math.max(h, sh)
     }
-    w += canvas.measureText(')').width
 
     // adjust f's y
     this._proxied.f.y += (h - this._proxied.f.height) / 2
@@ -498,7 +516,6 @@ class CallExprDebugger extends DebuggerFn {
 
   render(canvas, options) {
     this._proxied.f.render(canvas, options)
-    canvas.fillText('(', this._proxied.f.x + this._proxied.f.width, this._proxied.f.y + options.text_height)
     let last_p
     for (let i = 0; i < this._proxied.params.length; i++) {
       if (i > 0) {
@@ -507,7 +524,6 @@ class CallExprDebugger extends DebuggerFn {
       last_p = this._proxied.params[i]
       last_p.render(canvas, options)
     }
-    canvas.fillText(')', last_p.x + last_p.width, last_p.y + options.text_height)
   }
 
 }
@@ -529,7 +545,6 @@ class ConstDebugger extends DebuggerFn {
   }
 
   render(canvas, options) {
-    //strokeRect(this.x, this.y, this.width, this.height)
     canvas.fillText(this.proxied.toString(), this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
@@ -584,6 +599,10 @@ class OperatorDebugger extends DebuggerFn {
     this.options.show_output = false
     this.opNames = fn._fns[1]._name.split(' ')
     this.contained = fn._fns = fn._fns.map(f => exports.wrapFnWithDebugger(f))
+    this.contained[0].contained.forEach(f => {
+      if (f instanceof OperatorDebugger)
+        f.enclose = true
+    })
     this.debugPause = false
   }
 
@@ -591,6 +610,8 @@ class OperatorDebugger extends DebuggerFn {
     this.x = x
     this.y = y
     let x_start = x
+    if (this.enclose)
+      x_start += 4
     this.width = this.height = 0
     this.contained[0].contained.map((f, idx) => {
       let [w, h] = f.adjustSize(canvas, x_start, y + options.margin, options)
@@ -603,6 +624,9 @@ class OperatorDebugger extends DebuggerFn {
     })
     this.width += x_start - x
     this.height += options.margin * 2
+
+    if (this.enclose)
+      this.width += 8
     this.contained[1].x = this.x + this.width
     this.contained[1].width = 8
     this.contained[1].y = this.y
@@ -617,6 +641,8 @@ class OperatorDebugger extends DebuggerFn {
   }
 
   render(canvas, options) {
+    if (this.enclose)
+      drawParentheses(canvas, this.x, this.y, this.width, this.height)
     this.contained[0].contained.forEach((c, idx) => {
       c.render(canvas, options)
       if (idx < this.opNames.length)
@@ -643,7 +669,6 @@ class RefDebugger extends DebuggerFn {
   }
 
   render(canvas, options) {
-    strokeRect(this.x, this.y, this.width, this.height)
     canvas.fillText(this.proxied.name, this.x + options.margin, this.y + options.text_height + options.margin)
   }
 }
@@ -663,14 +688,17 @@ class NamedExprDebugger extends WrapperDebugger {
     this.x = x
     this.y = y
     const metrix = canvas.measureText(this.proxied.name + ': ')
-    let [w, h] = this.proxied.wrapped.adjustSize(canvas, x + metrix.width, y, options)
+
+    let child_x = x + metrix.width
+    let [w, h] = this.proxied.wrapped.adjustSize(canvas, child_x, y, options)
+
     this.width = w + metrix.width
     this.height = h
     return [this.width, this.height]
   }
 
   render(canvas, options) {
-    canvas.fillText(this.proxied.name + ': ', this.x, this.y + options.text_height + options.margin)
+    canvas.fillText(this.proxied.name + ': ', this.x + 4, this.y + options.text_height + options.margin)
     this.proxied.wrapped.render(canvas, options)
   }
 }

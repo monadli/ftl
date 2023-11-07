@@ -141,7 +141,7 @@ async function start_debug() {
 
     ftl_debugger.debug_ctrl.reset()
     let exec = new ftl_debugger.wrapFnWithDebugger(module._executables[0])
-    let options = { margin: 4, text_height: 14, font: '14px arial', large_font: '28px arial' }
+    let options = { margin: 2, text_height: 14, font: '14px arial', large_font: '28px arial', small_font: '8px arial'  }
     exec.adjustSize(ctx, 40, 40, options)
     exec.adjustLocation(0, 0, options)
     exec.render(ctx, options)
@@ -383,6 +383,7 @@ except "->", which is preserved. Simply copy from below when you need to define 
 
   debugCanvas = document.getElementById('ftl-graph2')
   let debugCtx = debugCanvas.getContext('2d')
+  debugCtx.font = '8px arial'
   debugCtx.translate(0.5, 0.5)
   ftl_debugger.setDebugCanvas(debugCtx)
 </script>
