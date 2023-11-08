@@ -113,6 +113,7 @@ function enable_editor(enable) {
 
 async function start_debug() {
   display_debug_panel(true)
+  display_panel_by_id('graph-panel', true)
   enable_run_buttons_panel(false)
   display_nav(false)
   enable_editor(false)
@@ -175,6 +176,7 @@ async function start_debug() {
     */
   } catch (e) {
     if (!(e instanceof ftl_debugger.DebuggerStopException)) {
+      display_panel_by_id('graph-panel', false)
       result_pane.value += `ERROR: ${e.message}`
       console.error(e)
     }
@@ -359,9 +361,9 @@ except "->", which is preserved. Simply copy from below when you need to define 
       <button id='debug-button' onclick='start_debug()'>Debug</button>
     </div>
     <div id='debug-panel' style='margin-top: 20px; margin-bottom: 10px;display:none'>
-    </div>
+  </div>
 
-  <div style="position:relative;width:500px;height:400px;">
+  <div id='graph-panel' style="position:relative;width:500px;height:400px;">
     <canvas id='ftl-graph' width='500' height='400' style="position:absolute;top:0;left:0;width:500px;height:400px;border:1px solid #d3d3d3;">Function graphs show here.</canvas>
     <canvas id='ftl-graph2' width='500' height='400' style="position:absolute;top:0;left:0;width:500px;height:400px" onclick='showBreakPoint(event)'></canvas>
   </div>

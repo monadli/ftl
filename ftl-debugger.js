@@ -379,15 +379,27 @@ class TupleDebugger extends DebuggerFn {
     let margins = options.margin * 2
     this.x = x
     this.y = y
-    let y_start = y + options.margin
-    this.width = 0
-    this.contained.map(f => {
-      let [w, h] = f.adjustSize(canvas, x + options.margin, y_start, options)
-      y_start += h + options.margin
-      if (w > this.width) this.width = w
-    })
-    this.width += margins
-    this.height = y_start - y
+    if (this.vertical) {
+      let y_start = y + options.margin
+      this.width = 0
+      this.contained.map(f => {
+        let [w, h] = f.adjustSize(canvas, x + options.margin, y_start, options)
+        y_start += h + options.margin
+        if (w > this.width) this.width = w
+      })
+      this.width += margins
+      this.height = y_start - y
+    } else {
+      let x_start = x + options.margin
+      this.height = 0
+      this.contained.map(f => {
+        let [w, h] = f.adjustSize(canvas, x_start, y + options.margin, options)
+        x_start += w + options.margin
+        if (h > this.height) this.height = h
+      })
+      this.height += margins
+      this.width = x_start - x
+    }
     return [this.width, this.height]
   }
 
@@ -405,6 +417,12 @@ class TupleDebugger extends DebuggerFn {
       f.render(canvas, options)
     })
     drawParentheses(this.x, this.y, this.width, this.height, options)
+    if (!this.vertical) {
+      for (let i = 0; i < this.proxied._fns.length - 1; i++) {
+        let p = this.proxied._fns[i]
+        canvas.fillText(',', p.x + p.width - options.margin, p.y + p.height - options.margin)
+      }
+    }
   }
 }
 
@@ -473,7 +491,7 @@ function getFnDebugger(name) {
 exports.wrapFnWithDebugger = function(fn) {
   let wrap = getFnDebugger(fn.typeName)
   if (!wrap)
-    throw new Error(`No debugger found for "${fn.typeName}"!`)
+    throw new Error(`Debugger for "${fn.typeName}" not implemented yet!`)
   return new wrap(fn)
 }
 
@@ -483,7 +501,7 @@ class CallExprDebugger extends DebuggerFn {
 
     this.contained = fn.f = exports.wrapFnWithDebugger(fn.f)
     fn.params = fn.params.map(f => exports.wrapFnWithDebugger(f))
-    fn.params.vertical = false
+    fn.params.forEach(p => p.vertical = false)
   }
 
   adjustSize(canvas, x, y, options) {
