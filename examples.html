@@ -22,8 +22,9 @@ footer {
 <script>
 var module_content = {}
 var curr_path = ''
-var user_code = '// You may copy code from examples or write your own ftl code here.\n// Your code will stay here when you switch to examples.'
+var user_code = '// You may copy code from examples or write your own ftl code here.\n// Your code will stay here when you switch to examples.\n\n'
 var in_user_code = false
+
 
 const path_1 = {
   default: {
@@ -62,7 +63,7 @@ function load_ftl(path, name) {
     console.log(`loaded ${path}/${name}.ftl`)
     document.getElementById('code-name').innerHTML = `${name}.ftl`
     curr_path = name
-    
+
     let editor = document.getElementById('code_content')
     if (in_user_code) {
       user_code = editor.value  
@@ -71,7 +72,7 @@ function load_ftl(path, name) {
 
     editor.value = ftl_content
     editor.readOnly = true
-    
+
     if (path == 'lib') {
       document.getElementById('run-button').disabled = true
     } else {
@@ -92,16 +93,71 @@ function load_user_code() {
   document.getElementById('code-name').innerHTML = 'write your own program'
 }
 
-function run_ftl() {
+function enable_by_id(id, enable) {
+  document.getElementById(id).style.disabled = !enable
+}
+function enable_run_button(enable) { enable_by_id('run-button', enable) }
+function enable_debug_button(enable) { enable_by_id('debug-button', enable) }
+function display_nav(enable) {
+  document.getElementsByTagName('nav')[0].style.display = enable ? 'block' : 'none'
+}
+function display_panel_by_id(id, display) {
+  document.getElementById(id).style.display = display ? 'block' : 'none'
+}
+function display_debug_panel(display) { display_panel_by_id('debug-panel', display) }
+function enable_run_buttons_panel(display) { display_panel_by_id('run-buttons-panel', display) }
+function enable_editor(enable) {
+  if (in_user_code)
+    document.getElementById('code_content').readOnly = !enable
+}
+
+async function start_debug() {
+  display_debug_panel(true)
+  display_panel_by_id('graph-panel', true)
+  enable_run_buttons_panel(false)
+  display_nav(false)
+  enable_editor(false)
+
   let result_pane = document.getElementById('result')
   try {
-
     let editor = document.getElementById('code_content')
     result_pane.value = ``
-    ftl_builder.init()    
+    ftl_builder.init()
     let module = in_user_code
-      ? ftl_builder.buildModuleWithContent('demo', editor.value)
+      ? ftl_builder.buildModuleWithContent('demo', 'import ftl/sideffect\n' + editor.value)
       : ftl_builder.buildModule('demo', `./${curr_path}`)
+
+
+    const canvas = document.getElementById('ftl-graph')
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.font = '14px arial'
+    ctx.lineWidth = 0.5
+
+    const debugCanvas = document.getElementById('ftl-graph2')
+    const debugCtx = debugCanvas.getContext('2d')
+    debugCtx.clearRect(0, 0, debugCanvas.width, debugCanvas.height)
+    debugCtx.font = '14px arial'
+    debugCtx.lineWidth = 0.5
+
+    ftl_debugger.debug_ctrl.reset()
+    let exec = new ftl_debugger.wrapFnWithDebugger(module._executables[0])
+    let options = { margin: 2, text_height: 14, font: '14px arial', large_font: '28px arial', small_font: '8px arial'  }
+    exec.adjustSize(ctx, 40, 40, options)
+    exec.adjustLocation(0, 0, options)
+    exec.render(ctx, options)
+    window.ftl_exec = exec
+    await exec.apply()
+    // draw all executables into diagram
+    //for (let exec of module.executables) {
+    //  exec = new DebuggerFn(exec)
+    //  console.log(exec)
+    //}
+    ////let wait = await ftl_debugger.debug_ctrl.show().then(res => {console.log(res);})
+    ////console.log('working', wait)
+    /*
+
+    // run all executables
     for (let exec of module.executables) {
       try {
         let res = exec.apply()
@@ -117,9 +173,81 @@ function run_ftl() {
         result_pane.value += `ERROR: ${e.message}\r\n\r\n`
       }
     }
+    */
+  } catch (e) {
+    if (!(e instanceof ftl_debugger.DebuggerStopException)) {
+      display_panel_by_id('graph-panel', false)
+      result_pane.value += `ERROR: ${e.message}`
+      console.error(e)
+    }
+  }
+  finally {
+    window.ftl_exec = null
+    display_debug_panel(false)
+    enable_run_buttons_panel(true)
+    display_nav(true)
+    enable_editor(true)
+  }
+}
+
+function debug_stop() {
+  enable_run_buttons_panel(true)
+  display_debug_panel(false)
+}
+
+async function run_ftl() {
+  enable_debug_button(false)
+  let result_pane = document.getElementById('result')
+  try {
+
+    let editor = document.getElementById('code_content')
+    result_pane.value = ``
+    ftl_builder.init()
+    let module = in_user_code
+      ? ftl_builder.buildModuleWithContent('demo', 'import ftl/sideffect\n' + editor.value)
+      : ftl_builder.buildModule('demo', `./${curr_path}`)
+/*
+    if (in_user_code) {
+      var infoF = module.getAvailableFn('logger')
+      var sideffect = new ftl.SideffectFn(
+        'logger',
+        module.getAvailableFn('logger'),
+        new ftl.TupleFn(
+          new ftl.ConstFn(console),
+          new ftl.RefFn('_', module)
+        )
+      )
+      // draw all executables into diagram
+      for (let exec of module.executables) {
+        console.log(exec)
+        exec._wrapped = new ftl.SideffectedFn(exec._wrapped, [sideffect])
+      }
+    }
+*/
+    // run all executables
+    for (let exec of module.executables) {
+      try {
+        let res = await exec.apply()
+        if (res !== undefined) {
+          if (res instanceof ftl.RefFn) {
+            result_pane.value += `Reference to '${res.name}' seems not resolved. Did you forget to import?`
+          }
+          else if (Array.isArray(res) || typeof res == 'string') {
+            result_pane.value += JSON.stringify(res)
+          } else {
+            result_pane.value += res
+          }
+          result_pane.value += '\r\n\r\n'
+        }
+      } catch (e) {
+        result_pane.value += `ERROR: ${e.message}\r\n\r\n`
+      }
+    }
   } catch (e) {
     result_pane.value += `ERROR: ${e.message}`
     console.error(e)
+  } finally {
+    enable_debug_button(true)
   }
 }
 
@@ -128,25 +256,46 @@ function input() {
     return new Tuple()
 }
 
+function showBreakPoint(e) {
+  if (!window.ftl_exec)
+    return
+  let selected = window.ftl_exec.selectFn(e.offsetX, e.offsetY)
+  if (selected) {
+    console.log(`selected ${selected}`)
+    selected.setBreakpoint()
+  } else
+    console.log('found nothing')
+}
+
 var exports = {}
 </script>
+
 <script src="ftl-core.js"></script>
 <script>
 var ftl = exports
 var exports = {}
 </script>
+
 <script src="ftl-parser.js"></script>
 <script>
 var ftl_parser = exports
 var exports = {}
 </script>
+
 <script src="ftl-builder.js"></script>
 <script>
 var ftl_builder = exports
 ftl_builder.setRunPath('')
+var exports = {}
 </script>
+
+<script src="ftl-debugger.js"></script>
+<script>
+var ftl_debugger = exports
+</script>
+
 </head>
-<body style='font-family:arial;font-size: 14pt;'>
+<body style='font-family:arial;font-size: 14pt;' onload='load_ftl("demo", "welcome")'>
 <h2>FTL Examples</h2>
 <p>This page contains FTL library, basics of FTL in individual examples, and some actual examples.</p>
 <p>Lastly there is <b>write your own program</b> panel where you can either copy from example or write your own FTL program.</p>
@@ -157,6 +306,7 @@ except "->", which is preserved. Simply copy from below when you need to define 
 <div style="color: rgb(0, 0, 255);">!%&*+\-./:;<=>?^|×÷∏∑∕²³⁴√∛∜∗∙∧∨∩∪∼≤≥⊂⊃¬∀</div>
 
 </p>
+
 <div style='display: flex'>
 <nav style='width:256px'>
 <div class='header'>library</div>
@@ -168,50 +318,75 @@ except "->", which is preserved. Simply copy from below when you need to define 
 </div>
 
 <div class='content demo'>
-<div class='header'>basics</div>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>comments</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>expressions</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>imports</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>tupology</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>functional-tuple</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>operators</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>basic-types</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>type-equality</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>extending-mapping-operator</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>raise-for-list</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>side-effects</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>identity-function</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>function-composition</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>for-while-loop</a>
-<div class='header'>examples</div>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>biomial-coeff</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>fibonacci</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>map</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>reduce</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>square-root</a>
-<a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>fft</a>
+  <div class='header'>basics</div>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>comments</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>expressions</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>imports</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>tupology</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>functional-tuple</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>operators</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>basic-types</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>type-equality</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>extending-mapping-operator</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>raise-for-list</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>side-effects</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>identity-function</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>function-composition</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>for-while-loop</a>
+  <div class='header'>examples</div>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>biomial-coeff</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>fibonacci</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>map</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>reduce</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>square-root</a>
+  <a href="javascript:void(0);" onclick='load_ftl("demo", this.innerHTML)'>fft</a>
 </div>
 
 <div class='header'>try it yourself</div>
 <div class='content'>
-<a href="javascript:void(0);" onclick='load_user_code()'>write your own program</a>
+  <a href="javascript:void(0);" onclick='load_user_code()'>write your own program</a>
 </div>
 
 </nav>
+
 <div style='flex: 1;padding-left: 10px'>
-<div id='lib-area' style='width:100%;height:400px'>
-<textarea id='code_content' style='width:100%;height:100%;font-size:14pt'></textarea>
+  <div id='lib-area' style='width:100%;height:400px'>
+    <textarea id='code_content' style='width:100%;height:100%;font-size:14pt'></textarea>
+  </div>
+  <div id='code-name' style='height:20px;margin-top:6px'></div>
+
+  <div style='width:100%;height:240px'>
+    <div id="run-buttons-panel" style='margin-top: 20px; margin-bottom: 10px' >
+      <button id='run-button' onclick='run_ftl()'>Run</button>
+      <button id='debug-button' onclick='start_debug()'>Debug</button>
+    </div>
+    <div id='debug-panel' style='margin-top: 20px; margin-bottom: 10px;display:none'>
+  </div>
+
+  <div id='graph-panel' style="position:relative;width:500px;height:400px;">
+    <canvas id='ftl-graph' width='500' height='400' style="position:absolute;top:0;left:0;width:500px;height:400px;border:1px solid #d3d3d3;">Function graphs show here.</canvas>
+    <canvas id='ftl-graph2' width='500' height='400' style="position:absolute;top:0;left:0;width:500px;height:400px" onclick='showBreakPoint(event)'></canvas>
+  </div>
+  <div style='width:100%;height:400px'>
+    <textarea id='result' readonly='true' style='width:100%;height:200px;;font-size:14pt'></textarea>
+  </div>
 </div>
-<div id='code-name' style='height:20px;margin-top:6px'></div>
-<div style='width:100%;height:240px'>
-<button id='run-button' style='margin-top: 20px; margin-bottom: 10px' onclick='run_ftl()'>Run</button>
-<div style='width:100%;height:400px'>
-<textarea id='result' readonly='true' style='width:100%;height:200px;;font-size:14pt'></textarea>
-</div>
-<div id='user-control'></div>
-</div>
+
 </div>
 </div>
 <footer>ver 0.0.3</footer>
 </body>
+<script>
+  document.getElementById('debug-panel').appendChild(ftl_debugger.debug_ctrl.ui)
+  canvas = document.getElementById('ftl-graph')
+  ctx = canvas.getContext('2d')
+  ctx.translate(0.5, 0.5)
+  ftl_debugger.setCanvas(ctx)
+
+  debugCanvas = document.getElementById('ftl-graph2')
+  let debugCtx = debugCanvas.getContext('2d')
+  debugCtx.font = '8px arial'
+  debugCtx.translate(0.5, 0.5)
+  ftl_debugger.setDebugCanvas(debugCtx)
+</script>
 </html>

@@ -30,6 +30,7 @@ var libPath;
 var runPath;
 var optimization = false;
 var currentBuildModules = new Set();
+const ASYNC_FUNC_ERROR = 'await is only valid in async function';
 Error.stackTraceLimit = Infinity;
 function setRunPath(path) {
     runPath = path;
@@ -113,7 +114,7 @@ function buildElement(buildInfo, module, input = null) {
         return buildInfo;
 }
 function getBuilder(name) {
-    let builder = eval(`build${name}`); //buildElements[name]
+    let builder = eval(`build${name}`);
     if (!builder)
         throw new Error(`Builder for ${name} not found!`);
     return builder;
@@ -441,6 +442,10 @@ function buildFunctionSignature(details, module) {
     return { name: name, params: params };
 }
 function buildFunctionDeclaration(details, module) {
+    function build_native_function(as_async = false) {
+        let script = eval(`(${as_async ? 'async ' : ''}function(${param_list.join(',')})${body.script})`);
+        return new ftl.NativeFunctionFn(f_name, params, script);
+    }
     let signature = buildElement(details.signature, module, null);
     let f_name;
     let params;
@@ -467,15 +472,17 @@ function buildFunctionDeclaration(details, module) {
     let fn;
     if (body.script) {
         try {
-            let script = eval("(function(" + param_list.join(',') + ")" + body.script + ")");
-            fn = new ftl.NativeFunctionFn(f_name, params, script);
+            fn = build_native_function(false);
         }
         catch (e) {
-            if (e.message.startsWith('Unexpected token')) {
-                throw new Error(e.message + '. Most likely a javascript reserved key word is used as an identifier!');
+            if (e.message.startsWith(ASYNC_FUNC_ERROR)) {
+                fn = build_native_function(true);
+            }
+            else if (e.message.startsWith('Unexpected token')) {
+                throw new Error(`${e.message} in '${f_name}'. Most likely a javascript reserved key word is used as an identifier!`);
             }
             else
-                throw e;
+                throw new Error(`${e.message} in '${f_name}'`);
         }
     }
     else {
@@ -719,7 +726,7 @@ function buildArrayElementSelector(details, module) {
         }
         let index_info = index.first;
         if (index_info instanceof ftl.ArrayInitializerWithRangeFn) {
-            return new ftl.ArrayRangeSelectorFn(name, index_info.startValue.apply(), index_info.endValue.apply(), index_info.interval.apply());
+            return new ftl.ArrayRangeSelectorFn(name, index_info.startValue, index_info.endValue, index_info.interval);
         }
         return new ftl.ArrayElementSelectorFn(name, index_info);
     }
@@ -814,13 +821,6 @@ function build_function_parameters(params) {
     });
     return new ftl.TupleFn(...fns);
 }
-function validate_tuple_elements(elms) {
-}
-//function addbuilder<D extends FtlBuilder>(builder:new(props?:any) => D) {
-//  buildElements[builder.name] = builder
-//}
-// this is for building function / operator parameters
-var dummy_param_tuple = new ftl.TupleFn();
 // The following functions are used for parsing
 function join(value) {
     return Array.isArray(value) ? value.join("") : value;

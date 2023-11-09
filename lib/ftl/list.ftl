@@ -90,7 +90,11 @@ fn list .->-> f {
     if (f instanceof ftl.TupleFn) {
       let ret = new ftl.Tuple()
       for (let elm of f.fns) {
-        let val = list.map(e => elm.apply(e))
+        let val = []
+        for (let e of list) {
+          let v = await elm.apply(e)
+          val.push(v)
+        }
         if (elm instanceof ftl.NamedExprFn)
           ret.addNameValue(elm.name, val)
         else
@@ -98,10 +102,16 @@ fn list .->-> f {
       }
       return ret
     }
-    else
-      return list.map(e => f.apply(e))
+    else {
+      let val = []
+      for (let e of list) {
+        let v = await f.apply(e)
+        val.push(v)
+      }
+      return val
+    }
   } else
-    return f.apply(list)
+    return await f.apply(list)
 }
 
 /**
@@ -120,16 +130,20 @@ fn a .<op> b {
   let b_is_arr = Array.isArray(b)
   if (Array.isArray(a)) {
     let ret = []
-    a.forEach((elm, i) => {
-      ret.push(op.apply(ftl.Tuple.fromValues(elm, b_is_arr ? b[i] : b)))
-    })
+    let i = 0
+    for (let elm of a) {
+      let v = await op.apply(ftl.Tuple.fromValues(elm, b_is_arr ? b[i] : b))
+      ret.push(v)
+      i++
+    }
     return ret
   } else if (b_is_arr) {
     let ret = []
-    b.forEach(elm => {
-      ret.push(op.apply(ftl.Tuple.fromValues(a, elm)))
-    })
+    for (let elm of b) {
+      let v = await op.apply(ftl.Tuple.fromValues(a, elm))
+      ret.push(v)
+    }
     return ret
   } else
-      return op.apply(ftl.Tuple.fromValues(a, b))
+      return await op.apply(ftl.Tuple.fromValues(a, b))
 }
