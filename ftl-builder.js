@@ -30,7 +30,11 @@ var libPath;
 var runPath;
 var optimization = false;
 var currentBuildModules = new Set();
+
+// error from Chrome browser when building async function
 const ASYNC_FUNC_ERROR = 'await is only valid in async function';
+const AWAIT_KW = /\sawait\s/;
+
 Error.stackTraceLimit = Infinity;
 function setRunPath(path) {
     runPath = path;
@@ -302,7 +306,7 @@ function buildN_aryOperatorExpression(details, module, input = null) {
         let f;
         while (i < op.length) {
             let prefix = op.substring(0, i);
-            prefix_f = module.getAvailableFn(`${prefix}$`);
+            prefix_f = module.getAvailableFn(`${prefix}\$`);
             if (prefix_f) {
                 f = module.getAvailableFn(op.substring(i));
                 if (f)
@@ -465,7 +469,7 @@ function buildFunctionDeclaration(details, module) {
     // will generate function with name '.$' which can
     // be individually imported.
     if (params.size == 3 && f_name.endsWith('< >')) {
-        f_name = `${f_name.substring(0, f_name.length - 3)}$`;
+        f_name = `${f_name.substring(0, f_name.length - 3)}\$`;
     }
     let body = details.body;
     let param_list = params.map((p) => p.name);
@@ -475,7 +479,7 @@ function buildFunctionDeclaration(details, module) {
             fn = build_native_function(false);
         }
         catch (e) {
-            if (e.message.startsWith(ASYNC_FUNC_ERROR)) {
+            if (e.message.startsWith(ASYNC_FUNC_ERROR) || details.body.script.match(AWAIT_KW) ) {
                 fn = build_native_function(true);
             }
             else if (e.message.startsWith('Unexpected token')) {
