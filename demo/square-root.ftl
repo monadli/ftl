@@ -9,6 +9,14 @@ import ftl/lang[+, -, /, >, ?<]
  * the same named elements as the intial tuple, which is the basic
  * requirement for a for loop.
  */
+
+//direct computation
+(n: 50)
+  -> (x:n, y:1, n, e:0.000001)
+  -> (x - y > e) ?< ((x:(x + y)/2, n, e) -> (x, y: n / x, n, e))
+  -> x
+
+// function implementation
 fn square_root(n)
   -> (x:n, y:1, n, e:0.000001)
   -> (x - y > e) ?< ((x:(x + y)/2, n, e) -> (x, y: n / x, n, e))

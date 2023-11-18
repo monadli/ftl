@@ -42,7 +42,7 @@ function drawParentheses(x, y, width, height, ) {
   ctx.stroke()
 }
 
-function drawSquereBrakets(x, y, width, height, options) {
+function drawSquereBrakets(x, y, width, height) {
   canvas.beginPath()
   canvas.moveTo(x + 6, y)
   canvas.lineTo(x, y)
@@ -652,6 +652,8 @@ class OperatorDebugger extends DebuggerFn {
   }
 
   adjustLocation(deltaX, deltaY, options) {
+    this.x += deltaX
+    this.y += deltaY
     this.contained[0].contained.forEach(elm => {
       let delta_y = (this.height - elm.height)/2 - options.margin
       elm.adjustLocation(deltaX, deltaY + delta_y, options)
@@ -664,7 +666,7 @@ class OperatorDebugger extends DebuggerFn {
     this.contained[0].contained.forEach((c, idx) => {
       c.render(canvas, options)
       if (idx < this.opNames.length)
-        canvas.fillText(this.opNames[idx], c.x + c.width + 4, c.y + (c.height + options.text_height) / 2)
+        canvas.fillText(this.opNames[idx], c.x + c.width + 4, this.y + (this.height + options.text_height) / 2)
     })
   }
 }

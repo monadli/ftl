@@ -12,12 +12,12 @@ import ftl/sideffect
 //     (initial variables) -> (incremental expression) ?< (boolean expression) -> (results)
 
 // 1. simple loop without computation but just output i in the end
-(i: 0) -> (i < 10) ?< (i: i + 1) -> i
+(i: 0) -> (i < 5) ?< (i: i + 1) -> i
 
 // 2. same simple loop with intermediate results displayed:
 (i: 0)
  -> @info('i starts with', i)
- (i < 10) ?< (i: @info('i in loop', i) i + 1)
+ (i < 5) ?< (i: @info('i in loop', i) i + 1)
  -> @info('i ends with', i) i
 
 // 3. More complicated loop with computation
