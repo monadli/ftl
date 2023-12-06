@@ -1,4 +1,5 @@
 import ftl/lang[+, *, /, <, ==, ?<, '? :']
+import ftl/math
 
 // creates an list with n elements
 fn list(n) { return new Array(n) }
@@ -68,10 +69,10 @@ fn ∏ list -> list |> (accu * item)
 fn mean(list) -> ∑list / len
 
 // max of list
-fn ∨ list -> list |> max(accu, item)
+fn ∨ list -> list |> (accu ∨ item)
 
 // min of list
-fn ∧ list -> list |> min(accu, item)
+fn ∧ list -> list |> (accu ∧ item)
 
 /**
  * Apply each element of the list to f, which can be a function or an

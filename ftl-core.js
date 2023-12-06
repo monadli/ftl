@@ -1038,7 +1038,7 @@ class ArrayElementSelectorFn extends NamedFn {
                 list = list.value;
             let index = typeof this._index == 'number' ? this._index : yield this._index.apply(input);
             if (list)
-                return list[index] || null;
+                return (index < 0 ? list[list.length + index] : list[index]) || null;
             else
                 return this;
         });
@@ -1061,6 +1061,8 @@ class ArrayRangeSelectorFn extends Fn {
             let start = yield this.start.apply(input);
             let end = yield this.end.apply(input);
             let interval = yield this.interval.apply(input);
+            if (start < 0)
+                start = list.length + start;
             end = end == -1 ? list.length : end + 1;
             let len = Math.ceil((end - start) / interval);
             let ret = new Array(len);

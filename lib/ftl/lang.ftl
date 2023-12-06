@@ -4,7 +4,7 @@
 
 // unary -
 
-fn -val { return -val }
+fn -val { return Array.isArray(val) ? val.map(v => -v) : -val }
 
 fn x + y { return x + y }
 fn x - y { return x - y }

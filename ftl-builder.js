@@ -255,7 +255,7 @@ function buildOperatorExpression(details, module, input) {
     }
     catch (e) {
         // array initializer
-        if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :')) {
+        if (e instanceof N_aryOperatorBuildError && (e.op == ':' || e.op == ': :' || e.op == ':-')) {
             let start = e.operands[0];
             if (start instanceof ftl.RefFn) {
                 throw new FtlBuildError(`It seems a sideffect is in front of tuple element name '${start.name}'`);

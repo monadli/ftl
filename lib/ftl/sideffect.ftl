@@ -6,9 +6,9 @@
 // in ftl-core.ftl is available under ftl namespace, such as Tuple being
 // referred as ftl.Tuple.
 
-// Wraps native console's log.
+// Wraps native console's info().
 fn info(message, input) {
-  console.log(`${message}: ${input}`)
+  console.info(`${message}: ${input}`)
 }
 
 // Throws error if result of condition is false.
@@ -19,8 +19,8 @@ fn assert(condition, error) {
   }
 }
 
-// General logger that takes context that has a method "log".
+// General logger that has log function.
 // Example is passing console as context.
 fn logger(context, input) {
-  context.log('from logger:', input)
+  context.log(input)
 }

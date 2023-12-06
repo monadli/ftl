@@ -330,13 +330,13 @@ Since this expression involves in two operators `-` and `*` and operators are le
 (5 - 2) * 3
 ```
 
-If `2 * 3` needs to be computed first, do this:
+If `2 * 3` needs to be computed first, do it as:
 ```
 5 - (2 * 3)
 ```
 
 #### N-ary Operators
-`FTL` allows definiton of n-ary operators. For example, the ternary operator `? :` is defined in `ftl/lang.ftl` library.
+`FTL` allows definiton of n-ary infix operators. For example, the ternary operator `? :` is defined in `ftl/lang.ftl` library.
 
 N-ary operators cannot be nested in the middle without parentheses. Using `? :` as an example. We can have `1 < 2 ? (2 < 3 ? true : false) : false` but `1 < 2 ? 2 < 3 ? true : false : false` will give error as `ERROR: N-ary operator '< ? < ? : :' not found!`
 
@@ -536,7 +536,7 @@ When implementing with ftl, it starts with operator `->`.
 
 For example:
 ```
-fn x! -> x < 2 ?? 1 :: (x * (x - 1)!)
+fn x! -> x == 0 ?? 1 :: (x * (x - 1)!)
 ```
 
 #### Application
